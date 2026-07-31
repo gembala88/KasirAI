@@ -1,0 +1,4 @@
+# Placeholder — apps/dashboard is not implemented yet (spec §10 Phase 7).
+# This file exists to match the folder structure in §4 of the spec.
+# Replace with a real multi-stage Vite build once apps/dashboard has code,
+# following the same pattern as Dockerfile.api.

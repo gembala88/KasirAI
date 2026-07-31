@@ -1,0 +1,14 @@
+# MariaDB tuning for the 2 vCPU / 2 GB RAM VPS target (spec §13).
+# Mounted read-only into the `db` container at /etc/mysql/conf.d/ (see
+# infra/docker/docker-compose.yml). Keeps InnoDB's buffer pool and per-
+# connection buffers small enough that MariaDB stays inside its 512m
+# `mem_limit` even under load.
+[mysqld]
+innodb_buffer_pool_size = 128M
+innodb_buffer_pool_instances = 1
+innodb_log_file_size = 64M
+max_connections = 50
+thread_cache_size = 8
+tmp_table_size = 16M
+max_heap_table_size = 16M
+performance_schema = OFF

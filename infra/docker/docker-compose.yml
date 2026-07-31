@@ -1,0 +1,261 @@
+﻿# ERPNext stack, tuned for the confirmed 2 vCPU / 2 GB RAM VPS (spec §13).
+#
+# Based on the official frappe_docker `pwd.yml` reference (single-site,
+# single-compose getting-started layout — no custom Frappe app needed for
+# MVP, per spec §3.2), with these deviations applied for the low-RAM target:
+#   - GUNICORN_WORKERS=1 (spec §13: "limit gunicorn workers to 1")
+#   - queue-long and queue-short merged into one `queue` worker (spec §13:
+#     "disable unused modules to reduce background job load" — with only
+#     Selling/Buying/Stock/Accounting active, one worker covers the volume)
+#   - `mem_limit` set on every long-running container (spec §13: "explicit
+#     Docker memory limits per container so one container can't starve the
+#     others") — total steady-state ceiling is kept under ~1.6 GB, leaving
+#     headroom for the host OS, the Node API, and the 2 GB swap buffer
+#     configured by infra/erpnext/setup-vps-swap.sh
+#   - MariaDB given a low-memory my.cnf (infra/erpnext/mariadb/hermes-tuning.cnf)
+#
+# Only the `erpnext` app is installed (not the separate `hrms` app), which
+# is how HR stays out of this instance per spec §13. Manufacturing/Projects
+# ship inside the `erpnext` app itself — see README.md "First login" for how
+# to hide them from the UI via the Setup Wizard's domain selection.
+#
+# Usage: see README.md "Running ERPNext locally / on the VPS".
+
+services:
+  backend:
+    image: frappe/erpnext:${ERPNEXT_VERSION:-v16.30.0}
+    networks:
+      - hermes_network
+    mem_limit: 400m
+    deploy:
+      restart_policy:
+        condition: on-failure
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+    environment:
+      DB_HOST: db
+      DB_PORT: '3306'
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in .env}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in .env}
+      GUNICORN_WORKERS: '1'
+      GUNICORN_THREADS: '4'
+      GUNICORN_TIMEOUT: '120'
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+
+  configurator:
+    image: frappe/erpnext:${ERPNEXT_VERSION:-v16.30.0}
+    networks:
+      - hermes_network
+    deploy:
+      restart_policy:
+        condition: none
+    entrypoint:
+      - bash
+      - -c
+    command:
+      - >
+        ls -1 apps > sites/apps.txt;
+        bench set-config -g db_host $$DB_HOST;
+        bench set-config -gp db_port $$DB_PORT;
+        bench set-config -g redis_cache "redis://$$REDIS_CACHE";
+        bench set-config -g redis_queue "redis://$$REDIS_QUEUE";
+        bench set-config -g redis_socketio "redis://$$REDIS_QUEUE";
+        bench set-config -gp socketio_port $$SOCKETIO_PORT;
+    environment:
+      DB_HOST: db
+      DB_PORT: '3306'
+      REDIS_CACHE: redis-cache:6379
+      REDIS_QUEUE: redis-queue:6379
+      SOCKETIO_PORT: '9000'
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+
+  create-site:
+    image: frappe/erpnext:${ERPNEXT_VERSION:-v16.30.0}
+    networks:
+      - hermes_network
+    deploy:
+      restart_policy:
+        condition: none
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+    entrypoint:
+      - bash
+      - -c
+    command:
+      - >
+        wait-for-it -t 120 db:3306;
+        wait-for-it -t 120 redis-cache:6379;
+        wait-for-it -t 120 redis-queue:6379;
+        export start=`date +%s`;
+        until [[ -n `grep -hs ^ sites/common_site_config.json | jq -r ".db_host // empty"` ]] && \
+          [[ -n `grep -hs ^ sites/common_site_config.json | jq -r ".redis_cache // empty"` ]] && \
+          [[ -n `grep -hs ^ sites/common_site_config.json | jq -r ".redis_queue // empty"` ]];
+        do
+          echo "Waiting for sites/common_site_config.json to be created";
+          sleep 5;
+          if (( `date +%s`-start > 120 )); then
+            echo "could not find sites/common_site_config.json with required keys";
+            exit 1
+          fi
+        done;
+        echo "sites/common_site_config.json found";
+        if [ -d "sites/$$SITE_NAME" ]; then
+          echo "Site $$SITE_NAME already exists, skipping creation";
+        else
+          bench new-site --mariadb-user-host-login-scope='%' --admin-password=$$ADMIN_PASSWORD --db-root-username=root --db-root-password=$$DB_ROOT_PASSWORD --install-app erpnext --set-default $$SITE_NAME;
+        fi;
+    environment:
+      SITE_NAME: ${SITE_NAME:-hermes.localhost}
+      DB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in .env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+
+  db:
+    image: mariadb:11.8
+    networks:
+      - hermes_network
+    mem_limit: 512m
+    healthcheck:
+      test: ['CMD', 'healthcheck.sh', '--connect', '--innodb_initialized']
+      start_period: 5s
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    deploy:
+      restart_policy:
+        condition: on-failure
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in .env}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD in .env}
+    volumes:
+      - db-data:/var/lib/mysql
+      - ../erpnext/mariadb/hermes-tuning.cnf:/etc/mysql/conf.d/hermes-tuning.cnf:ro
+
+  frontend:
+    image: frappe/erpnext:${ERPNEXT_VERSION:-v16.30.0}
+    networks:
+      - hermes_network
+    mem_limit: 128m
+    depends_on:
+      - websocket
+      - backend
+    deploy:
+      restart_policy:
+        condition: on-failure
+    command:
+      - nginx-entrypoint.sh
+    environment:
+      BACKEND: backend:8000
+      FRAPPE_SITE_NAME_HEADER: ${SITE_NAME:-hermes.localhost}
+      SOCKETIO: websocket:9000
+      UPSTREAM_REAL_IP_ADDRESS: 127.0.0.1
+      UPSTREAM_REAL_IP_HEADER: X-Forwarded-For
+      UPSTREAM_REAL_IP_RECURSIVE: 'off'
+      PROXY_READ_TIMEOUT: 120
+      CLIENT_MAX_BODY_SIZE: 50m
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+    ports:
+      - '${HTTP_PUBLISH_PORT:-8080}:8080'
+
+  queue:
+    image: frappe/erpnext:${ERPNEXT_VERSION:-v16.30.0}
+    networks:
+      - hermes_network
+    mem_limit: 300m
+    deploy:
+      restart_policy:
+        condition: on-failure
+    command:
+      - bench
+      - worker
+      - --queue
+      - short,default,long
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+    environment:
+      FRAPPE_REDIS_CACHE: redis://redis-cache:6379
+      FRAPPE_REDIS_QUEUE: redis://redis-queue:6379
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+
+  redis-queue:
+    image: redis:6.2-alpine
+    networks:
+      - hermes_network
+    mem_limit: 64m
+    deploy:
+      restart_policy:
+        condition: on-failure
+    volumes:
+      - redis-queue-data:/data
+
+  redis-cache:
+    image: redis:6.2-alpine
+    networks:
+      - hermes_network
+    mem_limit: 32m
+    deploy:
+      restart_policy:
+        condition: on-failure
+
+  scheduler:
+    image: frappe/erpnext:${ERPNEXT_VERSION:-v16.30.0}
+    networks:
+      - hermes_network
+    mem_limit: 150m
+    deploy:
+      restart_policy:
+        condition: on-failure
+    command:
+      - bench
+      - schedule
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+
+  websocket:
+    image: frappe/erpnext:${ERPNEXT_VERSION:-v16.30.0}
+    networks:
+      - hermes_network
+    mem_limit: 100m
+    deploy:
+      restart_policy:
+        condition: on-failure
+    command:
+      - node
+      - /home/frappe/frappe-bench/apps/frappe/socketio.js
+    environment:
+      FRAPPE_REDIS_CACHE: redis://redis-cache:6379
+      FRAPPE_REDIS_QUEUE: redis://redis-queue:6379
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+
+volumes:
+  db-data:
+  redis-queue-data:
+  sites:
+  logs:
+
+networks:
+  hermes_network:
+    driver: bridge

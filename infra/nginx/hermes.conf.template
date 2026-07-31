@@ -1,0 +1,49 @@
+# Production reverse proxy template — spec §10 Phase 9 ("Deploy via Docker +
+# Nginx on Ubuntu server"). Not wired into infra/docker/docker-compose.yml
+# yet: apps/dashboard and apps/pwa-scanner don't have builds to serve until
+# their respective phases (§10 Phase 2, 7) land. Kept here now only to match
+# the folder structure in §4 and document the intended routing.
+#
+# Intended routing once all pieces exist:
+#   /            -> apps/dashboard  (owner/cashier/warehouse web UI)
+#   /scan/       -> apps/pwa-scanner
+#   /api/        -> Hermes API (apps/api, Fastify, this repo's main service)
+#   /erp/        -> ERPNext frontend container (infra/docker/docker-compose.yml)
+#
+# Replace ${...} placeholders and copy to /etc/nginx/sites-available/hermes
+# on the VPS, then symlink into sites-enabled.
+
+server {
+    listen 80;
+    server_name ${DOMAIN};
+
+    location / {
+        proxy_pass http://127.0.0.1:${DASHBOARD_PORT};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    location /scan/ {
+        proxy_pass http://127.0.0.1:${PWA_SCANNER_PORT}/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:${API_PORT}/api/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 120s;
+    }
+
+    location /erp/ {
+        proxy_pass http://127.0.0.1:${ERPNEXT_PORT}/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        client_max_body_size 50m;
+    }
+}

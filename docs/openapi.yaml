@@ -1,0 +1,18 @@
+# Auto-generated API documentation (spec §4). Placeholder until routes have
+# real request/response schemas to generate from — regenerate via the API's
+# OpenAPI plugin once modules move past the `/api/v1/<module>/_status`
+# scaffolding stage (see apps/api/src/modules/*/interfaces).
+openapi: 3.0.3
+info:
+  title: Hermes API
+  version: 0.1.0
+  description: AI-powered wholesale & retail ERP platform — application layer on top of ERPNext.
+servers:
+  - url: /api/v1
+paths:
+  /health:
+    get:
+      summary: Liveness check
+      responses:
+        '200':
+          description: Service is up
