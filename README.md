@@ -4,9 +4,12 @@ AI-powered wholesale & retail ERP platform. ERPNext is the single source of
 truth for all business data; this repo is the application layer on top of it
 (WhatsApp ordering, POS/scanning, owner analytics, dashboard). See the full
 spec for architecture, data model, and roadmap — this README only covers
-running what's in the repo right now (§10 Phase 0: foundation).
+running what's in the repo right now (§10 Phases 0–1: foundation + core data
+layer).
 
-## What's here (Phase 0)
+## What's here
+
+**Phase 0 (foundation):**
 
 - `apps/api` — Fastify + TypeScript modular monolith, split into the domain
   modules from the spec (`auth`, `sales-pos`, `inventory`,
@@ -22,6 +25,20 @@ running what's in the repo right now (§10 Phase 0: foundation).
 - `apps/pwa-scanner`, `apps/dashboard`, `packages/shared-types`,
   `packages/ui-components` — folders exist per the spec's structure but are
   not implemented yet (see each folder's README for which phase owns it).
+
+**Phase 1 (core data layer):**
+
+- `apps/api/src/shared/erpnext-client` — the real shared ERPNext API client
+  (§5), used by every module instead of calling ERPNext directly. Frappe
+  REST API over token auth, wrapped in retry-with-backoff (3 attempts,
+  exponential backoff, only for transient/5xx/429 failures — a 4xx like a
+  validation error is never retried) and a circuit breaker (opens after 5
+  consecutive transient failures, half-open retry after 10s) per the NFR
+  "Resilience" requirement in §1.4.
+- `apps/api/scripts/seed-erpnext.ts` — idempotent script that creates the
+  Phase 1 ERPNext data model: `customer_tier` / `credit_limit` /
+  `payment_term_days` Custom Fields on `Customer`, the Retail/Grosir/Member
+  Price Lists, and the Pcs/Lusin/Karton UOMs with their conversion factors.
 
 ## Prerequisites
 
@@ -84,6 +101,28 @@ with user `Administrator` and the `ADMIN_PASSWORD` from your `.env`.
 Manufacturing/Projects/HR-oriented menus from the Desk sidebar; HR itself is
 unavailable regardless because only the `erpnext` app is installed, not the
 separate `hrms` app (see `infra/docker/docker-compose.yml` header comment).
+
+### Setting up the Phase 1 data model (custom fields, Price Lists, UOMs)
+
+The seed script authenticates to ERPNext as a real user via API key/secret
+token auth, not the shared `Administrator`/password login. Generate a key
+pair once per environment:
+
+```bash
+cd infra/docker
+docker compose exec backend bench --site "$SITE_NAME" execute frappe.core.doctype.user.user.generate_keys --args "['Administrator']"
+```
+
+This prints `{"api_key": "...", "api_secret": "..."}` — the secret is only
+ever shown this once. Put both in the repo-root `.env` (`ERPNEXT_API_KEY`,
+`ERPNEXT_API_SECRET`), then run:
+
+```bash
+npm run seed:erpnext --workspace=apps/api
+```
+
+Safe to re-run — it checks for each Custom Field/Price List/UOM/UOM
+Conversion Factor before creating it, so nothing gets duplicated.
 
 ### What's tuned for the 2 vCPU / 2 GB RAM VPS (spec §13)
 

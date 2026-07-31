@@ -1,4 +1,31 @@
+import { existsSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { config as loadDotenv } from 'dotenv';
 import { z } from 'zod';
+
+/**
+ * Loads the nearest `.env`, walking up from cwd. There's a single
+ * `.env.example` at the monorepo root (§4), but npm workspace scripts run
+ * with cwd set to apps/api, and the production Docker image's WORKDIR is
+ * the repo root — this works for both without hardcoding either shape.
+ * A missing `.env` (e.g. production, where real env vars are injected
+ * directly) is not an error; dotenv just has nothing to load.
+ */
+function loadNearestEnvFile(): void {
+  let dir = process.cwd();
+  for (let i = 0; i < 5; i += 1) {
+    const candidate = join(dir, '.env');
+    if (existsSync(candidate)) {
+      loadDotenv({ path: candidate });
+      return;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) return;
+    dir = parent;
+  }
+}
+
+loadNearestEnvFile();
 
 /**
  * Comma-separated list of API keys -> non-empty string array.
