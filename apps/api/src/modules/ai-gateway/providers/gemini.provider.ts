@@ -27,7 +27,12 @@ export function createGeminiProvider(
         response = await fetchImpl(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ parts: [{ text: input.prompt }] }] }),
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: input.prompt }] }],
+            ...(input.systemPrompt
+              ? { systemInstruction: { parts: [{ text: input.systemPrompt }] } }
+              : {}),
+          }),
         });
       } catch (cause) {
         throw new AIProviderError(

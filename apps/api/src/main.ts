@@ -15,7 +15,7 @@ import {
   startCustomerMembershipBackgroundJobs,
   stopCustomerMembershipBackgroundJobs,
 } from './modules/customer-membership/interfaces/index.js';
-import { registerWhatsappRoutes } from './modules/whatsapp/interfaces/index.js';
+import { registerWhatsappModuleRoutes } from './modules/whatsapp/interfaces/index.js';
 import { registerAiGatewayRoutes } from './modules/ai-gateway/interfaces/index.js';
 import { registerPaymentRoutes } from './modules/payment/interfaces/index.js';
 import { registerNotificationRoutes } from './modules/notification/interfaces/index.js';
@@ -52,7 +52,7 @@ export function buildApp() {
   registerSalesPosRoutes(app);
   registerInventoryModuleRoutes(app);
   registerCustomerMembershipRoutes(app);
-  registerWhatsappRoutes(app);
+  registerWhatsappModuleRoutes(app);
   registerAiGatewayRoutes(app);
   registerPaymentRoutes(app);
   registerNotificationRoutes(app);

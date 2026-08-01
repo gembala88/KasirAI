@@ -39,7 +39,10 @@ export function createOpenAiCompatibleProvider(config: OpenAiCompatibleConfig): 
           },
           body: JSON.stringify({
             model: config.model,
-            messages: [{ role: 'user', content: input.prompt }],
+            messages: [
+              ...(input.systemPrompt ? [{ role: 'system', content: input.systemPrompt }] : []),
+              { role: 'user', content: input.prompt },
+            ],
           }),
         });
       } catch (cause) {

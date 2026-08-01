@@ -121,7 +121,13 @@ const envSchema = z.object({
   WHATSAPP_PHONE_NUMBER_ID: z.string().default(''),
   WHATSAPP_ACCESS_TOKEN: z.string().default(''),
   WHATSAPP_WEBHOOK_VERIFY_TOKEN: z.string().default(''),
+  // Meta signs inbound webhook payloads with this (X-Hub-Signature-256,
+  // HMAC-SHA256 of the raw body) — the app's secret, not a separate token.
   WHATSAPP_APP_SECRET: z.string().default(''),
+  WHATSAPP_API_VERSION: z.string().default('v21.0'),
+  // How many prior turns of ai_conversation_log to include as context
+  // when building a reply (spec §5 "chat history for context/memory").
+  WHATSAPP_CONVERSATION_HISTORY_TURNS: z.coerce.number().int().nonnegative().default(10),
 
   // --- Payment (QRIS static image, manual confirmation for MVP — §7) ---
   QRIS_STATIC_IMAGE_URL: z.string().default(''),

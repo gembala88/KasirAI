@@ -41,6 +41,38 @@ const SCHEMA = `
     confirmed_at TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_ai_action_audit_status ON ai_action_audit(status);
+
+  -- Maps WhatsApp phone number <-> ERPNext Customer ID + conversation
+  -- state (spec §5) — ERPNext has no concept of a WhatsApp session.
+  CREATE TABLE IF NOT EXISTS whatsapp_sessions (
+    phone_number TEXT PRIMARY KEY,
+    customer_id TEXT,
+    state TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  -- Chat history for context/memory (spec §5) — not business data, so it
+  -- doesn't belong in ERPNext either.
+  CREATE TABLE IF NOT EXISTS ai_conversation_log (
+    id TEXT PRIMARY KEY,
+    phone_number TEXT NOT NULL,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_ai_conversation_log_phone ON ai_conversation_log(phone_number, created_at);
+
+  -- WhatsApp/push notification delivery tracking (spec §5).
+  CREATE TABLE IF NOT EXISTS notification_log (
+    id TEXT PRIMARY KEY,
+    phone_number TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    message_type TEXT NOT NULL,
+    content TEXT NOT NULL,
+    status TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
 `;
 
 export function getDb(): DatabaseSync {

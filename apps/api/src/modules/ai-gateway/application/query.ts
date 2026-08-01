@@ -9,7 +9,7 @@
 import { buildProviderPools, generateWithFailover } from '../infrastructure/index.js';
 import type { AIResponse } from '../providers/index.js';
 
-export async function runAiQuery(prompt: string): Promise<AIResponse> {
+export async function runAiQuery(prompt: string, systemPrompt?: string): Promise<AIResponse> {
   const pools = buildProviderPools();
-  return generateWithFailover(pools, { prompt });
+  return generateWithFailover(pools, { prompt, ...(systemPrompt ? { systemPrompt } : {}) });
 }

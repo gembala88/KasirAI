@@ -8,26 +8,14 @@
  * enforcement point for that rule, independent of which provider produced
  * the proposal.
  *
- * Queries ERPNext directly (via the shared erpnext-client) rather than
- * calling into sales-pos/inventory's application layer — modules only
- * talk to each other through `interfaces` (§2.1, §3.3), and stock/price
- * lookups are a handful of lines, not worth a cross-module dependency for.
+ * Queries ERPNext directly (via the shared erpnext-client/erpnext-queries)
+ * rather than calling into sales-pos/inventory's application layer —
+ * modules only talk to each other through `interfaces` (§2.1, §3.3).
  */
 import { env } from '../../../config/env.js';
 import { erpNextClient } from '../../../shared/erpnext-client/index.js';
-import type {
-  SalesOrderActionPayload,
-  ValidationIssue,
-  ValidationResult,
-} from '../domain/index.js';
-
-interface ItemPriceRecord {
-  price_list_rate: number;
-}
-
-interface BinRecord {
-  actual_qty: number;
-}
+import { getStockQty, lookupItemPrice, resolvePriceListForTier } from '../../../shared/erpnext-queries/index.js';
+import type { SalesOrderActionPayload, ValidationIssue, ValidationResult } from '../domain/index.js';
 
 interface ItemRecord {
   min_order_qty: number;
@@ -35,32 +23,6 @@ interface ItemRecord {
 
 interface CustomerRecord {
   customer_tier?: string;
-}
-
-function resolvePriceList(tier: string | undefined): string {
-  return tier === 'Grosir' || tier === 'Member' ? tier : 'Retail';
-}
-
-async function lookupPrice(itemCode: string, priceList: string): Promise<number | null> {
-  const prices = await erpNextClient.list<ItemPriceRecord>('Item Price', {
-    filters: [
-      ['item_code', '=', itemCode],
-      ['price_list', '=', priceList],
-    ],
-    fields: ['price_list_rate'],
-  });
-  return prices[0]?.price_list_rate ?? null;
-}
-
-async function getStockQty(itemCode: string, warehouse: string): Promise<number> {
-  const bins = await erpNextClient.list<BinRecord>('Bin', {
-    filters: [
-      ['item_code', '=', itemCode],
-      ['warehouse', '=', warehouse],
-    ],
-    fields: ['actual_qty'],
-  });
-  return bins[0]?.actual_qty ?? 0;
 }
 
 export async function validateSalesOrderAction(
@@ -80,7 +42,7 @@ export async function validateSalesOrderAction(
     issues.push({ field: 'items', message: 'At least one line item is required' });
   }
 
-  const priceList = resolvePriceList(tier);
+  const priceList = resolvePriceListForTier(tier);
 
   for (const [index, line] of payload.items.entries()) {
     if (line.qty <= 0) {
@@ -98,7 +60,7 @@ export async function validateSalesOrderAction(
     }
 
     const [correctPrice, stockQty] = await Promise.all([
-      lookupPrice(line.itemCode, priceList),
+      lookupItemPrice(line.itemCode, priceList),
       getStockQty(line.itemCode, env.ERPNEXT_DEFAULT_WAREHOUSE),
     ]);
 

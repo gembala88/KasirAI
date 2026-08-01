@@ -96,6 +96,59 @@ export async function createTransaction(
   return toPosTransaction(doc);
 }
 
+export async function getTransaction(name: string): Promise<PosTransaction> {
+  const doc = await erpNextClient.get<SalesInvoiceDoc>('Sales Invoice', name);
+  return toPosTransaction(doc);
+}
+
+interface SalesOrderDoc {
+  name: string;
+  customer: string;
+  selling_price_list: string;
+  items: Array<{ item_code: string; qty: number; rate: number; warehouse: string }>;
+}
+
+/**
+ * QRIS payment flow (§7): converts an already-confirmed Sales Order into
+ * a *draft* Sales Invoice (docstatus=0 — stock is not reduced by a draft)
+ * so the customer can be sent the static QRIS image to pay against.
+ * Reuses `po_no` (Frappe's standard "Customer's PO No." field) to trace
+ * the invoice back to its source order rather than adding a custom field.
+ *
+ * `is_pos: 1` even though this is a WhatsApp-channel sale, not a till
+ * sale — found live (Phase 5 verification) that Frappe's `payments`
+ * child table on Sales Invoice, which `addPayment` below writes to and
+ * relies on to actually register `paid_amount`, is only honoured when
+ * `is_pos = 1`; a plain (non-POS) Sales Invoice submits fine with
+ * `payments` set but silently ignores it, leaving the invoice "Unpaid".
+ * `is_pos` here means "paid via the payments child table on submit", not
+ * "sold at a physical till".
+ */
+export async function createInvoiceFromSalesOrder(orderName: string): Promise<PosTransaction> {
+  const order = await erpNextClient.get<SalesOrderDoc>('Sales Order', orderName);
+
+  const doc = await erpNextClient.create<SalesInvoiceDoc>('Sales Invoice', {
+    company: env.ERPNEXT_DEFAULT_COMPANY,
+    customer: order.customer,
+    currency: 'IDR',
+    conversion_rate: 1,
+    is_pos: 1,
+    update_stock: 1,
+    selling_price_list: order.selling_price_list,
+    price_list_currency: 'IDR',
+    plc_conversion_rate: 1,
+    po_no: order.name,
+    items: order.items.map((item) => ({
+      item_code: item.item_code,
+      qty: item.qty,
+      rate: item.rate,
+      warehouse: item.warehouse,
+    })),
+  });
+
+  return toPosTransaction(doc);
+}
+
 export async function listParkedTransactions(): Promise<PosTransaction[]> {
   const docs = await erpNextClient.list<SalesInvoiceDoc>('Sales Invoice', {
     filters: [

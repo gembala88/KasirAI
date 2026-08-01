@@ -6,6 +6,13 @@
 export interface AIRequest {
   prompt: string;
   context?: Record<string, unknown>;
+  /**
+   * Persona/instruction text kept separate from the user-turn prompt
+   * (spec §8 Hermes persona) — providers that support a dedicated system
+   * role/field use it natively (Gemini's systemInstruction); the
+   * OpenAI-compatible client prepends it as a `system` message.
+   */
+  systemPrompt?: string;
 }
 
 export interface AIResponse {

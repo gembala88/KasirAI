@@ -41,6 +41,22 @@ export async function getCustomerProfile(customerId: string): Promise<CustomerPr
   }
 }
 
+/**
+ * Looks up a Customer by phone number (spec §7: the WhatsApp webhook only
+ * ever gives us a phone number, never an ERPNext Customer ID). Returns
+ * `null` rather than throwing when nobody matches — an unrecognised
+ * number chatting in is an expected case (not-yet-registered customer),
+ * not an error.
+ */
+export async function findCustomerByMobile(mobileNo: string): Promise<CustomerProfile | null> {
+  const [doc] = await erpNextClient.list<CustomerDoc>('Customer', {
+    filters: [['mobile_no', '=', mobileNo]],
+    fields: ['name', 'customer_name', 'customer_tier', 'credit_limit', 'payment_term_days', 'mobile_no'],
+    limit_page_length: '1',
+  });
+  return doc ? toProfile(doc) : null;
+}
+
 export interface CreateCustomerInput {
   name: string;
   tier: string;

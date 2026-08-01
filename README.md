@@ -4,8 +4,8 @@ AI-powered wholesale & retail ERP platform. ERPNext is the single source of
 truth for all business data; this repo is the application layer on top of it
 (WhatsApp ordering, POS/scanning, owner analytics, dashboard). See the full
 spec for architecture, data model, and roadmap — this README only covers
-running what's in the repo right now (§10 Phases 0–4: foundation, core data
-layer, POS + Inventory, Customer & Piutang, AI Gateway).
+running what's in the repo right now (§10 Phases 0–5: foundation, core data
+layer, POS + Inventory, Customer & Piutang, AI Gateway, WhatsApp Integration).
 
 ## What's here
 
@@ -136,6 +136,81 @@ layer, POS + Inventory, Customer & Piutang, AI Gateway).
   owner-analytics chat (that needs live ERPNext data grounding, a later
   phase) — this is the concrete way to prove the provider/failover
   machinery reaches a real AI provider.
+
+**Phase 5 (WhatsApp Integration):**
+
+- `apps/api/src/modules/whatsapp/interfaces/webhook.routes.ts` — the real
+  WhatsApp Cloud API webhook: `GET /whatsapp/webhook` handles Meta's
+  verification handshake (`hub.mode`/`hub.verify_token`/`hub.challenge`);
+  `POST /whatsapp/webhook` verifies `X-Hub-Signature-256` (HMAC-SHA256 of
+  the raw body, same `removeAllContentTypeParsers()` fix as the Phase 2
+  ERPNext webhook needed) and dispatches each inbound text message.
+- Hermes persona (`application/persona.ts`, §8) — a Bahasa Indonesia system
+  prompt carried as a real `systemPrompt` on `AIRequest` (Gemini's native
+  `systemInstruction`; the OpenAI-compatible client prepends a `system`
+  message) rather than string-concatenated into the prompt. The model
+  always answers with one JSON envelope, `{"reply": ..., "action": null |
+  {...}}`; native LLM function-calling isn't used since the Phase 4
+  provider abstraction doesn't carry tool schemas — a documented scope
+  simplification, not an oversight.
+- `application/conversation.ts` — `handleInboundMessage` runs up to two AI
+  Gateway turns per inbound message: turn A can request real data via a
+  structured `action`; if it does, this layer executes it for real
+  (`application/actions.ts`) and calls the model again with the result as
+  `system_data` so the final reply is grounded, never guessed. Every
+  fact-shaped action result the model can see is real — including
+  `check_stock`'s `{found: false}` vs `{found: true, matches: [...,
+  {stockQty: 0}]}` distinction, added after live testing showed a
+  small model conflating "no such product" with "out of stock" when both
+  just looked like an empty/zero-quantity result.
+- 7 conversation actions, each routed through the module that owns that
+  data (never straight to ERPNext from `whatsapp`): `check_stock` /
+  `check_price` (sales-pos), `propose_sales_order` (ai-gateway's Phase 4
+  propose→confirm validated-action layer — proposed *and* confirmed in the
+  same turn once the model judges the request unambiguous, unlike the
+  AI Gateway's own two-call HTTP endpoints), `get_order_status` /
+  `cancel_order` (new `ai-gateway/application/orders.ts`), and
+  `get_purchase_history` (customer-membership).
+- QRIS payment flow (§7): `initiate_qris_payment` converts a confirmed
+  Sales Order into a *draft* Sales Invoice
+  (`sales-pos/application/transactions.ts`'s `createInvoiceFromSalesOrder`,
+  `is_pos: 1` — found live that Frappe only honours the `payments` child
+  table on submit when `is_pos` is set, regardless of sales channel) and
+  sends the static QRIS image if `QRIS_STATIC_IMAGE_URL` is configured.
+  `POST /api/v1/whatsapp/orders/:invoiceName/confirm-payment` is the
+  owner/cashier's manual confirmation (API-only, no UI, by design for this
+  phase) — reuses the same `addPayment` the POS module uses, posting to
+  the real `QRIS` Mode of Payment's account and reducing stock on submit.
+  Returns `customerNotified: false` rather than a bare error when the
+  ERPNext write succeeds but the WhatsApp confirmation send fails, so a
+  notification hiccup never looks like the payment itself failed.
+- `apps/api/src/shared/erpnext-queries` — `resolvePriceListForTier` /
+  `lookupItemPrice` / `getStockQty` extracted here once a third module
+  (whatsapp) needed the same ERPNext lookups sales-pos and ai-gateway's
+  validator already had duplicated.
+- Live-verified against the real ERPNext stack and a real NVIDIA NIM call
+  (no Gemini/Mimo/OpenAI/Claude keys are configured yet, so NVIDIA NIM is
+  the only provider actually exercised so far): a multi-turn WhatsApp
+  conversation created and submitted a real Sales Order at the real
+  ERPNext Grosir price even after the model stated a different, fabricated
+  price earlier in the same conversation — the validated-action layer
+  silently corrected it, which is the property this whole design exists
+  to guarantee. `cancel_order` and the full QRIS initiate → confirm cycle
+  (draft invoice → real payment posted → stock reduced) were verified the
+  same way. Outbound WhatsApp sends attempt a real Graph API call and are
+  handled gracefully when they fail (no `WHATSAPP_ACCESS_TOKEN` is
+  configured yet) — a send is never faked as successful.
+- Known limitation, not a code defect: free-tier small models (verified
+  with NVIDIA NIM's `meta/llama-3.1-8b-instruct`) don't reliably pick the
+  intended structured action from natural language even with explicit
+  per-action trigger keywords in the prompt — e.g. it sometimes chose
+  `get_order_status` for a message clearly about paying. The
+  `initiate_qris_payment` code path itself was separately verified correct
+  against real ERPNext; the gap is the small model's instruction-following,
+  which a stronger/paid model would likely improve. `AI_PROVIDER_PRIORITY`
+  reordering to test Gemini's reliability for this specifically is blocked
+  on a real `GEMINI_API_KEYS` value — nothing has been reordered without
+  that evidence.
 
 ### Renaming the placeholder company
 
