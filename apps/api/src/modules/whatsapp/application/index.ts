@@ -6,4 +6,4 @@
  * `../interfaces`.
  */
 export { handleInboundMessage } from './conversation.js';
-export { confirmQrisPayment } from './actions.js';
+export { confirmPayment } from './actions.js';

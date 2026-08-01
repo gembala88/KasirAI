@@ -14,6 +14,9 @@ export interface ConversationLogEntry {
   createdAt: string;
 }
 
+/** The three payment methods §10 Phase 6 adds alongside QRIS — each maps 1:1 to a real ERPNext Mode of Payment ("QRIS", "Transfer", "Cash"). */
+export type PaymentMethod = 'qris' | 'transfer' | 'cod';
+
 /**
  * The structured actions a conversation turn can dispatch — this is the
  * "AI proposes the action as structured JSON" boundary from §1.3 FR-5,
@@ -28,7 +31,7 @@ export type ConversationAction =
   | { type: 'get_order_status'; orderName: string }
   | { type: 'get_purchase_history' }
   | { type: 'cancel_order'; orderName: string }
-  | { type: 'initiate_qris_payment'; orderName: string };
+  | { type: 'initiate_payment'; orderName: string; method: PaymentMethod };
 
 export interface ConversationTurnResult {
   reply: string;

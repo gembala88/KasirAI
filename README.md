@@ -4,8 +4,9 @@ AI-powered wholesale & retail ERP platform. ERPNext is the single source of
 truth for all business data; this repo is the application layer on top of it
 (WhatsApp ordering, POS/scanning, owner analytics, dashboard). See the full
 spec for architecture, data model, and roadmap — this README only covers
-running what's in the repo right now (§10 Phases 0–5: foundation, core data
-layer, POS + Inventory, Customer & Piutang, AI Gateway, WhatsApp Integration).
+running what's in the repo right now (§10 Phases 0–6: foundation, core data
+layer, POS + Inventory, Customer & Piutang, AI Gateway, WhatsApp
+Integration, Payments).
 
 ## What's here
 
@@ -171,19 +172,14 @@ layer, POS + Inventory, Customer & Piutang, AI Gateway, WhatsApp Integration).
   AI Gateway's own two-call HTTP endpoints), `get_order_status` /
   `cancel_order` (new `ai-gateway/application/orders.ts`), and
   `get_purchase_history` (customer-membership).
-- QRIS payment flow (§7): `initiate_qris_payment` converts a confirmed
-  Sales Order into a *draft* Sales Invoice
-  (`sales-pos/application/transactions.ts`'s `createInvoiceFromSalesOrder`,
-  `is_pos: 1` — found live that Frappe only honours the `payments` child
-  table on submit when `is_pos` is set, regardless of sales channel) and
-  sends the static QRIS image if `QRIS_STATIC_IMAGE_URL` is configured.
-  `POST /api/v1/whatsapp/orders/:invoiceName/confirm-payment` is the
-  owner/cashier's manual confirmation (API-only, no UI, by design for this
-  phase) — reuses the same `addPayment` the POS module uses, posting to
-  the real `QRIS` Mode of Payment's account and reducing stock on submit.
-  Returns `customerNotified: false` rather than a bare error when the
-  ERPNext write succeeds but the WhatsApp confirmation send fails, so a
-  notification hiccup never looks like the payment itself failed.
+- QRIS payment flow (§7): converts a confirmed Sales Order into a *draft*
+  Sales Invoice (`sales-pos/application/transactions.ts`'s
+  `createInvoiceFromSalesOrder`, `is_pos: 1` — found live that Frappe only
+  honours the `payments` child table on submit when `is_pos` is set,
+  regardless of sales channel) and sends the static QRIS image if
+  `QRIS_STATIC_IMAGE_URL` is configured. Generalized into a
+  method-agnostic `initiate_payment` action in Phase 6 alongside COD and
+  Bank Transfer — see that section.
 - `apps/api/src/shared/erpnext-queries` — `resolvePriceListForTier` /
   `lookupItemPrice` / `getStockQty` extracted here once a third module
   (whatsapp) needed the same ERPNext lookups sales-pos and ai-gateway's
@@ -211,6 +207,94 @@ layer, POS + Inventory, Customer & Piutang, AI Gateway, WhatsApp Integration).
   reordering to test Gemini's reliability for this specifically is blocked
   on a real `GEMINI_API_KEYS` value — nothing has been reordered without
   that evidence.
+
+**Phase 6 (Payments):**
+
+- §10's Phase 6 line calls for "QRIS integration (via licensed aggregator —
+  Midtrans/Xendit, since direct QRIS API access requires a licensed
+  payment processor), COD/transfer flows." Only the COD/transfer half is
+  built here — real aggregator integration (dynamic QR codes,
+  webhook-based automatic payment confirmation) needs a real Midtrans or
+  Xendit sandbox account, which doesn't exist yet; deferred by explicit
+  project decision rather than assumed. Phase 5's static-image + manual
+  QRIS confirmation stays as-is until then.
+- `whatsapp/domain/index.ts`'s `initiate_qris_payment` action is now the
+  method-agnostic `initiate_payment`, taking `{orderName, method: "qris" |
+  "transfer" | "cod"}` — same underlying draft-invoice mechanics for all
+  three, different customer-facing instructions
+  (`application/actions.ts`): QRIS sends the static image if configured,
+  Transfer sends the real bank details (`BANK_TRANSFER_BANK_NAME` /
+  `_ACCOUNT_NUMBER` / `_ACCOUNT_NAME`) if configured, COD always sends a
+  confirmation (no external config needed — it's just "pay the courier").
+  Each method maps 1:1 to a real ERPNext Mode of Payment: qris→`QRIS`,
+  transfer→`Transfer`, cod→`Cash` (COD *is* cash, just collected by the
+  courier instead of at a till).
+- `POST /api/v1/whatsapp/orders/:invoiceName/confirm-payment` now takes a
+  required `method` alongside `phoneNumber`, validated against the same
+  three values, so the owner/cashier confirms whichever method was
+  actually used.
+- Bug found and fixed via live testing (initial version of this phase):
+  the payment-instruction send (QRIS image / bank details / COD text) was
+  inside the *same* try/catch as the draft-invoice creation, so a
+  WhatsApp send failure after a successful ERPNext write got mislabeled
+  as `invoice_failed` — the exact masking bug already fixed once for
+  `confirmPayment`, recurring here. This class of bug (independent
+  outcomes sharing one try/catch) is worth checking for in any future
+  payment-adjacent endpoint.
+- **Payment-detail hardening** (`application/payment-reply.ts`) —
+  structural, not prompt-level. Live testing found the model can pick the
+  *wrong* action for a payment request (e.g. `get_order_status` instead
+  of `initiate_payment`) and then invent account details in its freeform
+  reply anyway; a stronger persona-prompt example reduced how often this
+  happened but doesn't prevent it, and the cost of failure (a customer
+  transferring money to a fabricated account) is worse than a wrong
+  price. So, matching how price/stock correctness is already enforced
+  outside the model's control:
+  - `actions.ts`'s `initiate_payment` case no longer sends any WhatsApp
+    message itself — it only creates the invoice and returns real facts
+    (`invoiceName`, `grandTotal`, `method`).
+  - `conversation.ts` is now the *only* place a payment-instruction
+    reply is composed. Whenever this turn's action really was a
+    successful `initiate_payment`, the customer-facing reply is always
+    `buildPaymentInstructionReply(result)` — assembled from the real
+    ERPNext write and real server config, never from the model's own
+    turn text (there's no second AI turn at all in this path; the
+    model's freeform reply for that turn is discarded outright, even if
+    it happened to be correct).
+  - Any other reply is scanned by `containsUnverifiedPaymentDetails`
+    (Indonesian payment-detail keywords, or a bare 6+ digit run) before
+    being sent. A match is blocked and replaced with a safe fallback
+    ("sebentar ya kak, saya pastikan dulu...") rather than relayed —
+    deliberately erring toward false positives, since an occasional
+    over-cautious fallback is far cheaper than leaking a fabricated
+    account number.
+  - `test/whatsapp-conversation.test.ts` reproduces the original live
+    failure with mocked AI responses (model picks `get_order_status`,
+    then fabricates a transfer account number) and asserts the hardened
+    path blocks it — not just that one prompt example happens to fix it.
+    Also covers: a fabricated reply on the very first turn (no action at
+    all), a successful payment's template overriding a deliberately
+    wrong model reply, QRIS image delivery, and that an ordinary reply
+    mentioning a short number is never blocked.
+- Live-verified against real ERPNext: COD and Bank Transfer each ran the
+  full cycle through a real WhatsApp conversation — draft invoice created
+  with the real order total, owner-confirmed via the API, invoice
+  submitted (`status: Paid`, correct `paid_amount`), real payment row
+  posted to the method's real ERPNext account (`Cash - TH` for COD,
+  `Bank Transfer - TH` for Transfer), stock reduced. QRIS re-verified
+  working under the renamed `initiate_payment` action.
+- `GEMINI_MODEL` fixed from `gemini-1.5-flash` (404s — deprecated) to
+  `gemini-flash-latest`, found live once a real `GEMINI_API_KEYS` value
+  was supplied — same kind of provider-catalog drift as Phase 4's NVIDIA
+  NIM model fix. With a real Gemini key configured, `AI_PROVIDER_PRIORITY`
+  (`mimo,gemini,nvidia,...`, unchanged) means Gemini — not NVIDIA NIM —
+  became the active provider automatically, since Mimo has no key
+  configured; this was **not** a deliberate reordering to run a
+  comparison. Incidentally, the COD hardening regression check above ran
+  against Gemini and picked `initiate_payment` correctly on the first
+  attempt, unlike NVIDIA NIM's `meta/llama-3.1-8b-instruct` in earlier
+  testing — a genuine but informal data point, not the systematic A/B
+  comparison that's still pending explicit go-ahead.
 
 ### Renaming the placeholder company
 

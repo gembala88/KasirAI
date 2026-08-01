@@ -133,44 +133,93 @@ describe('executeConversationAction', () => {
     );
   });
 
-  it('initiate_qris_payment sends the QRIS image and never claims success without a configured image URL', async () => {
-    mockGet({ Customer: { name: 'CUST-1', customer_tier: 'Retail' } });
-    mockList({ Customer: [{ name: 'CUST-1', customer_name: 'Budi', mobile_no: `${PHONE}-qris` }] });
-    erpNextClientMock.get.mockImplementation((doctype: string) => {
-      if (doctype === 'Sales Order') {
-        return Promise.resolve({
-          name: 'SO-0002',
-          customer: 'CUST-1',
-          selling_price_list: 'Retail',
-          items: [{ item_code: 'ITEM-OIL', qty: 2, rate: 18000, warehouse: 'Gudang Utama - TH' }],
+  describe('initiate_payment', () => {
+    // As of the Phase 6 payment-detail hardening, this action only ever
+    // creates the draft invoice and returns real facts — it never sends
+    // a WhatsApp message itself. Composing/sending the payment
+    // instruction is conversation.ts's job exclusively (payment-reply.ts),
+    // covered by test/whatsapp-conversation.test.ts.
+    function mockOrderAndInvoice(orderName: string, invoiceName: string): void {
+      mockGet({ Customer: { name: 'CUST-1', customer_tier: 'Retail' } });
+      erpNextClientMock.get.mockImplementation((doctype: string) => {
+        if (doctype === 'Sales Order') {
+          return Promise.resolve({
+            name: orderName,
+            customer: 'CUST-1',
+            selling_price_list: 'Retail',
+            items: [{ item_code: 'ITEM-OIL', qty: 2, rate: 18000, warehouse: 'Gudang Utama - TH' }],
+          });
+        }
+        if (doctype === 'Customer') {
+          return Promise.resolve({ name: 'CUST-1', customer_tier: 'Retail' });
+        }
+        return Promise.reject(new Error(`unexpected doctype ${doctype}`));
+      });
+      erpNextClientMock.create.mockResolvedValue({
+        name: invoiceName,
+        status: 'Draft',
+        customer: 'CUST-1',
+        grand_total: 36000,
+        paid_amount: 0,
+        outstanding_amount: 36000,
+      });
+    }
+
+    it.each(['qris', 'transfer', 'cod'] as const)(
+      'method=%s: creates the draft invoice and returns real facts, never sends a message itself',
+      async (method) => {
+        mockList({ Customer: [{ name: 'CUST-1', customer_name: 'Budi', mobile_no: `${PHONE}-${method}` }] });
+        mockOrderAndInvoice(`SO-${method}`, `SINV-${method}`);
+
+        const phone = `${PHONE}-${method}`;
+        const session = getOrCreateSession(phone);
+        const result = await executeConversationAction(phone, session, {
+          type: 'initiate_payment',
+          orderName: `SO-${method}`,
+          method,
         });
-      }
-      if (doctype === 'Customer') {
-        return Promise.resolve({ name: 'CUST-1', customer_tier: 'Retail' });
-      }
-      return Promise.reject(new Error(`unexpected doctype ${doctype}`));
-    });
-    erpNextClientMock.create.mockResolvedValue({
-      name: 'SINV-0001',
-      status: 'Draft',
-      customer: 'CUST-1',
-      grand_total: 36000,
-      paid_amount: 0,
-      outstanding_amount: 36000,
+
+        expect(result).toEqual({ invoiceName: `SINV-${method}`, grandTotal: 36000, method });
+        expect(sendTextMessageMock).not.toHaveBeenCalled();
+        expect(sendImageMessageMock).not.toHaveBeenCalled();
+      },
+    );
+
+    it('reports invoice_failed without masking when the ERPNext write itself fails', async () => {
+      mockList({ Customer: [{ name: 'CUST-1', customer_name: 'Budi', mobile_no: `${PHONE}-writefail` }] });
+      mockGet({ Customer: { name: 'CUST-1', customer_tier: 'Retail' } });
+      erpNextClientMock.get.mockImplementation((doctype: string) =>
+        doctype === 'Sales Order'
+          ? Promise.reject(new Error('ERPNext request failed with status 404'))
+          : Promise.resolve({ name: 'CUST-1', customer_tier: 'Retail' }),
+      );
+
+      const phone = `${PHONE}-writefail`;
+      const session = getOrCreateSession(phone);
+      const result = await executeConversationAction(phone, session, {
+        type: 'initiate_payment',
+        orderName: 'SO-MISSING',
+        method: 'cod',
+      });
+
+      expect(result).toMatchObject({ error: 'invoice_failed' });
     });
 
-    const phone = `${PHONE}-qris`;
-    const session = getOrCreateSession(phone);
-    const result = (await executeConversationAction(phone, session, {
-      type: 'initiate_qris_payment',
-      orderName: 'SO-0002',
-    })) as { invoiceName: string; grandTotal: number; qrisImageSent: boolean };
+    it('rejects a method the model invented that is not one of qris/transfer/cod', async () => {
+      mockList({ Customer: [{ name: 'CUST-1', customer_name: 'Budi', mobile_no: `${PHONE}-badmethod` }] });
+      mockOrderAndInvoice('SO-0005', 'SINV-0004');
 
-    expect(result.invoiceName).toBe('SINV-0001');
-    expect(result.grandTotal).toBe(36000);
-    // QRIS_STATIC_IMAGE_URL is unset in the test env, same as production
-    // until the user configures it — must not claim a send that didn't happen.
-    expect(result.qrisImageSent).toBe(false);
-    expect(sendImageMessageMock).not.toHaveBeenCalled();
+      const phone = `${PHONE}-badmethod`;
+      const session = getOrCreateSession(phone);
+      const result = await executeConversationAction(phone, session, {
+        type: 'initiate_payment',
+        orderName: 'SO-0005',
+        // @ts-expect-error deliberately invalid at the boundary this guards
+        method: 'cash',
+      });
+
+      expect(result).toEqual({ error: 'unsupported_method', method: 'cash' });
+      expect(erpNextClientMock.create).not.toHaveBeenCalled();
+    });
   });
 });

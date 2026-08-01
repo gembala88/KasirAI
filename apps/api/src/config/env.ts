@@ -110,7 +110,11 @@ const envSchema = z.object({
   // Model names are env-configurable rather than hardcoded — free-tier
   // model availability shifts over time and per-account.
   MIMO_MODEL: z.string().default('mimo-v2.5-pro'),
-  GEMINI_MODEL: z.string().default('gemini-1.5-flash'),
+  // gemini-1.5-flash 404s on current API keys (deprecated); confirmed
+  // live 2026-08-02 that "gemini-flash-latest" works — Google's
+  // "-latest" alias convention for whichever Flash model is currently
+  // served, avoiding pinning to a dated snapshot that gets sunset again.
+  GEMINI_MODEL: z.string().default('gemini-flash-latest'),
   NVIDIA_NIM_MODEL: z.string().default('meta/llama-3.1-8b-instruct'),
   // Consecutive-failure threshold before a key is put on cooldown, and how
   // long the cooldown lasts (§3.1: "tracks key health in Redis ... so a
@@ -129,8 +133,14 @@ const envSchema = z.object({
   // when building a reply (spec §5 "chat history for context/memory").
   WHATSAPP_CONVERSATION_HISTORY_TURNS: z.coerce.number().int().nonnegative().default(10),
 
-  // --- Payment (QRIS static image, manual confirmation for MVP — §7) ---
+  // --- Payment (§10 Phase 6: COD/Transfer, alongside Phase 5's static-image
+  // QRIS — all three are manually confirmed by the owner/cashier for now;
+  // real licensed-aggregator (Midtrans/Xendit) integration for automatic
+  // QRIS confirmation is deferred until real sandbox credentials exist) ---
   QRIS_STATIC_IMAGE_URL: z.string().default(''),
+  BANK_TRANSFER_BANK_NAME: z.string().default(''),
+  BANK_TRANSFER_ACCOUNT_NUMBER: z.string().default(''),
+  BANK_TRANSFER_ACCOUNT_NAME: z.string().default(''),
 
   // --- Observability ---
   SENTRY_DSN: z.string().default(''),

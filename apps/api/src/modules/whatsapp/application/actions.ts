@@ -24,9 +24,21 @@ import {
   getTransaction,
   searchProducts,
 } from '../../sales-pos/interfaces/index.js';
-import type { ConversationAction, WhatsAppSession } from '../domain/index.js';
-import { sendImageMessage, sendTextMessage } from '../infrastructure/whatsapp-client.js';
+import type { ConversationAction, PaymentMethod, WhatsAppSession } from '../domain/index.js';
+import { sendTextMessage } from '../infrastructure/whatsapp-client.js';
 import { updateSession } from '../infrastructure/sessions.js';
+
+/**
+ * Each payment method maps 1:1 to a real ERPNext Mode of Payment (created
+ * in the Phase 2 seed script, each posting to its own account for
+ * reconciliation) — "cod" reuses "Cash" since it *is* cash, just collected
+ * by the courier at delivery instead of at a till.
+ */
+export const MODE_OF_PAYMENT_BY_METHOD: Record<PaymentMethod, string> = {
+  qris: 'QRIS',
+  transfer: 'Transfer',
+  cod: 'Cash',
+};
 
 async function resolveCustomerId(phoneNumber: string, session: WhatsAppSession): Promise<string | null> {
   if (session.customerId) {
@@ -128,25 +140,26 @@ export async function executeConversationAction(
       }
     }
 
-    case 'initiate_qris_payment': {
+    case 'initiate_payment': {
       const customerId = await resolveCustomerId(phoneNumber, session);
       if (!customerId) {
         return { error: 'customer_not_registered' };
       }
+      if (!(action.method in MODE_OF_PAYMENT_BY_METHOD)) {
+        // parseModelJson only checks the action's "type", not nested
+        // fields — a model could emit a method it invented (e.g. "cash"
+        // instead of "cod"), so this is checked for real here.
+        return { error: 'unsupported_method', method: action.method };
+      }
+      // No message is sent from here — composing and sending the
+      // payment-instruction reply is conversation.ts's job exclusively
+      // (payment-reply.ts's buildPaymentInstructionReply), so there is
+      // exactly one place in the codebase that turns a successful
+      // initiate_payment into customer-facing text. This action only
+      // ever returns real facts about the ERPNext write.
       try {
         const invoice = await createInvoiceFromSalesOrder(action.orderName);
-        if (env.QRIS_STATIC_IMAGE_URL) {
-          await sendImageMessage(
-            phoneNumber,
-            env.QRIS_STATIC_IMAGE_URL,
-            `Total: Rp ${invoice.grandTotal.toLocaleString('id-ID')} — scan QRIS ini untuk bayar pesanan ${invoice.name}`,
-          );
-        }
-        return {
-          invoiceName: invoice.name,
-          grandTotal: invoice.grandTotal,
-          qrisImageSent: Boolean(env.QRIS_STATIC_IMAGE_URL),
-        };
+        return { invoiceName: invoice.name, grandTotal: invoice.grandTotal, method: action.method };
       } catch (error) {
         return { error: 'invoice_failed', message: error instanceof Error ? error.message : String(error) };
       }
@@ -159,7 +172,7 @@ export async function executeConversationAction(
   }
 }
 
-export interface QrisConfirmResult {
+export interface PaymentConfirmResult {
   invoiceName: string;
   grandTotal: number;
   /** False if the ERPNext write succeeded but the WhatsApp notification failed — never claims a send that didn't happen. */
@@ -167,23 +180,25 @@ export interface QrisConfirmResult {
 }
 
 /**
- * Owner/cashier confirms a QRIS payment was received (§7, "API endpoint
- * only, no UI" per project decision) — reuses the same addPayment the
- * POS module uses to submit the invoice (docstatus=1) and reduce stock,
- * then sends the customer a real WhatsApp confirmation.
+ * Owner/cashier confirms a payment was received — QRIS, bank transfer, or
+ * COD cash-on-delivery (§7/§10 Phase 6, "API endpoint only, no UI" per
+ * project decision) — reuses the same addPayment the POS module uses to
+ * submit the invoice (docstatus=1) and reduce stock, then sends the
+ * customer a real WhatsApp confirmation.
  *
  * The ERPNext write and the WhatsApp notification are treated as
  * separate outcomes: a notification failure (e.g. WhatsApp credentials
  * not configured yet) must never look like the payment itself failed to
  * the owner/cashier calling this — the money was already registered.
  */
-export async function confirmQrisPayment(
+export async function confirmPayment(
   invoiceName: string,
   phoneNumber: string,
-): Promise<QrisConfirmResult> {
+  method: PaymentMethod,
+): Promise<PaymentConfirmResult> {
   const current = await getTransaction(invoiceName);
   const updated = await addPayment(invoiceName, [
-    { modeOfPayment: 'QRIS', amount: current.grandTotal },
+    { modeOfPayment: MODE_OF_PAYMENT_BY_METHOD[method], amount: current.grandTotal },
   ]);
 
   let customerNotified = false;
@@ -194,7 +209,7 @@ export async function confirmQrisPayment(
     );
     customerNotified = true;
   } catch (error) {
-    logger.error({ invoiceName, phoneNumber, error }, 'whatsapp.qris_confirmation_notify_failed');
+    logger.error({ invoiceName, phoneNumber, error }, 'whatsapp.payment_confirmation_notify_failed');
   }
 
   return { invoiceName: updated.name, grandTotal: updated.grandTotal, customerNotified };

@@ -14,12 +14,19 @@ import { runAiQuery } from '../../ai-gateway/interfaces/index.js';
 import { executeConversationAction } from './actions.js';
 import { buildTurnPrompt, HERMES_SYSTEM_PROMPT, parseModelJson, type ParsedTurn } from './persona.js';
 import {
+  buildPaymentInstructionReply,
+  containsUnverifiedPaymentDetails,
+  isSuccessfulPaymentResult,
+  SAFE_PAYMENT_FALLBACK_REPLY,
+  shouldSendQrisImage,
+} from './payment-reply.js';
+import {
   appendConversationLog,
   getOrCreateSession,
   getRecentConversation,
   logNotification,
 } from '../infrastructure/sessions.js';
-import { sendTextMessage } from '../infrastructure/whatsapp-client.js';
+import { sendImageMessage, sendTextMessage } from '../infrastructure/whatsapp-client.js';
 
 async function runPersonaTurn(
   history: Parameters<typeof buildTurnPrompt>[0],
@@ -39,14 +46,36 @@ export async function handleInboundMessage(phoneNumber: string, text: string): P
   const history = getRecentConversation(phoneNumber, env.WHATSAPP_CONVERSATION_HISTORY_TURNS);
 
   let finalReply: string;
+  let sendAsQrisImage = false;
+
   try {
     const turnA = await runPersonaTurn(history, text, undefined);
 
     if (turnA.action) {
       logger.info({ phoneNumber, action: turnA.action.type }, 'whatsapp.conversation_action');
       const systemData = await executeConversationAction(phoneNumber, session, turnA.action);
-      const turnB = await runPersonaTurn(history, text, systemData);
-      finalReply = turnB.reply;
+
+      if (turnA.action.type === 'initiate_payment' && isSuccessfulPaymentResult(systemData)) {
+        // Payment details are never taken from the model's own words —
+        // always assembled from the real result, even if the model's
+        // turn-B reply happens to also be correct. See payment-reply.ts.
+        finalReply = buildPaymentInstructionReply(systemData);
+        sendAsQrisImage = shouldSendQrisImage(systemData);
+      } else {
+        const turnB = await runPersonaTurn(history, text, systemData);
+        if (containsUnverifiedPaymentDetails(turnB.reply)) {
+          logger.warn(
+            { phoneNumber, action: turnA.action.type, reply: turnB.reply },
+            'whatsapp.blocked_unverified_payment_details',
+          );
+          finalReply = SAFE_PAYMENT_FALLBACK_REPLY;
+        } else {
+          finalReply = turnB.reply;
+        }
+      }
+    } else if (containsUnverifiedPaymentDetails(turnA.reply)) {
+      logger.warn({ phoneNumber, reply: turnA.reply }, 'whatsapp.blocked_unverified_payment_details');
+      finalReply = SAFE_PAYMENT_FALLBACK_REPLY;
     } else {
       finalReply = turnA.reply;
     }
@@ -58,7 +87,11 @@ export async function handleInboundMessage(phoneNumber: string, text: string): P
   appendConversationLog(phoneNumber, 'assistant', finalReply);
 
   try {
-    await sendTextMessage(phoneNumber, finalReply);
+    if (sendAsQrisImage) {
+      await sendImageMessage(phoneNumber, env.QRIS_STATIC_IMAGE_URL, finalReply);
+    } else {
+      await sendTextMessage(phoneNumber, finalReply);
+    }
     logNotification(phoneNumber, 'outbound', 'text', finalReply, 'sent');
   } catch (error) {
     // The inbound message was still received/logged/replied-to internally;
