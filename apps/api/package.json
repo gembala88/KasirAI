@@ -14,6 +14,7 @@
     "seed:erpnext": "tsx scripts/seed-erpnext.ts"
   },
   "dependencies": {
+    "@fastify/cors": "^10.0.2",
     "@fastify/sensible": "^6.0.2",
     "close-with-grace": "^2.2.0",
     "cockatiel": "^3.2.1",

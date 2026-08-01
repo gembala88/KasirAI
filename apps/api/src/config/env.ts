@@ -51,6 +51,14 @@ const envSchema = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace']).default('info'),
   PORT: z.coerce.number().int().positive().default(3000),
   HOST: z.string().default('0.0.0.0'),
+  // Comma-separated allowlist for browser clients (apps/pwa-scanner,
+  // apps/dashboard) calling the API cross-origin. "*" (default) reflects
+  // any origin — fine while those apps only run on developer machines;
+  // replace with real production origins before deploying (§10 Phase 8).
+  CORS_ALLOWED_ORIGINS: z
+    .string()
+    .default('*')
+    .transform((value) => (value === '*' ? true : value.split(',').map((o) => o.trim()))),
 
   // --- Auth ---
   JWT_SECRET: z
@@ -64,6 +72,21 @@ const envSchema = z.object({
   ERPNEXT_BASE_URL: z.string().url().default('http://localhost:8000'),
   ERPNEXT_API_KEY: z.string().default(''),
   ERPNEXT_API_SECRET: z.string().default(''),
+  // Placeholder company name until the real business name is confirmed —
+  // see README "Renaming the placeholder company". Renaming is a Company
+  // doctype edit in ERPNext, not a code change, once these are updated.
+  ERPNEXT_DEFAULT_COMPANY: z.string().default('Toko Hermes'),
+  ERPNEXT_DEFAULT_WAREHOUSE: z.string().default('Gudang Utama - TH'),
+  // HMAC secret Frappe signs webhook payloads with (Webhook.webhook_secret).
+  // Empty means signature verification is skipped — fine for local dev,
+  // must be set before exposing /webhooks/erpnext beyond localhost.
+  ERPNEXT_WEBHOOK_SECRET: z.string().default(''),
+  // Where ERPNext should POST webhook events — from inside the ERPNext
+  // Docker network, the Node API running on the host is reached via
+  // Docker Desktop's host.docker.internal, not localhost.
+  ERPNEXT_WEBHOOK_CALLBACK_URL: z
+    .string()
+    .default('http://host.docker.internal:3000/webhooks/erpnext'),
 
   // --- Redis / BullMQ (async jobs, cache) ---
   REDIS_URL: z.string().default('redis://localhost:6379'),

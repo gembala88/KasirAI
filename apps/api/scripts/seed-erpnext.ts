@@ -1,10 +1,9 @@
 /**
- * Phase 1 "Core Data Layer" bootstrap (spec §10, §5).
+ * ERPNext bootstrap for Phases 1–2 (spec §10, §5). Idempotent: safe to
+ * re-run against the same site. Creates, via the shared ErpNextClient (not
+ * raw DB writes — "the correct way to add business fields", §5):
  *
- * Idempotent: safe to re-run against the same site. Creates, via the
- * shared ErpNextClient (not raw DB writes — "the correct way to add
- * business fields", §5):
- *
+ * Phase 1 "Core Data Layer":
  *   - Custom Fields on Customer: customer_tier, credit_limit,
  *     payment_term_days
  *   - Price Lists: Retail, Grosir, Member (§5: "use separate Price Lists
@@ -12,8 +11,34 @@
  *   - UOMs: Pcs, Lusin, Karton, with default UOM Conversion Factors
  *     (1 Karton = 12 Lusin = 144 Pcs, per §1.3 FR-2's example)
  *
+ * Phase 2 "POS + Inventory" prerequisites — none of this is optional
+ * scaffolding: ERPNext's Sales Invoice/Stock Entry/Stock Reconciliation
+ * doctypes hard-require a Company (and everything a Company implies: a
+ * Fiscal Year, a Chart of Accounts, at least one Warehouse) before they'll
+ * accept a single write. There's no Setup Wizard equivalent over the REST
+ * API, so this script IS the equivalent, discovered by exercising the real
+ * flow end-to-end against a fresh site (see README "Renaming the
+ * placeholder company" for what's a placeholder here and why):
+ *   - Company "Toko Hermes" (abbr TH) — creating it auto-creates the
+ *     Chart of Accounts and a few generic warehouses ERPNext ships with
+ *     (Stores/Finished Goods/WIP/Goods In Transit); those are left alone.
+ *   - Warehouse "Gudang Utama - TH" — the one warehouse per §12's
+ *     confirmed 1-store/1-warehouse MVP scope.
+ *   - Fiscal Year covering the current date.
+ *   - Item Group tree root + a default leaf group for un-categorized items.
+ *   - Stock Entry Types (Material Receipt/Issue/Transfer) and a Warehouse
+ *     Type (Transit) — link-validated master lists ERPNext expects to
+ *     exist but doesn't ship pre-populated.
+ *   - Modes of Payment (Cash, QRIS, Transfer), each posting to its own
+ *     account — Cash to the Company's default cash account, QRIS and
+ *     Transfer to their own Bank-type accounts created under "Bank
+ *     Accounts" — so split payments (§1.3 FR-1) reconcile correctly:
+ *     what's physically in the till versus what's settled to the bank.
+ *   - "Walk-in Customer" (tier Retail) as the default POS customer.
+ *
  * Usage: npm run seed:erpnext --workspace=apps/api
  */
+import { env } from '../src/config/env.js';
 import { erpNextClient, ErpNextApiError } from '../src/shared/erpnext-client/index.js';
 import { logger } from '../src/shared/logger/index.js';
 
@@ -57,6 +82,37 @@ const CUSTOMER_CUSTOM_FIELDS: CustomFieldSpec[] = [
 const PRICE_LISTS = ['Retail', 'Grosir', 'Member'];
 
 const UOMS = ['Pcs', 'Lusin', 'Karton'];
+
+// --- Phase 2 prerequisites ---
+
+const COMPANY_NAME = env.ERPNEXT_DEFAULT_COMPANY;
+const COMPANY_ABBR = 'TH';
+const COMPANY_CURRENCY = 'IDR';
+const COMPANY_COUNTRY = 'Indonesia';
+const WAREHOUSE_NAME = 'Gudang Utama';
+const ROOT_ITEM_GROUP = 'All Item Groups';
+const DEFAULT_ITEM_GROUP = 'Produk Umum';
+const STOCK_ENTRY_TYPES: Array<{ name: string; purpose: string }> = [
+  { name: 'Material Receipt', purpose: 'Material Receipt' },
+  { name: 'Material Issue', purpose: 'Material Issue' },
+  { name: 'Material Transfer', purpose: 'Material Transfer' },
+];
+const WAREHOUSE_TYPE = 'Transit';
+
+// Each Mode of Payment posts to its own account for real reconciliation
+// (what's physically in the till vs. what's settled to the bank). Cash
+// uses the Company's auto-created default cash account; QRIS and Transfer
+// get their own Bank-type accounts under the Company's "Bank Accounts"
+// group (also auto-created).
+const MODES_OF_PAYMENT: Array<{
+  name: string;
+  type: 'Cash' | 'Bank';
+  dedicatedAccountName?: string;
+}> = [
+  { name: 'Cash', type: 'Cash' },
+  { name: 'QRIS', type: 'Bank', dedicatedAccountName: 'QRIS' },
+  { name: 'Transfer', type: 'Bank', dedicatedAccountName: 'Bank Transfer' },
+];
 
 // UOM Conversion Factor requires a UOM Category (spec §1.3 FR-2's example —
 // karton/lusin/pcs are all "how many individual items" units).
@@ -146,6 +202,177 @@ async function ensureUomCategory(name: string): Promise<void> {
   logger.info({ name }, 'seed.uom_category.created');
 }
 
+/** Generic "create if the name doesn't already exist" helper for simple master-list doctypes. */
+async function ensureDoc(
+  doctype: string,
+  name: string,
+  createPayload: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await erpNextClient.get(doctype, name);
+    logger.info({ doctype, name }, 'seed.doc.exists');
+    return;
+  } catch (error) {
+    if (!(error instanceof ErpNextApiError) || error.statusCode !== 404) {
+      throw error;
+    }
+  }
+
+  await erpNextClient.create(doctype, createPayload);
+  logger.info({ doctype, name }, 'seed.doc.created');
+}
+
+async function ensureCompany(): Promise<{ name: string; defaultCashAccount: string }> {
+  interface CompanyDoc {
+    name: string;
+    default_cash_account: string;
+  }
+
+  try {
+    const existing = await erpNextClient.get<CompanyDoc>('Company', COMPANY_NAME);
+    logger.info({ name: COMPANY_NAME }, 'seed.company.exists');
+    return { name: existing.name, defaultCashAccount: existing.default_cash_account };
+  } catch (error) {
+    if (!(error instanceof ErpNextApiError) || error.statusCode !== 404) {
+      throw error;
+    }
+  }
+
+  // Creating a Company triggers ERPNext's on_update hook, which builds the
+  // Chart of Accounts and a handful of generic default warehouses — it
+  // needs Warehouse Type "Transit" to already exist for that to succeed.
+  await ensureDoc('Warehouse Type', WAREHOUSE_TYPE, { name: WAREHOUSE_TYPE });
+
+  const created = await erpNextClient.create<CompanyDoc>('Company', {
+    company_name: COMPANY_NAME,
+    abbr: COMPANY_ABBR,
+    default_currency: COMPANY_CURRENCY,
+    country: COMPANY_COUNTRY,
+    valuation_method: 'FIFO',
+  });
+  logger.info({ name: COMPANY_NAME }, 'seed.company.created');
+  return { name: created.name, defaultCashAccount: created.default_cash_account };
+}
+
+async function ensureFiscalYear(): Promise<void> {
+  const year = new Date().getFullYear();
+  await ensureDoc('Fiscal Year', String(year), {
+    year: String(year),
+    year_start_date: `${year}-01-01`,
+    year_end_date: `${year}-12-31`,
+  });
+}
+
+async function ensureWarehouse(company: string): Promise<void> {
+  await ensureDoc('Warehouse', env.ERPNEXT_DEFAULT_WAREHOUSE, {
+    warehouse_name: WAREHOUSE_NAME,
+    company,
+  });
+}
+
+async function ensureItemGroups(): Promise<void> {
+  await ensureDoc('Item Group', ROOT_ITEM_GROUP, {
+    item_group_name: ROOT_ITEM_GROUP,
+    is_group: 1,
+  });
+  await ensureDoc('Item Group', DEFAULT_ITEM_GROUP, {
+    item_group_name: DEFAULT_ITEM_GROUP,
+    parent_item_group: ROOT_ITEM_GROUP,
+    is_group: 0,
+  });
+}
+
+async function ensureStockEntryTypes(): Promise<void> {
+  for (const type of STOCK_ENTRY_TYPES) {
+    await ensureDoc('Stock Entry Type', type.name, { name: type.name, purpose: type.purpose });
+  }
+}
+
+async function ensureBankAccount(accountName: string, company: string): Promise<string> {
+  const fullName = `${accountName} - ${COMPANY_ABBR}`;
+  await ensureDoc('Account', fullName, {
+    account_name: accountName,
+    company,
+    parent_account: `Bank Accounts - ${COMPANY_ABBR}`,
+    account_type: 'Bank',
+    is_group: 0,
+  });
+  return fullName;
+}
+
+async function ensureModesOfPayment(company: string, defaultCashAccount: string): Promise<void> {
+  for (const mode of MODES_OF_PAYMENT) {
+    const account = mode.dedicatedAccountName
+      ? await ensureBankAccount(mode.dedicatedAccountName, company)
+      : defaultCashAccount;
+
+    await ensureDoc('Mode of Payment', mode.name, {
+      mode_of_payment: mode.name,
+      type: mode.type,
+      accounts: [{ company, default_account: account }],
+    });
+  }
+}
+
+async function ensureWalkInCustomer(): Promise<void> {
+  await ensureDoc('Customer', 'Walk-in Customer', {
+    customer_name: 'Walk-in Customer',
+    customer_type: 'Individual',
+    customer_tier: 'Retail',
+  });
+}
+
+// Doctypes that trigger cache invalidation / cross-module events on
+// change, per spec §3.2 — plus Sales Invoice, since sales-pos completes a
+// POS sale by submitting a stock-updating Sales Invoice (not a Sales
+// Order), which needs the same cache invalidation as a Stock Entry.
+// Registered against ERPNext's Webhook doctype so they actually fire
+// against apps/api's /webhooks/erpnext (§10 Phase 2).
+const ERPNEXT_WEBHOOK_SUBSCRIPTIONS: Array<{ doctype: string; event: string }> = [
+  { doctype: 'Stock Entry', event: 'on_submit' },
+  { doctype: 'Stock Reconciliation', event: 'on_submit' },
+  { doctype: 'Item', event: 'on_update' },
+  { doctype: 'Sales Invoice', event: 'on_submit' },
+];
+
+async function ensureErpNextWebhooks(): Promise<void> {
+  for (const subscription of ERPNEXT_WEBHOOK_SUBSCRIPTIONS) {
+    const already = await existsByFilter('Webhook', [
+      ['webhook_doctype', '=', subscription.doctype],
+      ['webhook_docevent', '=', subscription.event],
+      ['request_url', '=', env.ERPNEXT_WEBHOOK_CALLBACK_URL],
+    ]);
+    if (already) {
+      logger.info(subscription, 'seed.webhook.exists');
+      continue;
+    }
+
+    await erpNextClient.create('Webhook', {
+      __newname: `Hermes - ${subscription.doctype} - ${subscription.event}`,
+      webhook_doctype: subscription.doctype,
+      webhook_docevent: subscription.event,
+      request_url: env.ERPNEXT_WEBHOOK_CALLBACK_URL,
+      request_method: 'POST',
+      request_structure: 'JSON',
+      // Without this, Frappe posts an empty `{}` body — webhook_json is a
+      // Jinja template. `doc.as_json()` fails under Frappe's sandboxed
+      // Jinja environment (method calls blocked); `doc | tojson` is the
+      // data-only equivalent and is allowed.
+      webhook_json: '{{ doc | tojson }}',
+      enabled: 1,
+      enable_security: env.ERPNEXT_WEBHOOK_SECRET ? 1 : 0,
+      ...(env.ERPNEXT_WEBHOOK_SECRET ? { webhook_secret: env.ERPNEXT_WEBHOOK_SECRET } : {}),
+    });
+    logger.info(subscription, 'seed.webhook.created');
+  }
+
+  if (!env.ERPNEXT_WEBHOOK_SECRET) {
+    logger.warn(
+      'seed.webhook.no_secret_configured — signature verification will be skipped; set ERPNEXT_WEBHOOK_SECRET before exposing /webhooks/erpnext beyond localhost',
+    );
+  }
+}
+
 async function ensureUomConversionFactor(from: string, to: string, value: number): Promise<void> {
   const already = await existsByFilter('UOM Conversion Factor', [
     ['from_uom', '=', from],
@@ -183,6 +410,15 @@ async function main(): Promise<void> {
   for (const conversion of UOM_CONVERSIONS) {
     await ensureUomConversionFactor(conversion.from, conversion.to, conversion.value);
   }
+
+  const company = await ensureCompany();
+  await ensureFiscalYear();
+  await ensureWarehouse(company.name);
+  await ensureItemGroups();
+  await ensureStockEntryTypes();
+  await ensureModesOfPayment(company.name, company.defaultCashAccount);
+  await ensureWalkInCustomer();
+  await ensureErpNextWebhooks();
 
   logger.info('seed.done');
 }

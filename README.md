@@ -4,8 +4,8 @@ AI-powered wholesale & retail ERP platform. ERPNext is the single source of
 truth for all business data; this repo is the application layer on top of it
 (WhatsApp ordering, POS/scanning, owner analytics, dashboard). See the full
 spec for architecture, data model, and roadmap — this README only covers
-running what's in the repo right now (§10 Phases 0–1: foundation + core data
-layer).
+running what's in the repo right now (§10 Phases 0–2: foundation, core data
+layer, POS + Inventory).
 
 ## What's here
 
@@ -39,6 +39,46 @@ layer).
   Phase 1 ERPNext data model: `customer_tier` / `credit_limit` /
   `payment_term_days` Custom Fields on `Customer`, the Retail/Grosir/Member
   Price Lists, and the Pcs/Lusin/Karton UOMs with their conversion factors.
+
+**Phase 2 (POS + Inventory):**
+
+- `apps/api/src/modules/sales-pos` — tier-aware product search/pricing
+  (`GET /api/v1/products/search`, `GET /api/v1/products/:id/price`) and the
+  POS transaction lifecycle (`POST /api/v1/pos/transactions`,
+  `.../parked`, `.../:id/park`, `.../:id/payment` — split payment,
+  auto-completes the sale once payments cover the total). Backed by
+  ERPNext's `Sales Invoice` doctype (`is_pos=1`) rather than the dedicated
+  `POS Invoice` doctype — see the module's doc comment for why.
+- `apps/api/src/modules/inventory` — real-time cached stock reads
+  (`GET /api/v1/products/:id/stock`, 30s TTL), stock opname with a variance
+  report (`.../inventory/stock-opname`), scanner actions
+  (`.../inventory/scan/{add-stock,reduce-stock,transfer}`), and low-stock /
+  near-expiry alerts. Also owns `POST /webhooks/erpnext` — verifies
+  Frappe's HMAC signature, invalidates the stock cache, and republishes
+  every event on the shared event bus for other modules.
+- `apps/api/scripts/seed-erpnext.ts` (extended) — also bootstraps what
+  ERPNext requires before any Sales Invoice/Stock Entry can exist: a
+  Company, Warehouse, Fiscal Year, Item Groups, Stock Entry Types, Modes of
+  Payment (linked to the Company's cash account so split payments post),
+  a "Walk-in Customer", and the `Webhook` records that make
+  `/webhooks/erpnext` actually fire.
+- `apps/pwa-scanner` — installable PWA (Vite + React) for scan actions,
+  offline-first via an IndexedDB queue (`src/lib/offline-queue.ts`) that
+  syncs automatically when connectivity returns.
+- `@fastify/cors` on the API (`CORS_ALLOWED_ORIGINS` env var) — required
+  for `apps/pwa-scanner` (and later `apps/dashboard`) to call the API from
+  a browser at all; without it every cross-origin request is blocked
+  before it reaches a route.
+
+### Renaming the placeholder company
+
+`ERPNEXT_DEFAULT_COMPANY` / `ERPNEXT_DEFAULT_WAREHOUSE` default to a
+placeholder ("Toko Hermes" / "Gudang Utama - TH") since the spec left the
+real store name as `[Nama Toko]` (§8.1) — nothing was provided when Phase 2
+was built. To use your real business name: rename the Company and Warehouse
+in ERPNext's UI (Company rename cascades to linked accounts/warehouses
+automatically), then update both env vars to match. `apps/api`'s modules
+never hardcode the name — they only read these two env vars.
 
 ## Prerequisites
 
@@ -75,6 +115,19 @@ npm run typecheck    # tsc --noEmit
 npm run test         # vitest
 ```
 
+## Running the PWA scanner locally
+
+```bash
+npm run dev --workspace=apps/pwa-scanner
+```
+
+Opens on `http://localhost:5173`, talking to the API at
+`http://localhost:3000` by default (override with `VITE_API_BASE_URL` in a
+`.env` in `apps/pwa-scanner`). Requires the API's `@fastify/cors` to allow
+its origin — the default `CORS_ALLOWED_ORIGINS=*` covers this out of the
+box for local dev. See [apps/pwa-scanner/README.md](apps/pwa-scanner/README.md)
+for how to exercise the offline queue.
+
 ## Running ERPNext locally
 
 ```bash
@@ -102,7 +155,7 @@ Manufacturing/Projects/HR-oriented menus from the Desk sidebar; HR itself is
 unavailable regardless because only the `erpnext` app is installed, not the
 separate `hrms` app (see `infra/docker/docker-compose.yml` header comment).
 
-### Setting up the Phase 1 data model (custom fields, Price Lists, UOMs)
+### Setting up the ERPNext data model (Phase 1 + 2)
 
 The seed script authenticates to ERPNext as a real user via API key/secret
 token auth, not the shared `Administrator`/password login. Generate a key
@@ -121,8 +174,17 @@ ever shown this once. Put both in the repo-root `.env` (`ERPNEXT_API_KEY`,
 npm run seed:erpnext --workspace=apps/api
 ```
 
-Safe to re-run — it checks for each Custom Field/Price List/UOM/UOM
-Conversion Factor before creating it, so nothing gets duplicated.
+Safe to re-run — every step checks whether its record already exists before
+creating it, so nothing gets duplicated. Besides the Phase 1 Custom
+Fields/Price Lists/UOMs, this also creates the Phase 2 prerequisites (Company,
+Warehouse, Fiscal Year, Modes of Payment, Walk-in Customer) and registers the
+`Webhook` records that make `POST /webhooks/erpnext` fire — set
+`ERPNEXT_WEBHOOK_SECRET` in `.env` first so those are created with signature
+verification enabled (an empty secret means the endpoint accepts unsigned
+requests, logged as a warning — fine for a first local run, not for anything
+beyond localhost). If your API isn't reachable at
+`http://host.docker.internal:3000` from inside the ERPNext containers,
+override `ERPNEXT_WEBHOOK_CALLBACK_URL` before seeding.
 
 ### What's tuned for the 2 vCPU / 2 GB RAM VPS (spec §13)
 

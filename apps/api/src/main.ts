@@ -1,4 +1,5 @@
 import Fastify from 'fastify';
+import cors from '@fastify/cors';
 import sensible from '@fastify/sensible';
 import closeWithGrace from 'close-with-grace';
 import { fileURLToPath } from 'node:url';
@@ -8,7 +9,7 @@ import { AppError } from './shared/errors/index.js';
 
 import { registerAuthRoutes } from './modules/auth/interfaces/index.js';
 import { registerSalesPosRoutes } from './modules/sales-pos/interfaces/index.js';
-import { registerInventoryRoutes } from './modules/inventory/interfaces/index.js';
+import { registerInventoryModuleRoutes } from './modules/inventory/interfaces/index.js';
 import { registerCustomerMembershipRoutes } from './modules/customer-membership/interfaces/index.js';
 import { registerWhatsappRoutes } from './modules/whatsapp/interfaces/index.js';
 import { registerAiGatewayRoutes } from './modules/ai-gateway/interfaces/index.js';
@@ -28,6 +29,7 @@ export function buildApp() {
   });
 
   app.register(sensible);
+  app.register(cors, { origin: env.CORS_ALLOWED_ORIGINS });
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof AppError) {
@@ -44,7 +46,7 @@ export function buildApp() {
   // each module's `interfaces` boundary, never its internals (§2.1, §3.3).
   registerAuthRoutes(app);
   registerSalesPosRoutes(app);
-  registerInventoryRoutes(app);
+  registerInventoryModuleRoutes(app);
   registerCustomerMembershipRoutes(app);
   registerWhatsappRoutes(app);
   registerAiGatewayRoutes(app);
