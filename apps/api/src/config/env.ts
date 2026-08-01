@@ -89,7 +89,16 @@ const envSchema = z.object({
     .default('http://host.docker.internal:3000/webhooks/erpnext'),
 
   // --- Redis / BullMQ (async jobs, cache) ---
-  REDIS_URL: z.string().default('redis://localhost:6379'),
+  // Points at the `hermes-redis` service in infra/docker/docker-compose.yml
+  // (published on 6380, not the default 6379, to avoid colliding with any
+  // other local Redis — that service is separate from ERPNext's internal
+  // redis-cache/redis-queue, which aren't reachable from the host at all).
+  REDIS_URL: z.string().default('redis://localhost:6380'),
+  // Reminder window for piutang (accounts receivable) due-date checks,
+  // spec §7 "Piutang reminder flow". A repeatable BullMQ job checks daily;
+  // this controls how many days out counts as "coming due".
+  PIUTANG_REMINDER_DAYS_AHEAD: z.coerce.number().int().positive().default(3),
+  PIUTANG_REMINDER_CRON: z.string().default('0 8 * * *'),
 
   // --- AI Gateway: multi-provider, multi-key rotation (§3.1) ---
   AI_PROVIDER_PRIORITY: providerPriority,

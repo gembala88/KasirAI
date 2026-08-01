@@ -10,7 +10,11 @@ import { AppError } from './shared/errors/index.js';
 import { registerAuthRoutes } from './modules/auth/interfaces/index.js';
 import { registerSalesPosRoutes } from './modules/sales-pos/interfaces/index.js';
 import { registerInventoryModuleRoutes } from './modules/inventory/interfaces/index.js';
-import { registerCustomerMembershipRoutes } from './modules/customer-membership/interfaces/index.js';
+import {
+  registerCustomerMembershipRoutes,
+  startCustomerMembershipBackgroundJobs,
+  stopCustomerMembershipBackgroundJobs,
+} from './modules/customer-membership/interfaces/index.js';
 import { registerWhatsappRoutes } from './modules/whatsapp/interfaces/index.js';
 import { registerAiGatewayRoutes } from './modules/ai-gateway/interfaces/index.js';
 import { registerPaymentRoutes } from './modules/payment/interfaces/index.js';
@@ -61,10 +65,16 @@ export function buildApp() {
 async function main() {
   const app = buildApp();
 
+  // Background job workers (BullMQ + Redis, §3.3) — only started when
+  // actually running the server, never in buildApp(), so tests that just
+  // need the HTTP surface don't require a live Redis.
+  await startCustomerMembershipBackgroundJobs();
+
   closeWithGrace({ delay: 5000 }, async ({ err }) => {
     if (err) {
       logger.error({ err }, 'closing_app_due_to_error');
     }
+    await stopCustomerMembershipBackgroundJobs();
     await app.close();
   });
 

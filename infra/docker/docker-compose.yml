@@ -9,15 +9,40 @@
 #     Selling/Buying/Stock/Accounting active, one worker covers the volume)
 #   - `mem_limit` set on every long-running container (spec §13: "explicit
 #     Docker memory limits per container so one container can't starve the
-#     others") — total steady-state ceiling is kept under ~1.6 GB, leaving
-#     headroom for the host OS, the Node API, and the 2 GB swap buffer
-#     configured by infra/erpnext/setup-vps-swap.sh
+#     others") — see the running budget table below, kept up to date as
+#     services are added so the 2 GB ceiling stays visible at a glance.
 #   - MariaDB given a low-memory my.cnf (infra/erpnext/mariadb/hermes-tuning.cnf)
 #
 # Only the `erpnext` app is installed (not the separate `hrms` app), which
 # is how HR stays out of this instance per spec §13. Manufacturing/Projects
 # ship inside the `erpnext` app itself — see README.md "First login" for how
 # to hide them from the UI via the Setup Wizard's domain selection.
+#
+# `hermes-redis` (below) is a separate Redis instance for the Node API's
+# own use (BullMQ job queues, later caching) — distinct from redis-cache/
+# redis-queue above, which belong to ERPNext's Frappe workers only (per the
+# architecture diagram in spec §2). Published to the host, unlike the
+# ERPNext-internal ones, since apps/api runs on the host, not in this
+# compose file, until it's containerized in Phase 9.
+#
+# --- Memory budget (spec §13's 2 GB ceiling) ---------------------------
+#   Service          mem_limit   idle usage (docker stats, Phase 3)
+#   backend          400m        ~232 MiB
+#   db               512m        ~268 MiB
+#   queue            300m        ~54 MiB
+#   scheduler        150m        ~51 MiB
+#   frontend         128m        ~8 MiB
+#   websocket        100m        ~26 MiB
+#   redis-queue      64m         ~11 MiB
+#   hermes-redis     64m         ~8 MiB   (added Phase 3, for BullMQ)
+#   redis-cache      32m         ~14 MiB
+#   ------------------------------------------------------------------
+#   Total mem_limit: 1750m (~1.71 GB) of the 2 GB VPS, leaving ~250 MB
+#   for the host OS + the Node API (runs on the host, not in this
+#   compose file, until Phase 9) + the 2 GB swap buffer configured by
+#   infra/erpnext/scripts/setup-vps-swap.sh. Re-check this table whenever
+#   a service is added or a limit changes — it's meant to be the one place
+#   that answers "how much headroom is left" without adding up the file.
 #
 # Usage: see README.md "Running ERPNext locally / on the VPS".
 
@@ -211,6 +236,19 @@ services:
       restart_policy:
         condition: on-failure
 
+  hermes-redis:
+    image: redis:6.2-alpine
+    networks:
+      - hermes_network
+    mem_limit: 64m
+    deploy:
+      restart_policy:
+        condition: on-failure
+    volumes:
+      - hermes-redis-data:/data
+    ports:
+      - '${HERMES_REDIS_PUBLISH_PORT:-6380}:6379'
+
   scheduler:
     image: frappe/erpnext:${ERPNEXT_VERSION:-v16.30.0}
     networks:
@@ -253,6 +291,7 @@ services:
 volumes:
   db-data:
   redis-queue-data:
+  hermes-redis-data:
   sites:
   logs:
 

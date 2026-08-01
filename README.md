@@ -4,8 +4,8 @@ AI-powered wholesale & retail ERP platform. ERPNext is the single source of
 truth for all business data; this repo is the application layer on top of it
 (WhatsApp ordering, POS/scanning, owner analytics, dashboard). See the full
 spec for architecture, data model, and roadmap — this README only covers
-running what's in the repo right now (§10 Phases 0–2: foundation, core data
-layer, POS + Inventory).
+running what's in the repo right now (§10 Phases 0–3: foundation, core data
+layer, POS + Inventory, Customer & Piutang).
 
 ## What's here
 
@@ -59,9 +59,10 @@ layer, POS + Inventory).
 - `apps/api/scripts/seed-erpnext.ts` (extended) — also bootstraps what
   ERPNext requires before any Sales Invoice/Stock Entry can exist: a
   Company, Warehouse, Fiscal Year, Item Groups, Stock Entry Types, Modes of
-  Payment (linked to the Company's cash account so split payments post),
-  a "Walk-in Customer", and the `Webhook` records that make
-  `/webhooks/erpnext` actually fire.
+  Payment — each posting to its own account (Cash to the Company's default
+  cash account; QRIS and Bank Transfer to their own Bank-type accounts, for
+  real reconciliation) — a "Walk-in Customer", and the `Webhook` records
+  that make `/webhooks/erpnext` actually fire.
 - `apps/pwa-scanner` — installable PWA (Vite + React) for scan actions,
   offline-first via an IndexedDB queue (`src/lib/offline-queue.ts`) that
   syncs automatically when connectivity returns.
@@ -69,6 +70,33 @@ layer, POS + Inventory).
   for `apps/pwa-scanner` (and later `apps/dashboard`) to call the API from
   a browser at all; without it every cross-origin request is blocked
   before it reaches a route.
+
+**Phase 3 (Customer & Piutang):**
+
+- `apps/api/src/modules/customer-membership` — customer profile/membership
+  (`GET /api/v1/customers/:id`, `POST /api/v1/customers` to register with a
+  tier) and piutang (accounts receivable) tracking read live from ERPNext's
+  Sales Invoice ledger — never a separate cache (§1.4 NFR "Data
+  consistency"): `GET /api/v1/customers/:id/piutang` (outstanding invoices
+  with due dates, overdue flag), `GET /api/v1/customers/:id/purchase-history`.
+- Piutang reminder job (spec §7, §3.3) — a repeatable BullMQ job
+  (`PIUTANG_REMINDER_CRON`, daily by default) that finds invoices due
+  within `PIUTANG_REMINDER_DAYS_AHEAD` days across every customer, records
+  each via the shared audit logger, and publishes `piutang.reminder_due` on
+  the shared event bus. It does **not** send a WhatsApp message — that
+  integration is §10 Phase 5 and doesn't exist yet; fabricating a send here
+  would violate the same "never fabricate" principle the spec applies to
+  the AI persona (§8.1). A future notification/whatsapp module subscribes
+  to that same event to actually deliver it. Also exposed as
+  `GET /api/v1/customers/piutang/due-reminders` (synchronous read, same
+  query, for inspection) and `POST /api/v1/customers/piutang/check-reminders`
+  (enqueues an immediate run through the real queue, for manual/ops
+  triggering).
+- `hermes-redis` — a new service in `infra/docker/docker-compose.yml`,
+  separate from ERPNext's internal Redis instances, for the Node API's own
+  BullMQ queues. Published to the host on port 6380 (`REDIS_URL`), since
+  `apps/api` runs on the host, not in this compose file, until it's
+  containerized in Phase 9.
 
 ### Renaming the placeholder company
 
@@ -96,7 +124,16 @@ npm run dev --workspace=apps/api
 ```
 
 This starts the Fastify API on `http://localhost:3000` with `tsx watch`
-(auto-restarts on file changes). Verify it's up:
+(auto-restarts on file changes) and, since `npm run dev` runs the same
+`main()` entry point as production, also starts the piutang reminder
+BullMQ worker — which needs `hermes-redis` up first:
+
+```bash
+cd infra/docker && docker compose up -d hermes-redis
+```
+
+(`buildApp()`, used by the test suite, does **not** start background
+workers — tests never need a live Redis.) Verify it's up:
 
 ```bash
 curl http://localhost:3000/health
@@ -199,10 +236,13 @@ All applied in `infra/docker/docker-compose.yml` and
 | MariaDB InnoDB buffer pool capped at 128 MB, `performance_schema` off     | `infra/erpnext/mariadb/hermes-tuning.cnf` |
 | Only `erpnext` app installed (not `hrms`)                                 | `create-site` service                     |
 
-Steady-state container memory ceiling is ~1.6 GB, leaving headroom for the
-host OS and the Node API. On the actual VPS, also run the swap setup script
-once (see below) — it's a host-level change, not something Docker can do
-from inside a container.
+Steady-state container memory ceiling is ~1.71 GB (1750m across all
+`mem_limit`s — see the running budget table in
+`infra/docker/docker-compose.yml`'s header comment, kept current as
+services are added), leaving ~250 MB headroom for the host OS and the Node
+API. On the actual VPS, also run the swap setup script once (see below) —
+it's a host-level change, not something Docker can do from inside a
+container.
 
 ## Deploying to the VPS
 
