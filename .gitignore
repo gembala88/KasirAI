@@ -17,3 +17,6 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 .idea/
+
+# Hermes' own SQLite database (spec §5) — local runtime data, not source.
+apps/api/data/

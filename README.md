@@ -4,8 +4,8 @@ AI-powered wholesale & retail ERP platform. ERPNext is the single source of
 truth for all business data; this repo is the application layer on top of it
 (WhatsApp ordering, POS/scanning, owner analytics, dashboard). See the full
 spec for architecture, data model, and roadmap — this README only covers
-running what's in the repo right now (§10 Phases 0–3: foundation, core data
-layer, POS + Inventory, Customer & Piutang).
+running what's in the repo right now (§10 Phases 0–4: foundation, core data
+layer, POS + Inventory, Customer & Piutang, AI Gateway).
 
 ## What's here
 
@@ -98,6 +98,45 @@ layer, POS + Inventory, Customer & Piutang).
   `apps/api` runs on the host, not in this compose file, until it's
   containerized in Phase 9.
 
+**Phase 4 (AI Gateway):**
+
+- `apps/api/src/modules/ai-gateway/providers` — real implementations for
+  Mimo, Gemini, and NVIDIA NIM (§3.1's confirmed 5 providers, starting with
+  the free-tier ones — OpenAI/Claude aren't implemented yet). NVIDIA NIM
+  and Mimo share an OpenAI-compatible chat-completions client; Gemini uses
+  Google's native `generateContent` shape. All hand-rolled with `fetch`, no
+  SDK dependency, consistent with `shared/erpnext-client`.
+- Two-level failover (`infrastructure/gateway.ts`): rotates through a
+  provider's key pool before falling back to the next provider in
+  `AI_PROVIDER_PRIORITY`. Key health is tracked in `hermes-redis`
+  (`infrastructure/key-rotation.ts`, hashed keys only — never the raw key
+  in Redis's keyspace) behind a `KeyHealthStore` interface, so the failover
+  logic itself is unit-testable with an in-memory fake and needs no live
+  Redis in CI. Every failover is recorded via the shared audit logger.
+- Validation layer (`validation/index.ts`) — checks stock availability,
+  price correctness (an AI-proposed price that doesn't match ERPNext's is
+  always rejected, never trusted), and MOQ for Grosir tier (using Item's
+  own `min_order_qty`) before any ERPNext write. Queries ERPNext directly
+  rather than reaching into sales-pos/inventory's internals (§2.1/§3.3
+  module boundaries).
+- `ai_action_audit` table — Hermes' first "own database" table (§5).
+  Uses Node's built-in `node:sqlite` (still experimental, but needs no
+  native dependency and adds ~zero container memory) rather than a
+  separate Postgres/MariaDB server — the confirmed 2 GB VPS budget was
+  already tight after Phase 3's Redis addition. A single file at
+  `apps/api/data/hermes.sqlite`, gitignored.
+- `POST /api/v1/ai/action/propose` / `POST /api/v1/ai/action/:id/confirm`
+  (§6): propose validates and persists to `ai_action_audit`, never
+  touching ERPNext; confirm re-validates (stock/price may have moved since
+  the proposal) and only then executes — creating and submitting a real
+  ERPNext `Sales Order`. Starting with `propose_sales_order` as the one
+  concrete action type.
+- `POST /api/v1/ai/query` (§6) — a minimal endpoint that runs a prompt
+  through the failover gateway and returns the raw response. Not the full
+  owner-analytics chat (that needs live ERPNext data grounding, a later
+  phase) — this is the concrete way to prove the provider/failover
+  machinery reaches a real AI provider.
+
 ### Renaming the placeholder company
 
 `ERPNEXT_DEFAULT_COMPANY` / `ERPNEXT_DEFAULT_WAREHOUSE` default to a
@@ -164,6 +203,35 @@ Opens on `http://localhost:5173`, talking to the API at
 its origin — the default `CORS_ALLOWED_ORIGINS=*` covers this out of the
 box for local dev. See [apps/pwa-scanner/README.md](apps/pwa-scanner/README.md)
 for how to exercise the offline queue.
+
+## Setting up AI providers
+
+None of Mimo/Gemini/NVIDIA NIM have keys configured by default — without
+any, `POST /api/v1/ai/query` returns `503 SERVICE_UNAVAILABLE` (correctly:
+there's nothing to fail over to). `propose_action`/`confirm_action` don't
+need any AI provider at all — validation and execution talk to ERPNext
+directly, not an LLM.
+
+To enable a provider, add one or more comma-separated keys to its env var
+and restart:
+
+```bash
+# .env
+NVIDIA_NIM_API_KEYS=key1,key2
+GEMINI_API_KEYS=key1
+MIMO_API_KEYS=key1
+```
+
+- **NVIDIA NIM**: free tier at [build.nvidia.com](https://build.nvidia.com)
+  (uses your own NVIDIA account — not a link this repo can vouch for
+  beyond "it's NVIDIA's official developer portal").
+- **Gemini**: free tier via Google AI Studio.
+- **Mimo**: Xiaomi MiMo, `https://api.xiaomimimo.com/v1`.
+
+`AI_PROVIDER_PRIORITY` (default `mimo,gemini,nvidia,openai,claude`)
+controls fallback order — only providers with at least one key configured
+are actually tried; OpenAI/Claude have no implementation yet regardless of
+whether keys are set (§10 starts with the free-tier providers).
 
 ## Running ERPNext locally
 

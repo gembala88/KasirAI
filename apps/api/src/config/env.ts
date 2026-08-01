@@ -107,6 +107,15 @@ const envSchema = z.object({
   NVIDIA_NIM_API_KEYS: csvKeys,
   OPENAI_API_KEYS: csvKeys,
   CLAUDE_API_KEYS: csvKeys,
+  // Model names are env-configurable rather than hardcoded — free-tier
+  // model availability shifts over time and per-account.
+  MIMO_MODEL: z.string().default('mimo-v2.5-pro'),
+  GEMINI_MODEL: z.string().default('gemini-1.5-flash'),
+  NVIDIA_NIM_MODEL: z.string().default('meta/llama-3.1-8b-instruct'),
+  // Consecutive-failure threshold before a key is put on cooldown, and how
+  // long the cooldown lasts (§3.1: "tracks key health in Redis ... so a
+  // rate-limited key isn't retried immediately").
+  AI_KEY_COOLDOWN_SECONDS: z.coerce.number().int().positive().default(60),
 
   // --- WhatsApp Business Cloud API ---
   WHATSAPP_PHONE_NUMBER_ID: z.string().default(''),
