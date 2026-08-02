@@ -100,3 +100,17 @@ export function listConflicts(): SyncQueueRow[] {
     .all() as unknown as Row[];
   return rows.map(rowToQueueRow);
 }
+
+/**
+ * Deletes Synced rows older than the cutoff — data retention policy. Only
+ * ever targets `status = 'Synced'`: Pending/Processing/Failed/Retry/Conflict
+ * rows represent unresolved state and must never be silently deleted, and
+ * this function has no way to reach ERPNext's own data at all. Returns the
+ * number of rows actually deleted, for real reporting rather than a guess.
+ */
+export function deleteSyncedOlderThan(cutoffIso: string): number {
+  const result = getDb()
+    .prepare("DELETE FROM offline_sync_queue WHERE status = 'Synced' AND synced_at < ?")
+    .run(cutoffIso);
+  return Number(result.changes);
+}

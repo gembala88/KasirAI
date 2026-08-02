@@ -9,7 +9,10 @@
  *   - Price Lists: Retail, Grosir, Member (§5: "use separate Price Lists
  *     ... instead of a custom field — the standard ERPNext pattern")
  *   - UOMs: Pcs, Lusin, Karton, with default UOM Conversion Factors
- *     (1 Karton = 12 Lusin = 144 Pcs, per §1.3 FR-2's example)
+ *     (1 Karton = 12 Lusin = 144 Pcs, per §1.3 FR-2's example). Also seeds
+ *     Kg (fractional, not whole-number-only) for weight-sold items like
+ *     rice/sugar — made available ahead of time, no conversion factors yet
+ *     since no Kg-priced product exists to derive them from.
  *
  * Phase 2 "POS + Inventory" prerequisites — none of this is optional
  * scaffolding: ERPNext's Sales Invoice/Stock Entry/Stock Reconciliation
@@ -81,7 +84,12 @@ const CUSTOMER_CUSTOM_FIELDS: CustomFieldSpec[] = [
 
 const PRICE_LISTS = ['Retail', 'Grosir', 'Member'];
 
-const UOMS = ['Pcs', 'Lusin', 'Karton'];
+const UOMS: Array<{ name: string; mustBeWholeNumber: boolean }> = [
+  { name: 'Pcs', mustBeWholeNumber: true },
+  { name: 'Lusin', mustBeWholeNumber: true },
+  { name: 'Karton', mustBeWholeNumber: true },
+  { name: 'Kg', mustBeWholeNumber: false },
+];
 
 // --- Phase 8 auth prerequisites ---
 // hermes_role is a Custom Field on ERPNext's own User doctype rather than
@@ -143,6 +151,73 @@ const MODES_OF_PAYMENT: Array<{
   { name: 'Transfer', type: 'Bank', dedicatedAccountName: 'Bank Transfer' },
 ];
 
+// Compact, Indonesian-language checkout receipt (pre-Phase-9 polish pass,
+// 2026-08-03) — replaces ERPNext's own default Sales Invoice print format
+// (a full-page, English-language business invoice: "Bill to:", "In Words:",
+// A4-sized) which is real ERPNext content, not hardcoded, but the wrong
+// *shape* for a quick retail receipt. This is a real, user-editable ERPNext
+// Print Format (Setup > Printing > Print Format), not app code — the owner
+// can open it in ERPNext's Print Format designer and change it later
+// without touching this repository at all. Company name/address/logo still
+// come from ERPNext's own Letter Head (Setup > Printing > Letter Head),
+// rendered separately by the /printview route itself before this template's
+// own HTML — fill in the Company's address there for it to appear on
+// printed receipts.
+const RECEIPT_PRINT_FORMAT_NAME = 'Hermes Struk Kasir';
+const RECEIPT_PRINT_FORMAT_HTML = `<div style="font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; color: #171717; max-width: 380px; margin: 0 auto;">
+  <div style="text-align:center; margin-bottom: 12px;">
+    <div style="font-size: 12px; color:#666;">No. Struk: {{ doc.name }}</div>
+    <div style="font-size: 12px; color:#666;">{{ frappe.utils.formatdate(doc.posting_date, "dd-MM-yyyy") }} {{ ((doc.posting_time or "0:0:0")|string).split(".")[0] }}</div>
+  </div>
+  <div style="border-top: 1px dashed #999; border-bottom: 1px dashed #999; padding: 8px 0; margin-bottom: 8px;">
+    <div style="font-size:12px; color:#666;">Pelanggan: {{ doc.customer_name }}</div>
+  </div>
+  <table style="width:100%; border-collapse: collapse; font-size: 12px;">
+    <thead>
+      <tr style="border-bottom: 1px solid #ddd;">
+        <td style="padding: 4px 2px; text-align:left;">Barang</td>
+        <td style="padding: 4px 2px; text-align:right;">Qty</td>
+        <td style="padding: 4px 2px; text-align:right;">Harga</td>
+        <td style="padding: 4px 2px; text-align:right;">Subtotal</td>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in doc.items %}
+      <tr>
+        <td style="padding: 4px 2px;">{{ item.item_name }}</td>
+        <td style="padding: 4px 2px; text-align:right; white-space: nowrap;">{{ item.qty|int if item.qty == item.qty|int else item.qty }} {{ item.uom }}</td>
+        <td style="padding: 4px 2px; text-align:right;">{{ "{:,.0f}".format(item.rate)|replace(",", ".") }}</td>
+        <td style="padding: 4px 2px; text-align:right;">{{ "{:,.0f}".format(item.amount)|replace(",", ".") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div style="border-top: 1px dashed #999; margin-top: 8px; padding-top: 8px;">
+    {% if doc.discount_amount %}
+    <div style="display:flex; justify-content:space-between; font-size:12px;">
+      <span>Diskon</span><span>Rp {{ "{:,.0f}".format(doc.discount_amount)|replace(",", ".") }}</span>
+    </div>
+    {% endif %}
+    <div style="display:flex; justify-content:space-between; font-size:15px; font-weight:700; margin-top:4px;">
+      <span>Total</span><span>Rp {{ "{:,.0f}".format(doc.grand_total)|replace(",", ".") }}</span>
+    </div>
+    {% for pmt in doc.payments %}
+    <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:4px;">
+      <span>{{ pmt.mode_of_payment }}</span><span>Rp {{ "{:,.0f}".format(pmt.amount)|replace(",", ".") }}</span>
+    </div>
+    {% endfor %}
+    {% if doc.change_amount %}
+    <div style="display:flex; justify-content:space-between; font-size:12px;">
+      <span>Kembalian</span><span>Rp {{ "{:,.0f}".format(doc.change_amount)|replace(",", ".") }}</span>
+    </div>
+    {% endif %}
+  </div>
+  <div style="text-align:center; margin-top:16px; font-size:12px; color:#666;">
+    Terima kasih atas kunjungan Anda!
+  </div>
+</div>
+`;
+
 // UOM Conversion Factor requires a UOM Category (spec §1.3 FR-2's example —
 // karton/lusin/pcs are all "how many individual items" units).
 const UOM_CATEGORY = 'Quantity';
@@ -201,7 +276,7 @@ async function ensurePriceList(name: string): Promise<void> {
   logger.info({ name }, 'seed.price_list.created');
 }
 
-async function ensureUom(uomName: string): Promise<void> {
+async function ensureUom(uomName: string, mustBeWholeNumber: boolean): Promise<void> {
   try {
     await erpNextClient.get('UOM', uomName);
     logger.info({ uomName }, 'seed.uom.exists');
@@ -212,7 +287,10 @@ async function ensureUom(uomName: string): Promise<void> {
     }
   }
 
-  await erpNextClient.create('UOM', { uom_name: uomName, must_be_whole_number: 1 });
+  await erpNextClient.create('UOM', {
+    uom_name: uomName,
+    must_be_whole_number: mustBeWholeNumber ? 1 : 0,
+  });
   logger.info({ uomName }, 'seed.uom.created');
 }
 
@@ -452,7 +530,7 @@ async function main(): Promise<void> {
   }
 
   for (const uom of UOMS) {
-    await ensureUom(uom);
+    await ensureUom(uom.name, uom.mustBeWholeNumber);
   }
 
   await ensureUomCategory(UOM_CATEGORY);
@@ -469,6 +547,19 @@ async function main(): Promise<void> {
   await ensureModesOfPayment(company.name, company.defaultCashAccount);
   await ensureWalkInCustomer();
   await ensureErpNextWebhooks();
+
+  await ensureDoc('Print Format', RECEIPT_PRINT_FORMAT_NAME, {
+    name: RECEIPT_PRINT_FORMAT_NAME,
+    doc_type: 'Sales Invoice',
+    module: 'Accounts',
+    print_format_type: 'Jinja',
+    standard: 'No',
+    custom_format: 1,
+    disabled: 0,
+    font_size: 12,
+    page_number: 'Hide',
+    html: RECEIPT_PRINT_FORMAT_HTML,
+  });
 
   await ensureCustomField('User', USER_ROLE_FIELD);
   for (const user of SEED_USERS) {

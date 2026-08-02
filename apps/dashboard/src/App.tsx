@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { STORE_NAME } from './branding';
 import Login from './components/Login';
 import Overview from './components/Overview';
 import OwnerChat from './components/OwnerChat';
@@ -51,7 +52,7 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>Hermes Dashboard</h1>
+        <h1>{STORE_NAME}</h1>
         <div className="header-actions">
           <span className="hint">
             {user.fullName} · {user.role}

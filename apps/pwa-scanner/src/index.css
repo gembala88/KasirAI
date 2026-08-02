@@ -352,6 +352,17 @@ h1 {
   padding: 0.6rem 0.8rem;
 }
 
+/* Payment-screen order summary — read-only recap, no +/- controls, so the
+   cashier can double-check the cart before confirming payment. */
+.cart-line--review {
+  justify-content: space-between;
+  font-size: 0.9rem;
+}
+
+.payment-form {
+  margin-top: 0.5rem;
+}
+
 .cart-line-actions {
   display: flex;
   gap: 0.35rem;

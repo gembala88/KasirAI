@@ -5,6 +5,10 @@ Written against the real Phase 9 smoke-test deployment on `43.128.68.124`
 what that means for the numbers below). Re-verify paths/ports if this is
 ever run against a different box.
 
+For a plain-language (non-technical) summary of what's been decided and
+fixed throughout this project, see [NOTES.md](NOTES.md) instead of this
+file — this one assumes familiarity with Docker/SSH/the codebase.
+
 ## Architecture at a glance
 
 ```
@@ -20,16 +24,117 @@ hermes-redis) all run in Docker Compose, one project, one network
 (+ docker-compose.shared-vps-test.yml override on this specific box).
 ```
 
-**Security note:** `frontend` (ERPNext, :8080) and `hermes-redis` (:6380)
-are currently published to `0.0.0.0`, not `127.0.0.1` — inherited from
-the local-dev-oriented defaults in docker-compose.yml (`HTTP_PUBLISH_PORT`,
-`HERMES_REDIS_PUBLISH_PORT`). On this specific deployment it doesn't
-matter yet because the cloud provider's security group blocks external
-access to non-80/443/22 ports anyway (see README's Phase 9 section) —
-but before that firewall situation changes, rebind both to
-`127.0.0.1:${PORT}:...` in the compose file, matching how `api`/
-`dashboard`/`pwa-scanner` are already done, so ERPNext and Redis are
-only reachable through Nginx like everything else.
+**Security note (fixed 2026-08-03):** `frontend` (ERPNext, :8080) and
+`hermes-redis` (:6380) were published to `0.0.0.0` through Phase 9 — a
+leftover local-dev default that only stayed harmless because the cloud
+provider's security group blocked external access to non-80/443/22 ports
+anyway. Both are now bound `127.0.0.1:${PORT}:...` in docker-compose.yml,
+matching `api`/`dashboard`/`pwa-scanner`, as defense-in-depth ahead of the
+domain/HTTPS work opening 80/443 for real — ERPNext's admin panel and
+Redis are no longer reachable except through Nginx or from processes on
+the VPS itself.
+
+## If something seems wrong — plain-language quick fixes
+
+Try these in order. Most problems are fixed by the first one or two steps —
+you very rarely need to touch the server itself.
+
+**1. Reload the page.** On the cashier screen or dashboard, pull down to
+refresh (phone) or press the reload button (computer). Fixes the large
+majority of "it froze" or "it's showing something weird" problems.
+
+**2. Clear the browser's site data and reload.** If reloading doesn't help:
+- **Chrome (phone or computer):** open the site, tap the padlock/info icon
+  next to the address bar → "Site settings" (or "Permissions") → "Clear &
+  reset" / "Clear data" → reload the page and log in again.
+- This does **not** delete anything from the store's real data (sales,
+  stock, customers) — that all lives on the server in ERPNext, never in
+  the browser. The only thing this clears is the phone/computer's own
+  temporary copy of the app and any offline-queued sales that haven't
+  synced yet — so **only do this if you're sure there's no unsynced sale
+  sitting in the offline queue** (check the queue indicator on the Kasir
+  screen first; if it says everything is synced, this is safe).
+
+**3. Reinstall the app (PWA).** Remove it from the home screen / app
+drawer, then open the site fresh in Chrome and "Install app" again (see
+"Store PC/tablet setup" below). Fixes problems step 2 didn't.
+
+**4. Restart the services on the server.** Only needed if the site is
+completely unreachable, or a specific piece (e.g. printing) is stuck. This
+does need SSH access to the VPS — if you don't have that yourself, this is
+the point to hand off to whoever does. The commands themselves are simple
+copy-paste, explained below.
+
+**5. Reboot the whole VPS.** Last resort — only if step 4 doesn't fix it.
+`sudo reboot`. Everything (Nginx, all the app containers, the scheduled
+backup timer) is configured to start itself back up automatically — you
+don't need to manually start anything after a reboot. Give it 2-3 minutes,
+then check `docker ps` shows everything `Up` again (see below).
+
+**Before touching the server at all:** this VPS may be shared with other,
+unrelated projects that must never be affected — see the "Shared VPS"
+warning under "VPS resource ceiling reminder" below. `docker restart`/
+`docker compose restart` commands in this runbook only ever target
+Hermes' own named containers (`docker-*`), never anything else on the box,
+but a full VPS reboot (step 5) restarts *everything* on the machine,
+including those other projects. Only reach for step 5 if steps 1-4 didn't
+work.
+
+## Store PC/tablet setup
+
+There are two separate apps, at two separate addresses under the same
+domain — install both on any device that needs them (a cashier device
+typically only needs the second one; the owner/manager probably wants
+both):
+
+- **`https://<domain>/`** — the owner/manager dashboard (Ringkasan, Tanya
+  Hermes, Konfirmasi Pembayaran, Konflik Sinkron).
+- **`https://<domain>/scan/`** — the cashier checkout screen (Kasir) and
+  warehouse barcode-scan tool, role-gated after login.
+
+(Replace `<domain>` with the real domain once it's live — `newpelangi.duckdns.org`
+at the time of writing, see this file's Domain & HTTPS notes.)
+
+**Android (phone or tablet), Chrome:**
+1. Open the address above in Chrome.
+2. Log in with the store's account for that device (cashier account for
+   the scan app, owner/manager account for the dashboard).
+3. Tap the **⋮** menu (top right) → **"Install app"** (sometimes shown as
+   **"Add to Home screen"**). Confirm.
+4. The app now has its own icon on the home screen/app drawer, opens
+   full-screen without Chrome's address bar, and behaves like a normal
+   installed app.
+5. **Test the camera prompt** on the scan screen right after installing —
+   tap the barcode-scan button, confirm Chrome/Android asks for camera
+   permission and the live camera view actually appears. This only works
+   over HTTPS, which is exactly what the domain/HTTPS setup exists for.
+
+**iPhone/iPad, Safari** (Chrome on iOS cannot install PWAs — this must be
+Safari specifically, an Apple platform restriction, not a Hermes
+limitation):
+1. Open the address above in Safari.
+2. Log in.
+3. Tap the **Share** icon (square with an arrow) → **"Add to Home
+   Screen"** → confirm.
+4. Same result: a home-screen icon that opens full-screen.
+5. Test the camera prompt the same way as Android, step 5 above — iOS
+   Safari PWAs can use the camera, but this project has not yet verified
+   it on a real iPhone/iPad; treat the first real test as the actual
+   verification, not an assumption carried over from the desktop-browser
+   testing already done.
+
+**Windows PC (e.g. a till with keyboard/mouse), Chrome or Edge:**
+1. Open the address above.
+2. Log in.
+3. Click the **install icon** in the address bar (a monitor-with-arrow
+   icon appears on installable sites) → **"Install"**.
+4. The app opens in its own window (no browser tabs/address bar) and gets
+   a taskbar/Start Menu shortcut, like a normal Windows app.
+
+**If "Install" doesn't appear anywhere:** the site isn't being served over
+HTTPS yet, or something about the connection is broken — installability is
+one of the things HTTPS/a valid certificate unlocks. Check `https://<domain>/health`
+loads with a valid padlock first.
 
 ## Restarting a service
 
@@ -168,6 +273,59 @@ README.md's §15 section for what's genuinely implemented vs. simplified.
   the reason shown, correct the underlying stock discrepancy in ERPNext
   directly, and note that the original queued action stays un-applied
   (by design) rather than being silently retried into a wrong state.
+
+## Data retention
+
+Plain-language summary: **only staging/log data that has already served its
+purpose gets auto-deleted, after 30 days. Real business data (ERPNext's own
+invoices, stock, customers, reports) is never touched by any automatic
+process — there is no code path in any of the mechanisms below that can
+reach ERPNext's database at all.**
+
+**Deleted automatically, after 30 days:**
+- **Sync-queue "receipts"** (`offline_sync_queue` table, Hermes' own
+  SQLite): once a queued offline sale/scan is marked `Synced`, the row is
+  just a receipt proving that sync happened — the real transaction already
+  exists for real in ERPNext. A daily background job
+  (`apps/api/src/modules/sync/infrastructure/retention-queue.ts`, BullMQ
+  scheduled at 03:00 by default — `RETENTION_CLEANUP_CRON` in `.env`)
+  deletes `Synced` rows older than `RETENTION_SYNC_QUEUE_DAYS` (default 30).
+  It is structurally incapable of touching anything else: `Pending` /
+  `Processing` / `Failed` / `Retry` / `Conflict` rows are never matched by
+  its delete query, no matter how old, because those represent unresolved
+  state — see the "sync lands in Conflict" playbook above. Live-verified:
+  a 45-day-old `Synced` row was deleted, a 2-day-old one was not, run
+  through the real BullMQ queue against the real dev database.
+- **Docker container logs**: every long-running service in
+  `docker-compose.yml` has `logging: *default-logging` (10 MB x 5 files,
+  rotated by Docker itself). This is a size bound, not an exact calendar
+  cutoff — Docker's own log driver has no day-based rotation, and deleting
+  an active container's log file out from under it doesn't actually free
+  the disk space until the container restarts, so a cron job doing that
+  directly would be the wrong tool. 10m x 5 comfortably covers well over
+  30 days of normal volume for a single-store deployment.
+- **Nginx access/error logs**: `/etc/logrotate.d/nginx` on the VPS (see
+  `infra/nginx/hermes-logrotate` in this repo for the deployed config) —
+  `daily`, `rotate 30`, compressed. Ubuntu's own default ships with
+  `rotate 14`; this replaces it with 30 to match the same policy.
+
+**Never auto-deleted, kept indefinitely:**
+- Everything in ERPNext/MariaDB — Sales Invoice, Stock Ledger Entry,
+  Customer, every report. This is simply the default: nothing in this
+  project runs a scheduled delete against ERPNext's database.
+- Hermes' own WhatsApp conversation history (`ai_conversation_log`,
+  `notification_log` tables) — kept indefinitely by explicit decision
+  (2026-08-03), since it can matter for resolving a customer dispute about
+  what was said or promised, weeks or months later.
+- Anything with `Conflict` status in the sync queue, until a human resolves
+  it via the dashboard's "Konflik Sinkron" tab — see the failure-mode
+  playbook above.
+
+**To check or change the retention window:** `RETENTION_SYNC_QUEUE_DAYS`
+and `RETENTION_CLEANUP_CRON` in `.env` (both have sane defaults, no action
+needed unless you want a different window). To confirm the job actually
+ran: `docker compose ... logs api | grep retention_cleanup.ran` shows how
+many rows were deleted on each run.
 
 ## VPS resource ceiling reminder
 

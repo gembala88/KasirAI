@@ -100,6 +100,15 @@ const envSchema = z.object({
   PIUTANG_REMINDER_DAYS_AHEAD: z.coerce.number().int().positive().default(3),
   PIUTANG_REMINDER_CRON: z.string().default('0 8 * * *'),
 
+  // Data retention (post-launch requirement): auto-delete only staging/log
+  // data that has already served its purpose — a Synced offline_sync_queue
+  // row is a sync receipt for a transaction that already exists for real in
+  // ERPNext, not the record of truth itself. ERPNext's own data (invoices,
+  // stock, customers, reports) is never touched by this job — there is no
+  // code path in retention-queue.ts that can reach ERPNext at all.
+  RETENTION_SYNC_QUEUE_DAYS: z.coerce.number().int().positive().default(30),
+  RETENTION_CLEANUP_CRON: z.string().default('0 3 * * *'),
+
   // --- AI Gateway: multi-provider, multi-key rotation (§3.1) ---
   AI_PROVIDER_PRIORITY: providerPriority,
   MIMO_API_KEYS: csvKeys,
@@ -148,7 +157,12 @@ const envSchema = z.object({
   // designer — Setup > Printing > Print Format) to control receipt layout,
   // store address/WA number/footer text, etc. without a code change or
   // asking Claude Code again.
-  ERPNEXT_RECEIPT_PRINT_FORMAT: z.string().default(''),
+  // Defaults to the compact Indonesian receipt seeded by
+  // scripts/seed-erpnext.ts (RECEIPT_PRINT_FORMAT_NAME) rather than empty
+  // (ERPNext's own default full-page English invoice layout). Override to
+  // '' or another Print Format name if the owner designs a replacement in
+  // ERPNext's own Print Format designer and wants a different one used.
+  ERPNEXT_RECEIPT_PRINT_FORMAT: z.string().default('Hermes Struk Kasir'),
 
   // --- Observability ---
   SENTRY_DSN: z.string().default(''),

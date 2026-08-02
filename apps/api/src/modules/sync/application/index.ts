@@ -1,1 +1,1 @@
-export { syncAction, listConflicts } from './sync.js';
+export { syncAction, listConflicts, cleanupSyncedQueueRows } from './sync.js';

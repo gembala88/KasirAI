@@ -880,6 +880,86 @@ in ERPNext's UI (Company rename cascades to linked accounts/warehouses
 automatically), then update both env vars to match. `apps/api`'s modules
 never hardcode the name — they only read these two env vars.
 
+## Pre-launch polish pass (2026-08-03)
+
+Requested after Phase 9: domain/HTTPS setup (in progress — blocked on the
+user identifying their cloud provider), plus six smaller items, all
+verified live rather than assumed:
+
+- **Kg UOM**: added alongside Pcs/Lusin/Karton for weight-sold items
+  (rice, sugar, etc.), with `must_be_whole_number: 0` (unlike the other
+  three) so fractional amounts like 0.5kg are actually usable. Live-
+  verified on both local dev and the VPS's ERPNext via the real seeded
+  UOM's field values, not just that the seed script ran without error.
+- **Data retention**: 30-day auto-delete for `offline_sync_queue` rows
+  that already reached `Synced` status (a BullMQ scheduled job,
+  `apps/api/src/modules/sync/infrastructure/retention-queue.ts`, same
+  pattern as the piutang reminder job) and for Docker/Nginx logs (compose
+  `logging:` size/count bounds + a 30-day nginx logrotate config). Never
+  touches ERPNext's own data, or any non-`Synced` sync-queue row — kept
+  by the store owner's explicit decision, indefinitely, is the WhatsApp
+  conversation history (`ai_conversation_log`/`notification_log`), since
+  it isn't "just a log" the way the others are. Live-verified: a real
+  45-day-old `Synced` row was deleted by the actual job (through the real
+  BullMQ queue + Redis + SQLite file), a 2-day-old one was not. Full
+  policy documented in RUNBOOK.md's "Data retention" section.
+- **Real security gap found and fixed** while in `docker-compose.yml` for
+  the above: `frontend` (ERPNext, :8080) and `hermes-redis` (:6380) were
+  still published to `0.0.0.0` from local-dev defaults, not `127.0.0.1`
+  like `api`/`dashboard`/`pwa-scanner` already were — harmless only
+  because the cloud firewall was also blocking those ports. Rebound to
+  `127.0.0.1` as defense-in-depth; live-verified via `ss -tlnp` on the
+  VPS post-deploy, plus a real login still succeeding afterward.
+- **RUNBOOK.md** gained three new sections: a plain-language "if
+  something seems wrong" quick-fix list (reload → clear site data →
+  reinstall the PWA → restart services → reboot, in that order, with an
+  explicit warning about the shared VPS before the reboot step), a "Store
+  PC/tablet setup" guide (Android Chrome / iOS Safari / Windows Chrome or
+  Edge, each with concrete steps), and the data-retention policy above.
+- **NOTES.md** (new) — a plain-language, non-technical running log of
+  every notable decision and real bug found across all phases, meant to
+  be readable without touching code or git history.
+- **Receipt redesigned**: the checkout receipt was, until now, ERPNext's
+  own default Sales Invoice print format — real ERPNext content (the
+  company name pulled correctly), but a full-page, English-language
+  business invoice layout ("Bill to:", "In Words:"), not a compact retail
+  receipt. Built a new ERPNext Print Format ("Hermes Struk Kasir",
+  Jinja-templated, seeded idempotently by `scripts/seed-erpnext.ts`,
+  editable anytime via ERPNext's own Print Format designer with zero code
+  changes) — compact, Indonesian-labeled, shows items/qty/subtotal/
+  payment method/change, set as the new default via
+  `ERPNEXT_RECEIPT_PRINT_FORMAT`. Two real bugs found and fixed live
+  while building it: a stray trailing period on the printed time, and
+  quantities showing as "1.0" instead of "1". Found and documented (not
+  fixed in code, since it isn't a code problem): the store's address is
+  currently blank on the letterhead because it was never entered in
+  ERPNext's Company record — see `DEPLOY_CHECKLIST.md`.
+- **Kasir checkout screen polish**: the payment-confirmation step's
+  "Metode Pembayaran"/"Jumlah Diterima" fields were unstyled native
+  browser controls (small, inconsistent with the rest of the app) —
+  reused the app's existing `.scan-form` styling so they match every
+  other input (confirmed live via computed CSS: 48px min-height, 8px
+  border-radius, matching the cart screen). Also added a read-only order
+  summary to the payment screen so the cashier can see what's actually in
+  the cart before confirming, not just the total.
+- **Store branding made easy to edit**: both `apps/dashboard` and
+  `apps/pwa-scanner` now have a single `src/branding.ts` file exporting
+  `STORE_NAME`, used by both the header and the installed PWA's
+  name/home-screen label — one line to change, no other code touched.
+- **Real bug found and fixed**: `apps/dashboard` had no PWA manifest at
+  all — despite RUNBOOK.md's "Store PC/tablet setup" instructions telling
+  the owner to install it as an app, Chrome had nothing to install (no
+  `<link rel="manifest">`, no `vite-plugin-pwa` dependency). Added the
+  same manifest/service-worker setup `apps/pwa-scanner` already had.
+  Live-verified with a real production build:
+  `dist/manifest.webmanifest` is generated with the correct name/icons,
+  and `index.html` correctly links to it.
+
+All of the above deployed and live-verified on the VPS too (not just
+locally): containers rebuilt, `docker ps` confirms all 12 healthy,
+`robin_darkpools`'s four processes confirmed untouched (same PIDs)
+throughout every step.
+
 ## Prerequisites
 
 - Node.js >= 20

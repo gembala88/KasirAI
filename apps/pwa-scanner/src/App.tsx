@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import Kasir from './components/Kasir';
 import Login from './components/Login';
 import WarehouseScan from './components/WarehouseScan';
+import { STORE_NAME } from './branding';
 import { logout } from './lib/api';
 import { getStoredAuth, setOnAuthRequired, type AuthUser } from './lib/auth';
 
@@ -58,7 +59,7 @@ export default function App() {
       )}
 
       <header className="app-header">
-        <h1>Hermes Scanner</h1>
+        <h1>{STORE_NAME}</h1>
         <div className="header-actions">
           <span className="hint">
             {user.fullName} · {user.role}

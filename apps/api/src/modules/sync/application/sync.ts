@@ -65,3 +65,10 @@ export async function syncAction(request: SyncRequest): Promise<SyncResponse> {
 export function listConflicts() {
   return syncStore.listConflicts();
 }
+
+/** Data retention (post-launch requirement): purges Synced sync-queue rows older than `retentionDays`. Never touches ERPNext. */
+export function cleanupSyncedQueueRows(retentionDays: number): { deleted: number } {
+  const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
+  const deleted = syncStore.deleteSyncedOlderThan(cutoff);
+  return { deleted };
+}

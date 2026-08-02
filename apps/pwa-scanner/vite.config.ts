@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+import { STORE_NAME } from './src/branding';
 
 export default defineConfig({
   plugins: [
@@ -8,8 +9,10 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: 'Hermes Scanner',
-        short_name: 'Hermes Scan',
+        // Same STORE_NAME as the app header (src/branding.ts) — this is
+        // also what shows under the icon once installed on a home screen.
+        name: STORE_NAME,
+        short_name: STORE_NAME.length > 12 ? 'Kasir' : STORE_NAME,
         description: 'Barcode/QR scanning for Hermes — stock in/out, transfer, stock opname.',
         theme_color: '#111827',
         background_color: '#111827',

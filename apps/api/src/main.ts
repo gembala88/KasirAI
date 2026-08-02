@@ -23,7 +23,11 @@ import { registerPaymentRoutes } from './modules/payment/interfaces/index.js';
 import { registerNotificationRoutes } from './modules/notification/interfaces/index.js';
 import { registerReportDashboardRoutes } from './modules/report-dashboard/interfaces/index.js';
 import { registerMediaRoutes } from './modules/media/interfaces/index.js';
-import { registerSyncRoutes } from './modules/sync/interfaces/index.js';
+import {
+  registerSyncRoutes,
+  startSyncBackgroundJobs,
+  stopSyncBackgroundJobs,
+} from './modules/sync/interfaces/index.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -108,6 +112,7 @@ async function main() {
   // actually running the server, never in buildApp(), so tests that just
   // need the HTTP surface don't require a live Redis.
   await startCustomerMembershipBackgroundJobs();
+  await startSyncBackgroundJobs();
 
   closeWithGrace({ delay: 5000 }, async ({ err }) => {
     if (err) {
@@ -118,6 +123,7 @@ async function main() {
       sentry.captureException(err);
     }
     await stopCustomerMembershipBackgroundJobs();
+    await stopSyncBackgroundJobs();
     await app.close();
   });
 

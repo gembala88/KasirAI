@@ -81,10 +81,29 @@
 #   like the real 2 vCPU box regardless of host hardware.
 #
 # Usage: see README.md "Running ERPNext locally / on the VPS".
+#
+# Data retention (post-launch requirement): Docker's json-file driver has no
+# calendar-day rotation, and deleting an active container's log file out
+# from under it doesn't actually free space until the container restarts —
+# so "30-day raw logs" is enforced here as a size/count bound instead, which
+# is the safe way to cap the same class of data. 10m x 5 files per service
+# comfortably covers 30+ days of normal volume for a single-store deployment
+# and is rotated by Docker itself, not a cron job touching log files
+# directly. Applied to every long-running service; the one-shot
+# configurator/create-site containers exit almost immediately and don't
+# need it. See RUNBOOK.md's "Data retention" section for the full policy
+# (including nginx's own logrotate config and the app-level
+# offline_sync_queue cleanup job, apps/api/src/modules/sync/infrastructure/retention-queue.ts).
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '5'
 
 services:
   backend:
     image: frappe/erpnext:${ERPNEXT_VERSION:-v16.30.0}
+    logging: *default-logging
     networks:
       - hermes_network
     mem_limit: 380m
@@ -179,6 +198,7 @@ services:
 
   db:
     image: mariadb:11.8
+    logging: *default-logging
     networks:
       - hermes_network
     mem_limit: 480m
@@ -205,6 +225,7 @@ services:
 
   frontend:
     image: frappe/erpnext:${ERPNEXT_VERSION:-v16.30.0}
+    logging: *default-logging
     networks:
       - hermes_network
     mem_limit: 110m
@@ -229,11 +250,20 @@ services:
     volumes:
       - sites:/home/frappe/frappe-bench/sites
       - logs:/home/frappe/frappe-bench/logs
+    # 127.0.0.1-only, not 0.0.0.0 — same reasoning as api/dashboard/
+    # pwa-scanner below: Nginx (infra/nginx) is the only thing that should
+    # be internet-facing on this box. Was 0.0.0.0 through Phase 9 (a
+    # leftover local-dev default — harmless only as long as a firewall
+    # outside Docker's control was also blocking the port); fixed as
+    # defense-in-depth once the domain/HTTPS work made port 80/443
+    # reachability an active concern, rather than relying solely on the
+    # cloud firewall to keep ERPNext's admin panel off the open internet.
     ports:
-      - '${HTTP_PUBLISH_PORT:-8080}:8080'
+      - '127.0.0.1:${HTTP_PUBLISH_PORT:-8080}:8080'
 
   queue:
     image: frappe/erpnext:${ERPNEXT_VERSION:-v16.30.0}
+    logging: *default-logging
     networks:
       - hermes_network
     mem_limit: 280m
@@ -258,6 +288,7 @@ services:
 
   redis-queue:
     image: redis:6.2-alpine
+    logging: *default-logging
     networks:
       - hermes_network
     mem_limit: 60m
@@ -270,6 +301,7 @@ services:
 
   redis-cache:
     image: redis:6.2-alpine
+    logging: *default-logging
     networks:
       - hermes_network
     mem_limit: 30m
@@ -280,6 +312,7 @@ services:
 
   hermes-redis:
     image: redis:6.2-alpine
+    logging: *default-logging
     networks:
       - hermes_network
     mem_limit: 60m
@@ -289,11 +322,18 @@ services:
         condition: on-failure
     volumes:
       - hermes-redis-data:/data
+    # 127.0.0.1-only — same defense-in-depth reasoning as `frontend` above.
+    # The containerized `api` service never uses this published port at all
+    # (it reaches hermes-redis over the internal Docker network via
+    # redis://hermes-redis:6379); this port only exists for local dev,
+    # where apps/api runs on the bare host and needs to reach into the
+    # Docker network — 127.0.0.1 binding still works fine for that.
     ports:
-      - '${HERMES_REDIS_PUBLISH_PORT:-6380}:6379'
+      - '127.0.0.1:${HERMES_REDIS_PUBLISH_PORT:-6380}:6379'
 
   scheduler:
     image: frappe/erpnext:${ERPNEXT_VERSION:-v16.30.0}
+    logging: *default-logging
     networks:
       - hermes_network
     mem_limit: 140m
@@ -313,6 +353,7 @@ services:
 
   websocket:
     image: frappe/erpnext:${ERPNEXT_VERSION:-v16.30.0}
+    logging: *default-logging
     networks:
       - hermes_network
     mem_limit: 90m
@@ -343,6 +384,7 @@ services:
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile.api
+    logging: *default-logging
     networks:
       - hermes_network
     mem_limit: 180m
@@ -377,6 +419,7 @@ services:
       dockerfile: infra/docker/Dockerfile.dashboard
       args:
         VITE_API_BASE_URL: ${DASHBOARD_API_BASE_URL:-/api}
+    logging: *default-logging
     networks:
       - hermes_network
     mem_limit: 40m
@@ -395,6 +438,7 @@ services:
       dockerfile: infra/docker/Dockerfile.pwa-scanner
       args:
         VITE_API_BASE_URL: ${PWA_SCANNER_API_BASE_URL:-/api}
+    logging: *default-logging
     networks:
       - hermes_network
     mem_limit: 40m

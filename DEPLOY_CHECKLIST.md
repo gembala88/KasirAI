@@ -89,6 +89,22 @@ below — this smoke-test box is not that VPS).
   in-file comment block — not the `-shared-vps-test.yml` override, which
   is specific to this one box.
 
+## Store details on the printed receipt
+
+- [ ] **Company address is currently blank** on the printed receipt's
+  letterhead — confirmed live: the store name ("Toko Hermes") renders
+  correctly, but the address line is empty because it was never entered
+  in ERPNext. **Action needed from you:** in ERPNext, go to Setup >
+  Company > (your company) and fill in the address, or edit the
+  letterhead directly at Setup > Printing > Letter Head. No code change
+  needed — the receipt (Print Format "Hermes Struk Kasir", seeded by
+  `scripts/seed-erpnext.ts`) pulls whatever is there automatically.
+- [x] Receipt content itself redesigned during the polish pass (compact,
+  Indonesian-language, editable anytime in ERPNext's Print Format
+  designer without touching code) — replaces ERPNext's own default
+  full-page English invoice layout, which was real ERPNext content but
+  the wrong shape for a quick retail receipt.
+
 ## Verified working (real evidence, not assumed)
 
 - [x] Full stack deployed: ERPNext + MariaDB + Redis (×3) + Hermes API +

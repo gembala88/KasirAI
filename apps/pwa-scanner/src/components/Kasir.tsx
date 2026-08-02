@@ -214,29 +214,45 @@ export default function Kasir() {
           <span className="card-value">{formatRupiah(total)}</span>
         </div>
 
-        <label>
-          Metode Pembayaran
-          <select
-            value={paymentMethod}
-            onChange={(e) => setPaymentMethod(e.target.value as (typeof PAYMENT_METHODS)[number])}
-          >
-            {PAYMENT_METHODS.map((method) => (
-              <option key={method} value={method}>
-                {method}
-              </option>
+        <section className="cart card">
+          <h2>Ringkasan Pesanan</h2>
+          <ul>
+            {cart.map((line) => (
+              <li key={line.itemCode} className="cart-line cart-line--review">
+                <span>
+                  {line.itemName} <span className="hint">× {line.qty}</span>
+                </span>
+                <span>{formatRupiah(line.qty * line.rate)}</span>
+              </li>
             ))}
-          </select>
-        </label>
+          </ul>
+        </section>
 
-        <label>
-          Jumlah Diterima
-          <input
-            value={amountTendered}
-            onChange={(e) => setAmountTendered(e.target.value)}
-            inputMode="decimal"
-            placeholder={String(total)}
-          />
-        </label>
+        <form className="scan-form payment-form" onSubmit={(e) => e.preventDefault()}>
+          <label>
+            Metode Pembayaran
+            <select
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod(e.target.value as (typeof PAYMENT_METHODS)[number])}
+            >
+              {PAYMENT_METHODS.map((method) => (
+                <option key={method} value={method}>
+                  {method}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            Jumlah Diterima
+            <input
+              value={amountTendered}
+              onChange={(e) => setAmountTendered(e.target.value)}
+              inputMode="decimal"
+              placeholder={String(total)}
+            />
+          </label>
+        </form>
 
         <label className="print-toggle">
           <input
