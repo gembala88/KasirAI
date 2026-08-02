@@ -29,8 +29,14 @@ export async function searchProducts(
   const priceList = resolvePriceListForTier(tier);
 
   const items = await erpNextClient.list<ItemRecord>('Item', {
-    filters: [
-      ['disabled', '=', 0],
+    filters: [['disabled', '=', 0]],
+    // A barcode scanner (or a cashier typing a code from memory) enters
+    // the item *code*, not its display name — searching only item_name
+    // meant a literal barcode/code scan matched nothing. or_filters is
+    // Frappe's OR-group (combined with `filters` via AND), so this reads
+    // as "not disabled, AND (code matches OR name matches)".
+    or_filters: [
+      ['item_code', 'like', `%${query}%`],
       ['item_name', 'like', `%${query}%`],
     ],
     fields: ['item_code', 'item_name', 'stock_uom'],

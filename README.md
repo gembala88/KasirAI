@@ -568,6 +568,195 @@ Integration, Payments, Dashboard & Owner Analytics).
   Documented here as a reviewed-and-accepted design choice rather than
   silently dropped.
 
+**Pre-Phase 9: POS refinements (cashier checkout screen, receipt printing).**
+
+Requested as three "small" refinements before Production Launch, but
+investigating them surfaced a real scope gap: **no cashier checkout/POS
+screen existed anywhere.** `apps/pwa-scanner` only ever implemented the
+warehouse inventory-scan tool (§1.3 FR-7); the spec's separate "POS screen
+(cashier) — barcode scan auto-adds to cart, numeric keypad always visible,
+big 'Bayar' button" (§1.3) was never built, only the backend `sales-pos`
+module behind it. Confirmed with the user before proceeding (building a
+full checkout UI is not actually "small") and got the go-ahead to build it
+for real, not defer it again.
+
+- **Cashier checkout screen** — new "Kasir" tab in `apps/pwa-scanner`
+  (`components/Kasir.tsx`), alongside the existing scan tool (now
+  `components/WarehouseScan.tsx`; `App.tsx` gates both behind login and
+  role — Warehouse Staff/Cashier see one tab each, Owner/Manager see both,
+  matching backend `requireRole` exactly). Product search/barcode input,
+  an always-visible numeric keypad for scan quantity, a cart, customer ID
+  field (blank = Walk-in/Retail), and a big "Bayar" button leading to a
+  payment step (method + amount + the print toggle below).
+- **Barcode-scan quantity merge (item 1)** — fixed in two places, not
+  one: `createTransaction` (`apps/api/src/modules/sales-pos/application/transactions.ts`)
+  now merges cart lines with the same item code + warehouse by summing
+  quantity before creating the ERPNext Sales Invoice, so *any* caller gets
+  this guarantee, not just the one UI; the Kasir screen also merges
+  client-side so the cart visibly increments the instant the same item is
+  scanned twice, not after a round trip. Live-verified through the actual
+  browser UI (not just curl): scanning `DEMO-BERAS-5KG` twice showed one
+  line, "2 × Rp 65.000 = Rp 130.000", confirmed directly against the real
+  ERPNext invoice afterward (`items: [{item_code, qty: 2}]`, one row).
+  Building this also surfaced a real, unrelated bug: `searchProducts` only
+  filtered on `item_name`, never `item_code` — a literal barcode/code scan
+  (as opposed to typing a product name) matched nothing. Fixed by adding
+  `item_code` to the search via Frappe's `or_filters` (confirmed live via
+  curl that `or_filters` combines with `filters` as `AND(OR(...))`, the
+  right semantics here — "not disabled, AND (code matches OR name
+  matches)").
+- **Print-receipt toggle (item 2)** — a checkbox on the payment step,
+  default on. On a successful sale, if checked, the app opens the receipt
+  and triggers the browser's print dialog; if unchecked, it's skipped
+  entirely — the transaction is recorded identically either way, exactly
+  as asked. A failed print (tested live via the automated browser's popup
+  blocker) is handled as "sale succeeded, print failed" rather than
+  rolling back or misreporting the sale as failed.
+- **Receipt content: zero hardcoded values, real ERPNext Print Format
+  (item 3)** — audited first and confirmed nothing was hardcoded anywhere
+  in the app (no store address/phone/invoice-numbering strings existed to
+  begin with), then built the receipt endpoint to keep it that way. New
+  `GET /api/v1/pos/transactions/:id/receipt` (`sales-pos/application/receipt.ts`)
+  proxies ERPNext's own `/printview` route — real HTML rendered entirely
+  by ERPNext's Print Format engine from the Company/Customer/Item data,
+  confirmed live to contain the real Company name ("Toko Hermes", pulled
+  from ERPNext, not a string in this codebase) and real invoice content.
+  A new optional `ERPNEXT_RECEIPT_PRINT_FORMAT` env var lets the owner
+  point at a custom Print Format (built in ERPNext's own Print Format
+  designer, Setup > Printing) later without any code change; empty uses
+  the doctype's default format. The frontend never constructs receipt
+  markup itself — it only opens what this endpoint returns and calls
+  `window.print()`.
+  Real infrastructure gap found live along the way: the original plan was
+  a real PDF via Frappe's `print_format.download_pdf`, but that fails in
+  this ERPNext Docker image — `wkhtmltopdf` itself errors
+  (`OSError: ... network error: ConnectionRefusedError`), a genuine
+  environment issue, not a guess. Pivoted to `/printview`'s HTML instead,
+  which avoids `wkhtmltopdf` entirely and lets the browser's native print
+  dialog handle the PDF/print conversion (works with any printer the OS
+  has a driver for, thermal receipt printers included) — arguably a
+  better fit for a 2 vCPU/2 GB VPS than adding a heavier PDF-rendering
+  dependency anyway.
+- **Also fixed: a real Phase 8 regression.** `apps/pwa-scanner` never sent
+  an `Authorization` header — Phase 8's global auth rollout made every
+  API route reject unauthenticated requests, silently breaking the
+  warehouse scan tool the moment it shipped (confirmed live: a real
+  unauthenticated scan request returned `401` against the running API).
+  Nothing caught this at the time because Phase 8's own verification only
+  covered curl and the dashboard's browser UI, not this app. Fixed with
+  the same login/JWT-attach pattern as `apps/dashboard`
+  (`lib/auth.ts`/`lib/api.ts`, new `components/Login.tsx`) — live-verified
+  the warehouse scan flow works end-to-end again post-login, as Warehouse
+  Staff, through the real browser UI.
+- All of the above live-verified together in one real session: logged in
+  as Cashier through the actual UI, scanned a real item twice (merged to
+  qty 2), paid by Cash, confirmed the real ERPNext invoice (`status:
+  Paid`, `docstatus: 1`, correct `paid_amount`), then cancelled it again
+  afterward so the test sale doesn't linger in the real books (`report-dashboard`'s
+  queries already filter on `docstatus = 1`, so a cancelled invoice
+  wouldn't have polluted real figures regardless — confirmed, not
+  assumed). Also verified Warehouse Staff can scan again post-login, and
+  that Owner/Manager see both tabs while Cashier/Warehouse Staff each see
+  only their own.
+
+**Pre-Phase 9: §15 Fault Tolerance & Offline Resilience.**
+
+Raised by the user as a gap check before going live: the spec's §15
+("right-sized for 1 kasir") wasn't in any prior phase report. Root cause,
+confirmed and disclosed rather than hidden: every phase so far had been
+checked against `HERMES_PROJECT_SPEC (1).md`, and §15 only exists in
+`HERMES_PROJECT_SPEC (2).md`. Audited honestly against the actual code
+before building anything: the offline queue had no UUID (just an
+IndexedDB auto-increment key), no content hash, no status field beyond
+implicit "queued or not," covered only warehouse scans (the new Kasir
+checkout screen had zero offline handling), no server-side
+`offline_sync_queue` staging table existed despite §5 naming it, and
+`innodb_flush_log_at_trx_commit=1` was correct only by InnoDB's implicit
+default, never explicitly configured. All of it built for real this pass:
+
+- **`offline_sync_queue` (§5, formalized by §15.2)** — new table in
+  Hermes' own SQLite (`shared/database/index.ts`): `uuid` (primary key),
+  `action_type`, `content_hash`, `client_timestamp`, `status`, `payload`,
+  `erpnext_reference`, `result`, `error_message`, timestamps.
+- **New `apps/api/src/modules/sync` module** — `POST /api/v1/sync/actions`
+  is the one idempotent entry point for every offline action (warehouse
+  scans and POS sales alike): verifies the content hash server-side
+  first (rejects a corrupted/altered payload without writing anything),
+  then checks the UUID against `offline_sync_queue` — already `Synced` or
+  `Conflict` means skip, never re-apply, exactly §15.2's wording. A
+  `pos-sale` action is one offline action but two ERPNext writes (create
+  invoice, then pay it) — the invoice's name is persisted as a *partial*
+  `erpnext_reference` the moment it's known, before payment is even
+  attempted, so a retry after a partial failure resumes from the existing
+  invoice instead of creating a second one. `GET /api/v1/sync/conflicts`
+  (Owner/Manager) backs the dashboard's manual-review list.
+- **Conflict classification is a real ERPNext error, not a guess** —
+  live-curled a genuine negative-stock attempt against real ERPNext
+  first to find the actual shape: `exc_type: "NegativeStockError"` in the
+  response body. That specific error is classified `Conflict`
+  (§15.2: "e.g., stock went negative because two changes happened in
+  overlapping windows") and routed to the dashboard's new **Konflik
+  Sinkron** tab (Owner/Manager) rather than retried automatically —
+  "silently guessing on a stock/money discrepancy is worse than asking
+  the owner to glance at it," per spec. Everything else that can fail
+  (network blips, validation errors) stays a plain retryable `Failed`.
+- **Frontend offline queue redesign** — `apps/pwa-scanner/src/lib/offline-queue.ts`:
+  every queued action now gets a real `crypto.randomUUID()`, a SHA-256
+  content hash (Web Crypto client-side, `node:crypto` server-side —
+  cross-checked byte-for-byte identical for the same payload, with tests
+  on both sides pinned to a known hash so the two can never silently
+  drift apart), a client timestamp, and the full six-state status
+  (`Pending`/`Processing`/`Synced`/`Failed`/`Retry`/`Conflict`).
+  New unified `lib/sync.ts`: every action — online or not — is written
+  to the local queue *first*, then an immediate sync attempt is made.
+  This closes a real gap the old "try direct submit, catch → enqueue"
+  pattern had: if a request reached the server and was applied but the
+  *response* never made it back (closed tab, connection drop right at the
+  end), the old code would think it failed and retry, which — without
+  server-side idempotency — would have silently created a duplicate sale
+  or stock movement. Now every attempt, first or retried, carries the
+  same UUID, and the server skips it if already synced. The Kasir
+  checkout screen now goes through this same path, closing the "zero
+  offline handling" gap entirely.
+- **`innodb_flush_log_at_trx_commit=1`** now explicit in
+  `infra/erpnext/mariadb/hermes-tuning.cnf`, not implicit. Restarted the
+  real `db` container (not just reloaded config) and re-queried
+  `SHOW VARIABLES` afterward to confirm the explicit line was actually
+  read and accepted, not coincidentally matching the old default.
+- **A real bug found live while testing this, not in production:**
+  `openDB`'s version bump (1 → 2, for the new `uuid`-keyed schema) hung
+  indefinitely — no error, no timeout — when a stale connection at the
+  old version was still open (hit via a leftover browser tab; the same
+  failure mode a cashier could hit with two tabs open, or an old
+  background tab from before a PWA update). Root-caused via
+  `indexedDB.databases()` showing the DB stuck at version 1 no matter
+  what. Fixed with the `blocking` handler IndexedDB's own upgrade
+  protocol expects: a connection about to block a newer version closes
+  itself so the upgrade can proceed, instead of hanging forever on a tab
+  the cashier may have forgotten about.
+- **Live-verified with a real network kill, not a simulated one:**
+  logged in as Cashier in the real browser, added a real item to the
+  cart, opened the payment step, then **killed the actual API server
+  process** (confirmed via curl: connection refused) before pressing
+  "Konfirmasi Pembayaran". The UI correctly reported the sale saved
+  locally rather than lost; inspecting IndexedDB directly confirmed a
+  real record with a real UUID, content hash, client timestamp, and
+  `Failed` status (the immediate sync attempt genuinely failed against
+  the dead server). Restarted the real API server, clicked "Sinkron
+  Sekarang", and confirmed against real ERPNext: **exactly one** new
+  invoice (`status: Paid`, `docstatus: 1`) — not zero, not duplicated.
+  Then, for the strongest possible proof, manually replayed the *exact
+  same* sync request via curl (identical UUID) against the real running
+  server: response came back `"skipped": true` with the same cached
+  invoice, and ERPNext still showed exactly one invoice afterward, not
+  two. The Conflict path was verified the same way — a real
+  `reduce-stock` request big enough to go negative, against real
+  ERPNext, correctly returned `Conflict`, was not re-applied on a
+  replayed retry, and appeared correctly in the real dashboard's Konflik
+  Sinkron tab. Every test invoice/stock entry created during this was
+  cleaned up afterward (cancelled + deleted, or deleted while still
+  draft) so nothing lingers in the real books.
+
 ### Renaming the placeholder company
 
 `ERPNEXT_DEFAULT_COMPANY` / `ERPNEXT_DEFAULT_WAREHOUSE` default to a

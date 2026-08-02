@@ -6,7 +6,7 @@ import {
   storeAuth,
   type AuthUser,
 } from './auth';
-import type { DashboardSummary, PaymentMethod, PendingPaymentOrder } from './types';
+import type { DashboardSummary, PaymentMethod, PendingPaymentOrder, SyncConflict } from './types';
 
 const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
 
@@ -130,4 +130,8 @@ export function confirmPendingPayment(
 
 export function askOwnerChat(prompt: string): Promise<{ reply: string }> {
   return post<{ reply: string }>('/api/v1/ai/query', { prompt });
+}
+
+export function fetchSyncConflicts(): Promise<{ conflicts: SyncConflict[] }> {
+  return get<{ conflicts: SyncConflict[] }>('/api/v1/sync/conflicts');
 }

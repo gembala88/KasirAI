@@ -142,6 +142,14 @@ const envSchema = z.object({
   BANK_TRANSFER_ACCOUNT_NUMBER: z.string().default(''),
   BANK_TRANSFER_ACCOUNT_NAME: z.string().default(''),
 
+  // --- Printing (spec §14: receipt/invoice printing) ---
+  // Empty = use the Sales Invoice doctype's default Print Format. Set to a
+  // custom Print Format name (built in ERPNext's own Print Format
+  // designer — Setup > Printing > Print Format) to control receipt layout,
+  // store address/WA number/footer text, etc. without a code change or
+  // asking Claude Code again.
+  ERPNEXT_RECEIPT_PRINT_FORMAT: z.string().default(''),
+
   // --- Observability ---
   SENTRY_DSN: z.string().default(''),
 });

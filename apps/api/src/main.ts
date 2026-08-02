@@ -23,6 +23,7 @@ import { registerPaymentRoutes } from './modules/payment/interfaces/index.js';
 import { registerNotificationRoutes } from './modules/notification/interfaces/index.js';
 import { registerReportDashboardRoutes } from './modules/report-dashboard/interfaces/index.js';
 import { registerMediaRoutes } from './modules/media/interfaces/index.js';
+import { registerSyncRoutes } from './modules/sync/interfaces/index.js';
 
 export async function buildApp() {
   const app = Fastify({
@@ -95,6 +96,7 @@ export async function buildApp() {
   registerNotificationRoutes(app);
   registerReportDashboardRoutes(app);
   registerMediaRoutes(app);
+  registerSyncRoutes(app);
 
   return app;
 }

@@ -12,3 +12,11 @@ thread_cache_size = 8
 tmp_table_size = 16M
 max_heap_table_size = 16M
 performance_schema = OFF
+
+# Power-loss corruption protection (spec §15.1) — flush and fsync the
+# InnoDB log on every transaction commit, guaranteeing a committed
+# transaction survives a power loss. This happens to already be
+# InnoDB's built-in default, but left implicit it's exactly the kind of
+# thing that silently breaks if a future base-image/version change
+# quietly ships a different default — explicit here so it can't drift.
+innodb_flush_log_at_trx_commit = 1

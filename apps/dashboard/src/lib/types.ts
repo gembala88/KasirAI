@@ -67,3 +67,15 @@ export interface PendingPaymentOrder {
 }
 
 export type PaymentMethod = 'qris' | 'transfer' | 'cod';
+
+// Mirrors apps/api's sync/domain (§15.2) — a Conflict is never
+// auto-resolved (e.g. two overlapping stock changes going negative), so
+// it needs a human glance here rather than being silently retried.
+export interface SyncConflict {
+  uuid: string;
+  actionType: string;
+  clientTimestamp: string;
+  createdAt: string;
+  errorMessage: string | null;
+  payload: unknown;
+}

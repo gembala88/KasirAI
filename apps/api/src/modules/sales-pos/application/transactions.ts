@@ -58,13 +58,41 @@ async function resolveCustomerTier(customerId: string | undefined): Promise<{
   return { customer: customer.name, tier: customer.customer_tier };
 }
 
+/**
+ * Scanning the same item's barcode twice in one checkout (spec §1.3's
+ * "barcode scan auto-adds to cart") must increment that line's qty, not
+ * create a second invoice line for the same item — merged here rather
+ * than relying on the cashier UI to dedupe client-side, so the guarantee
+ * holds for any caller of this endpoint, not just the one built-in POS
+ * screen. Grouped by item + resolved warehouse (a genuinely different
+ * warehouse is a different stock movement, not a duplicate scan); an
+ * explicit `rate` override from any line in the group wins over the
+ * price-list lookup the rest of the merged line would otherwise get.
+ */
+function mergeDuplicateLines(lines: CartLineInput[]): CartLineInput[] {
+  const merged = new Map<string, CartLineInput>();
+  for (const line of lines) {
+    const warehouse = line.warehouse ?? env.ERPNEXT_DEFAULT_WAREHOUSE;
+    const key = `${line.itemCode}::${warehouse}`;
+    const existing = merged.get(key);
+    if (existing) {
+      existing.qty += line.qty;
+      existing.rate ??= line.rate;
+    } else {
+      merged.set(key, { ...line, warehouse });
+    }
+  }
+  return [...merged.values()];
+}
+
 export async function createTransaction(
   customerId: string | undefined,
-  lines: CartLineInput[],
+  rawLines: CartLineInput[],
 ): Promise<PosTransaction> {
-  if (lines.length === 0) {
+  if (rawLines.length === 0) {
     throw new ValidationError('A POS transaction needs at least one line');
   }
+  const lines = mergeDuplicateLines(rawLines);
 
   const { customer, tier } = await resolveCustomerTier(customerId);
   const priceList = resolvePriceList(tier);

@@ -3,19 +3,22 @@ import Login from './components/Login';
 import Overview from './components/Overview';
 import OwnerChat from './components/OwnerChat';
 import Payments from './components/Payments';
+import SyncConflicts from './components/SyncConflicts';
 import { logout } from './lib/api';
 import { getStoredAuth, setOnAuthRequired, type AuthUser } from './lib/auth';
 import { getStoredTheme, storeTheme, type Theme } from './lib/theme';
 
-type Tab = 'overview' | 'chat' | 'payments';
+type Tab = 'overview' | 'chat' | 'payments' | 'sync-conflicts';
 
 // Which roles see which tabs (backend enforces this too — see
-// report-dashboard/ai-gateway/whatsapp routes' requireRole calls; this is
-// just so a role isn't shown a tab that would just 403 if clicked).
+// report-dashboard/ai-gateway/whatsapp/sync routes' requireRole calls;
+// this is just so a role isn't shown a tab that would just 403 if
+// clicked).
 const TABS: Array<{ id: Tab; label: string; roles: AuthUser['role'][] }> = [
   { id: 'overview', label: 'Ringkasan', roles: ['Owner', 'Manager'] },
   { id: 'chat', label: 'Tanya Hermes', roles: ['Owner', 'Manager'] },
   { id: 'payments', label: 'Konfirmasi Pembayaran', roles: ['Owner', 'Manager', 'Cashier'] },
+  { id: 'sync-conflicts', label: 'Konflik Sinkron', roles: ['Owner', 'Manager'] },
 ];
 
 export default function App() {
@@ -94,6 +97,7 @@ export default function App() {
             {tab === 'overview' && <Overview />}
             {tab === 'chat' && <OwnerChat />}
             {tab === 'payments' && <Payments />}
+            {tab === 'sync-conflicts' && <SyncConflicts />}
           </main>
         </>
       )}

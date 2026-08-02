@@ -3,10 +3,21 @@
   font-family: system-ui, sans-serif;
 }
 
+* {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
   background: #111827;
   color: #f3f4f6;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
 }
 
 .app {
@@ -27,6 +38,140 @@ body {
 
 h1 {
   font-size: 1.5rem;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.app-header h1 {
+  margin: 0;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.login-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.login-card {
+  background: #1f2937;
+  border: 1px solid #374151;
+  border-radius: 12px;
+  padding: 2rem;
+  width: 100%;
+  max-width: 340px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.login-card h1 {
+  margin: 0;
+}
+
+.login-card label,
+.login-card input {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.login-card input {
+  min-height: 3rem;
+  font-size: 1.1rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid #374151;
+  background: #111827;
+  color: #f3f4f6;
+}
+
+.theme-toggle {
+  min-height: 2.5rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 0.5rem;
+  border: 1px solid #374151;
+  background: #1f2937;
+  color: #f3f4f6;
+  cursor: pointer;
+}
+
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  border-bottom: 1px solid #374151;
+  margin-bottom: 1.25rem;
+}
+
+.tab {
+  flex: 1;
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  color: #9ca3af;
+  padding: 0.7rem 0.25rem;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.tab--active {
+  color: #f3f4f6;
+  border-bottom-color: #22d3ee;
+}
+
+.error-box {
+  background: rgba(248, 113, 113, 0.15);
+  border: 1px solid #f87171;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  color: #f3f4f6;
+  margin-top: 0.75rem;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  color: #22d3ee;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 1rem;
+  font-size: 0.95rem;
+}
+
+.card {
+  background: #1f2937;
+  border: 1px solid #374151;
+  border-radius: 0.75rem;
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin: 1rem 0;
+}
+
+.card-label {
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+
+.card-value {
+  font-size: 1.6rem;
+  font-weight: 700;
 }
 
 .scan-form {
@@ -109,4 +254,161 @@ h1 {
   padding: 0.6rem 0.8rem;
   border-radius: 0.5rem;
   font-size: 0.9rem;
+}
+
+.hint {
+  color: #9ca3af;
+  font-size: 0.9rem;
+}
+
+.message {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: #1f2937;
+  border-radius: 0.5rem;
+}
+
+/* --- Kasir (checkout) screen — spec §1.3 "optimized for speed" --- */
+
+.kasir {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.search-results {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.search-results button {
+  width: 100%;
+  text-align: left;
+  background: #1f2937;
+  border: 1px solid #374151;
+  color: #f3f4f6;
+  font-weight: 400;
+  padding: 0.6rem 0.8rem;
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+.keypad-section {
+  margin: 0.5rem 0 1rem;
+}
+
+/* Always visible, not tucked behind a modal — spec §1.3 "numeric keypad
+   always visible" for fast repeated entry during checkout. */
+.keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.keypad button {
+  min-height: 3rem;
+  font-size: 1.2rem;
+  font-weight: 600;
+  border-radius: 0.5rem;
+  border: 1px solid #374151;
+  background: #1f2937;
+  color: #f3f4f6;
+  cursor: pointer;
+}
+
+.keypad button:active {
+  transform: scale(0.96);
+}
+
+.cart {
+  margin-top: 0.5rem;
+}
+
+.cart h2 {
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.cart ul {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.cart-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  background: #1f2937;
+  border-radius: 0.5rem;
+  padding: 0.6rem 0.8rem;
+}
+
+.cart-line-actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.cart-line-actions button {
+  min-width: 2.25rem;
+  min-height: 2.25rem;
+  border-radius: 0.4rem;
+  border: 1px solid #374151;
+  background: #111827;
+  color: #f3f4f6;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.cart-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-direction: row !important;
+}
+
+/* Spec §1.3 "big 'Bayar' button" — the single most-tapped control on the
+   checkout screen, sized and colored to be unmissable. */
+.bayar-button {
+  min-height: 3.75rem;
+  font-size: 1.3rem;
+  font-weight: 700;
+  border-radius: 0.75rem;
+  border: none;
+  background: #22d3ee;
+  color: #0f172a;
+  cursor: pointer;
+  margin-top: 0.5rem;
+}
+
+.bayar-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.payment-summary {
+  text-align: center;
+}
+
+.print-toggle {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 1rem;
+}
+
+.print-toggle input {
+  min-height: auto;
+  width: 1.3rem;
+  height: 1.3rem;
 }

@@ -1,104 +1,52 @@
-import { useCallback, useEffect, useState } from 'react';
-import { submitScanAction } from './lib/api';
-import { buildAction } from './lib/build-action';
-import {
-  enqueueAction,
-  listQueuedActions,
-  removeQueuedAction,
-  type QueuedAction,
-} from './lib/offline-queue';
-import type { ScanActionType } from './lib/types';
+import { useEffect, useState } from 'react';
+import Kasir from './components/Kasir';
+import Login from './components/Login';
+import WarehouseScan from './components/WarehouseScan';
+import { logout } from './lib/api';
+import { getStoredAuth, setOnAuthRequired, type AuthUser } from './lib/auth';
 
-const ACTION_LABELS: Record<ScanActionType, string> = {
-  'add-stock': 'Tambah Stok',
-  'reduce-stock': 'Kurangi Stok',
-  transfer: 'Transfer',
-};
+type Tab = 'warehouse' | 'kasir';
+
+// Which roles see which tabs (the backend enforces this too — see
+// inventory.routes.ts's INVENTORY_MANAGE_ROLES and sales-pos.routes.ts's
+// POS_ROLES; this is just so a role isn't shown a tab that would just 403
+// if used).
+const TABS: Array<{ id: Tab; label: string; roles: AuthUser['role'][] }> = [
+  { id: 'warehouse', label: 'Gudang', roles: ['Owner', 'Manager', 'Warehouse Staff'] },
+  { id: 'kasir', label: 'Kasir', roles: ['Owner', 'Manager', 'Cashier'] },
+];
 
 export default function App() {
+  const [user, setUser] = useState<AuthUser | null>(() => getStoredAuth()?.user ?? null);
+  const [tab, setTab] = useState<Tab | null>(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [queue, setQueue] = useState<QueuedAction[]>([]);
-  const [syncing, setSyncing] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
 
-  const [actionType, setActionType] = useState<ScanActionType>('add-stock');
-  const [itemCode, setItemCode] = useState('');
-  const [qty, setQty] = useState('');
-  const [rate, setRate] = useState('');
-  const [warehouse, setWarehouse] = useState('');
-  const [toWarehouse, setToWarehouse] = useState('');
-
-  const refreshQueue = useCallback(async () => {
-    setQueue(await listQueuedActions());
+  useEffect(() => {
+    setOnAuthRequired(() => setUser(null));
+    return () => setOnAuthRequired(null);
   }, []);
 
   useEffect(() => {
-    void refreshQueue();
-  }, [refreshQueue]);
-
-  const syncQueue = useCallback(async () => {
-    setSyncing(true);
-    try {
-      const pending = await listQueuedActions();
-      for (const item of pending) {
-        try {
-          await submitScanAction(item.action);
-          await removeQueuedAction(item.id);
-        } catch {
-          // Still offline (or the API is down) — stop and retry next time.
-          break;
-        }
-      }
-    } finally {
-      await refreshQueue();
-      setSyncing(false);
-    }
-  }, [refreshQueue]);
-
-  useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
-      void syncQueue();
-    };
+    const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
-
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, [syncQueue]);
+  }, []);
 
-  async function handleSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    setMessage(null);
+  const visibleTabs = user ? TABS.filter((t) => t.roles.includes(user.role)) : [];
 
-    const built = buildAction(actionType, { itemCode, qty, rate, warehouse, toWarehouse });
-    if (typeof built === 'string') {
-      setMessage(built);
-      return;
+  useEffect(() => {
+    if (visibleTabs.length > 0 && (tab === null || !visibleTabs.some((t) => t.id === tab))) {
+      setTab(visibleTabs[0]?.id ?? null);
     }
+  }, [user, tab, visibleTabs]);
 
-    if (navigator.onLine) {
-      try {
-        await submitScanAction(built);
-        setMessage(`${ACTION_LABELS[actionType]} berhasil dikirim.`);
-      } catch {
-        await enqueueAction(built);
-        setMessage('Gagal kirim ke server — disimpan untuk sinkron nanti.');
-        await refreshQueue();
-      }
-    } else {
-      await enqueueAction(built);
-      setMessage('Mode offline — aksi disimpan, akan sinkron otomatis.');
-      await refreshQueue();
-    }
-
-    setItemCode('');
-    setQty('');
-    setRate('');
-    setToWarehouse('');
+  if (!user) {
+    return <Login onLoggedIn={setUser} />;
   }
 
   return (
@@ -109,93 +57,48 @@ export default function App() {
         </div>
       )}
 
-      <h1>Hermes Scanner</h1>
-
-      <form onSubmit={(e) => void handleSubmit(e)} className="scan-form">
-        <label>
-          Aksi
-          <select
-            value={actionType}
-            onChange={(e) => setActionType(e.target.value as ScanActionType)}
-          >
-            <option value="add-stock">Tambah Stok</option>
-            <option value="reduce-stock">Kurangi Stok</option>
-            <option value="transfer">Transfer</option>
-          </select>
-        </label>
-
-        <label>
-          Kode Barang
-          <input
-            value={itemCode}
-            onChange={(e) => setItemCode(e.target.value)}
-            placeholder="mis. BRG-001 (scan atau ketik manual)"
-            inputMode="text"
-          />
-        </label>
-
-        <label>
-          Jumlah
-          <input
-            value={qty}
-            onChange={(e) => setQty(e.target.value)}
-            inputMode="decimal"
-            placeholder="0"
-          />
-        </label>
-
-        {actionType === 'add-stock' && (
-          <label>
-            Harga Satuan
-            <input
-              value={rate}
-              onChange={(e) => setRate(e.target.value)}
-              inputMode="decimal"
-              placeholder="0"
-            />
-          </label>
-        )}
-
-        <label>
-          Gudang {actionType === 'transfer' ? '(Asal)' : ''}
-          <input
-            value={warehouse}
-            onChange={(e) => setWarehouse(e.target.value)}
-            placeholder="Kosongkan untuk gudang default"
-          />
-        </label>
-
-        {actionType === 'transfer' && (
-          <label>
-            Gudang Tujuan
-            <input value={toWarehouse} onChange={(e) => setToWarehouse(e.target.value)} />
-          </label>
-        )}
-
-        <button type="submit">Kirim</button>
-      </form>
-
-      {message && <p className="message">{message}</p>}
-
-      <section className="queue">
-        <h2>
-          Menunggu Sinkron ({queue.length})
+      <header className="app-header">
+        <h1>Hermes Scanner</h1>
+        <div className="header-actions">
+          <span className="hint">
+            {user.fullName} · {user.role}
+          </span>
           <button
             type="button"
-            onClick={() => void syncQueue()}
-            disabled={syncing || queue.length === 0}
+            className="theme-toggle"
+            onClick={() => {
+              logout();
+              setUser(null);
+            }}
           >
-            {syncing ? 'Menyinkron…' : 'Sinkron Sekarang'}
+            Keluar
           </button>
-        </h2>
-        <ul>
-          {queue.map((item) => (
-            <li key={item.id}>
-              {ACTION_LABELS[item.action.type]} — {item.action.itemCode} ({item.action.qty})
-            </li>
-          ))}
-        </ul>
-      </section>
+        </div>
+      </header>
+
+      {visibleTabs.length === 0 ? (
+        <p className="hint">Belum ada tampilan untuk role Anda ({user.role}).</p>
+      ) : (
+        <>
+          {visibleTabs.length > 1 && (
+            <nav className="tabs">
+              {visibleTabs.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={tab === item.id ? 'tab tab--active' : 'tab'}
+                  onClick={() => setTab(item.id)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </nav>
+          )}
+
+          {tab === 'warehouse' && <WarehouseScan isOnline={isOnline} />}
+          {tab === 'kasir' && <Kasir />}
+        </>
+      )}
     </main>
   );
 }

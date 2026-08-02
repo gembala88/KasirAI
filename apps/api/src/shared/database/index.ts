@@ -19,6 +19,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { env } from '../../config/env.js';
 
 // This file lives at apps/api/src/shared/database/index.ts (or the
 // mirrored dist/ path after build) — three levels below apps/api either
@@ -73,14 +74,46 @@ const SCHEMA = `
     status TEXT NOT NULL,
     created_at TEXT NOT NULL
   );
+
+  -- Staging table for PWA offline actions before they're pushed to
+  -- ERPNext (spec §5, formalized by §15.2: "Strengthened Offline Sync
+  -- Queue"). uuid is the client-generated transaction identity used to
+  -- detect duplicate syncs/retries — the whole point of this table.
+  -- erpnext_reference is set as soon as it's known, even before the
+  -- action fully completes (e.g. a pos-sale's invoice is created before
+  -- payment is recorded), so a retry after a partial failure can resume
+  -- from the right step instead of re-creating a duplicate document.
+  CREATE TABLE IF NOT EXISTS offline_sync_queue (
+    uuid TEXT PRIMARY KEY,
+    action_type TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    client_timestamp TEXT NOT NULL,
+    status TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    erpnext_reference TEXT,
+    result TEXT,
+    error_message TEXT,
+    created_at TEXT NOT NULL,
+    synced_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_offline_sync_queue_status ON offline_sync_queue(status);
 `;
 
 export function getDb(): DatabaseSync {
   if (!db) {
-    if (!existsSync(DATA_DIR)) {
-      mkdirSync(DATA_DIR, { recursive: true });
+    // Tests get a fresh in-memory database instead of touching the real
+    // dev data file — node:sqlite treats ':memory:' as a special path,
+    // no real file involved. Every test file re-imports this module
+    // fresh (a new module registry per file), so this is naturally
+    // isolated per test file with nothing to clean up afterward.
+    if (env.NODE_ENV === 'test') {
+      db = new DatabaseSync(':memory:');
+    } else {
+      if (!existsSync(DATA_DIR)) {
+        mkdirSync(DATA_DIR, { recursive: true });
+      }
+      db = new DatabaseSync(DB_PATH);
     }
-    db = new DatabaseSync(DB_PATH);
     db.exec(SCHEMA);
   }
   return db;

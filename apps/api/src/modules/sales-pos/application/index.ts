@@ -5,3 +5,4 @@ export {
   parkTransaction,
   addPayment,
 } from './transactions.js';
+export { getReceiptHtml } from './receipt.js';

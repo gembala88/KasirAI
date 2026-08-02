@@ -38,6 +38,7 @@ describe('app bootstrap', () => {
       'notifications',
       'reports',
       'media',
+      'sync',
     ];
 
     for (const module of modules) {

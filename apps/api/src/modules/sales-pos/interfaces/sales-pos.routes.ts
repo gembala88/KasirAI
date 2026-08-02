@@ -6,6 +6,7 @@ import {
   addPayment,
   createTransaction,
   getProductPrice,
+  getReceiptHtml,
   listParkedTransactions,
   parkTransaction,
   searchProducts,
@@ -88,6 +89,16 @@ export function registerSalesPosRoutes(app: FastifyInstance): void {
     '/api/v1/pos/transactions/:id/park',
     { preHandler: requireRole(...POS_ROLES) },
     async (request) => parkTransaction(request.params.id),
+  );
+
+  app.get<{ Params: { id: string } }>(
+    '/api/v1/pos/transactions/:id/receipt',
+    { preHandler: requireRole(...POS_ROLES) },
+    async (request, reply) => {
+      const html = await getReceiptHtml(request.params.id);
+      reply.type('text/html');
+      return html;
+    },
   );
 
   app.post<{ Params: { id: string } }>(
