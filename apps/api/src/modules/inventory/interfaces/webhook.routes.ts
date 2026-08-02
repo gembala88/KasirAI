@@ -55,6 +55,10 @@ export function registerErpNextWebhookRoute(app: FastifyInstance): void {
 
     scope.post<{ Body: { raw: Buffer; json: ErpNextWebhookPayload } }>(
       '/webhooks/erpnext',
+      // Defense in depth alongside signature verification — this route
+      // is unauthenticated (no JWT) like the WhatsApp webhook, even
+      // though it's meant to only be reachable from ERPNext itself.
+      { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
       async (request, reply) => {
         const signature = request.headers['x-frappe-webhook-signature'];
         const signatureHeader = Array.isArray(signature) ? signature[0] : signature;

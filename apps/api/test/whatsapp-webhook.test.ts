@@ -37,12 +37,12 @@ function inboundPayload(from: string, text: string) {
 }
 
 describe('WhatsApp webhook', () => {
-  let app: ReturnType<typeof buildApp>;
+  let app: Awaited<ReturnType<typeof buildApp>>;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     env.WHATSAPP_APP_SECRET = TEST_SECRET;
     env.WHATSAPP_WEBHOOK_VERIFY_TOKEN = TEST_VERIFY_TOKEN;
-    app = buildApp();
+    app = await buildApp();
   });
 
   afterAll(async () => {

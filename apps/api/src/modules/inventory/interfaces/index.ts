@@ -6,3 +6,6 @@ export function registerInventoryModuleRoutes(app: FastifyInstance): void {
   registerInventoryRoutes(app);
   registerErpNextWebhookRoute(app);
 }
+
+// Callable exports for other modules (report-dashboard's owner analytics, §6/§10 Phase 7).
+export { listLowStock, listNearExpiry } from '../application/index.js';

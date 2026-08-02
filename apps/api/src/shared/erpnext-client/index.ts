@@ -19,6 +19,7 @@ import {
 } from 'cockatiel';
 import { env } from '../../config/env.js';
 import { logger } from '../logger/index.js';
+import { sentry } from '../observability/sentry.js';
 
 export interface ErpNextClient {
   get<TResponse>(doctype: string, name: string): Promise<TResponse>;
@@ -65,7 +66,19 @@ interface ErpNextClientOptions {
   circuitBreakerThreshold?: number;
   /** How long the circuit stays open before allowing a trial request. Default 10s. */
   circuitBreakerResetMs?: number;
-  /** Max attempts per call (including the first). Default 3. */
+  /**
+   * Max attempts per call (including the first). Default 5 — found live
+   * (Phase 8 load test) that the previous default of 3 wasn't enough
+   * headroom for a real, genuinely transient failure mode: concurrent
+   * Sales Invoice creation (3 simultaneous checkouts) hit MariaDB's
+   * naming-series row lock and surfaced as a real
+   * `frappe.exceptions.QueryDeadlockError` — a straightforward 500,
+   * already correctly classified as retryable by `isRetryable`, but 2
+   * retries (200ms-2000ms backoff) sometimes wasn't enough to outlast the
+   * lock contention. Bumped generously since the cost of a couple more
+   * fast retries on an already-rare event is negligible next to a checkout
+   * failing outright.
+   */
   maxAttempts?: number;
 }
 
@@ -73,7 +86,7 @@ export function createErpNextClient(options: ErpNextClientOptions): ErpNextClien
   const fetchImpl = options.fetchImpl ?? fetch;
 
   const retryPolicy = retry(handleWhen(isRetryable), {
-    maxAttempts: (options.maxAttempts ?? 3) - 1,
+    maxAttempts: (options.maxAttempts ?? 5) - 1,
     backoff: new ExponentialBackoff({ initialDelay: 200, maxDelay: 2000 }),
   });
 
@@ -87,7 +100,13 @@ export function createErpNextClient(options: ErpNextClientOptions): ErpNextClien
   // its outcome to the breaker.
   const resiliencePolicy = wrap(circuitBreakerPolicy, retryPolicy);
 
-  circuitBreakerPolicy.onBreak(() => logger.warn('erpnext_client.circuit_open'));
+  circuitBreakerPolicy.onBreak(() => {
+    logger.warn('erpnext_client.circuit_open');
+    // ERPNext is the sole source of truth (§5) — every module depends on
+    // it, so a breaker trip here means the whole app is degraded, not just
+    // one request. Worth an alert even though no single exception caused it.
+    sentry.captureMessage('erpnext_client.circuit_open');
+  });
   circuitBreakerPolicy.onReset(() => logger.info('erpnext_client.circuit_closed'));
 
   async function request<TResponse>(

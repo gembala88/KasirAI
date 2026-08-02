@@ -7,4 +7,5 @@ export {
   getTransaction,
   createInvoiceFromSalesOrder,
   addPayment,
+  listPendingPaymentConfirmations,
 } from '../application/transactions.js';

@@ -4,9 +4,9 @@ AI-powered wholesale & retail ERP platform. ERPNext is the single source of
 truth for all business data; this repo is the application layer on top of it
 (WhatsApp ordering, POS/scanning, owner analytics, dashboard). See the full
 spec for architecture, data model, and roadmap — this README only covers
-running what's in the repo right now (§10 Phases 0–6: foundation, core data
+running what's in the repo right now (§10 Phases 0–7: foundation, core data
 layer, POS + Inventory, Customer & Piutang, AI Gateway, WhatsApp
-Integration, Payments).
+Integration, Payments, Dashboard & Owner Analytics).
 
 ## What's here
 
@@ -296,6 +296,278 @@ Integration, Payments).
   testing — a genuine but informal data point, not the systematic A/B
   comparison that's still pending explicit go-ahead.
 
+**Phase 7 (Dashboard & Owner Analytics):**
+
+- `apps/dashboard` — new Vite + React app (port 5174 in dev), the first
+  real UI for `apps/api`'s data. Three views behind a tab bar: Ringkasan
+  (Overview), Tanya Hermes (owner chat), Konfirmasi Pembayaran (the real
+  UI for Phase 5/6's "API endpoint only, no UI" confirm-payment decision
+  — that decision was for *that* phase, not permanent). Dark mode by
+  default with a persisted light-mode toggle (`localStorage`), per §9.
+  No auth/RBAC yet — `apps/api`'s `auth` module is still Phase 0's
+  placeholder, so every dashboard view is unauthenticated for now; not
+  requested this phase, called out here rather than silently assumed.
+- `apps/api/src/modules/report-dashboard/application/queries.ts` — real
+  ERPNext analytics (FR-6): today's revenue/profit, best/worst sellers
+  and most-active-customer over a rolling 30-day window (a single day is
+  too thin a sample), best supplier, near-out-of-stock and
+  expiring-batch alerts (reusing inventory's own real queries via its
+  interfaces barrel). `GET /api/v1/reports/dashboard-summary` bundles
+  all of it in one call (matches §9's "card-based summary... at top");
+  `GET /api/v1/reports/sales?from=&to=` is the drill-down detail view.
+  Real bug found and fixed via live testing: Sales Invoice Item's
+  `gross_profit`/`valuation_rate` fields are **not** reliably populated
+  on a plain document fetch (only ever confirmed populated on a Sales
+  *Order* item, which is a live projection, not the actual posted cost)
+  — profit silently came out as `0` despite real revenue. Fixed by
+  computing COGS from `Stock Ledger Entry.stock_value_difference`
+  instead, the authoritative source, confirmed against a real invoice's
+  real stock ledger row before trusting it.
+- Owner chat analytics (FR-6) — `POST /api/v1/ai/query` (§6's existing
+  "owner analytics chat" endpoint, a raw AI passthrough since Phase 4)
+  now delegates to `report-dashboard/application/owner-chat.ts`, which
+  follows the exact same two-turn validated pattern as the WhatsApp
+  persona: the model requests real data via `get_dashboard_summary` or
+  `get_sales_report({from, to})`, this layer runs the real query, the
+  model's final answer is grounded in that result. Live-verified
+  answering "no data" honestly for a date range with zero real sales
+  (§8.1's "never fabricate" rule, same as everywhere else), and
+  correctly citing real revenue/profit/best-seller/supplier/customer
+  figures matching the dashboard's own numbers exactly.
+- `GET /api/v1/whatsapp/orders/pending-payment` — WhatsApp orders with a
+  draft invoice awaiting manual payment confirmation (`sales-pos`'s
+  `listPendingPaymentConfirmations`, filtering on `po_no` being set,
+  same signal Phase 6 already used to distinguish these from
+  cashier-parked POS sales). The dashboard's Payments view lists them
+  with the customer's real phone number pre-filled and calls the
+  existing `confirm-payment` endpoint.
+- Live-verified end-to-end through the actual browser UI, not just curl:
+  loaded the dashboard against the real running API and ERPNext stack,
+  confirmed real numbers rendered (matching direct `curl` checks byte
+  for byte), asked the owner-chat widget a real question and got a
+  grounded answer, and clicked "Konfirmasi Pembayaran" on a real pending
+  order — confirmed afterward directly against ERPNext that the invoice
+  really submitted (`status: Paid`, correct `paid_amount`, a real
+  payment row posted to the right account).
+- A pre-existing Phase 2 test artifact (`[DELETED] Test Item...`, a
+  disabled item with 0 stock) shows up in the real "near out of stock"
+  alert — accurate reporting of what's actually in ERPNext, left as-is
+  rather than filtered out, consistent with never hiding real data to
+  make a demo look cleaner.
+
+**Phase 8 (Hardening — in progress):**
+
+- **Real authentication (hard gate before Phase 9).** JWT-based login
+  (`apps/api/src/modules/auth`), delegating credential verification to
+  ERPNext's own `/api/method/login` rather than duplicating a
+  password store — matches §5's data-model note that a separate
+  `user_roles_extended` table is only needed "if RBAC needs finer grain
+  than Frappe's native roles," which a single `hermes_role` custom
+  Select field on ERPNext's existing `User` doctype covers for the 4
+  roles in §1.4 (Owner, Manager, Cashier, Warehouse Staff). Access/refresh
+  JWT pair (`type: 'access'|'refresh'` claim prevents token-type
+  confusion); refresh rotates both tokens (no server-side revocation
+  list yet — documented scope simplification, not silently dropped).
+  A global Fastify `preHandler` (`attachAuthentication`) protects every
+  route by default except an explicit public allowlist (`/health`,
+  the two webhook receivers, `/auth/login`, `/auth/refresh`); a
+  `requireRole(...)` per-route guard enforces the role matrix on top —
+  `/reports/*`, `/ai/*`, and the payment-confirmation endpoints
+  restricted to Owner/Manager(/Cashier for payment confirmation), the
+  rest matrixed per module. The dashboard (`apps/dashboard`) got a real
+  login screen and role-gated tabs to match.
+  Live-verified: a request to a protected endpoint with no token
+  returns `401`; curl-driven access-matrix testing across all 4 real
+  seeded ERPNext users (one per role) confirmed every endpoint's
+  expected-vs-actual access matched exactly, both via the API directly
+  and through the real browser UI.
+- **Rate limiting on public endpoints** (`@fastify/rate-limit`,
+  `global: false` with a per-route `config.rateLimit` override) — the
+  only routes with no JWT to lean on for abuse control: `/auth/login`
+  (10 attempts / 15 min, brute-force protection) and the two webhook
+  receivers (60 req/min each). Found and fixed two real bugs live while
+  building this, both silent-failure classes that a mocked-only test
+  would not have caught: (1) `app.register(rateLimit, ...)` wasn't
+  `await`ed in `main.ts` — Fastify route registration is synchronous
+  while plugin registration is async, so routes were being added before
+  the plugin's `onRoute` hook attached, silently skipping rate limiting
+  entirely; (2) the global error handler only special-cased the app's
+  own `AppError` hierarchy, flattening every other error — including
+  `@fastify/rate-limit`'s real `429` — to a generic `500`, which likely
+  also affected other framework-level errors (Fastify's own 404s, body
+  parse errors) since Phase 0. Fixed by `await`ing the rate-limit
+  registration specifically and adding a second error-handler branch for
+  any error carrying a 4xx `statusCode`. Live-verified against the real
+  running server (not just `app.inject`): a curl loop of 12 wrong-password
+  login attempts returned `401` × 10 then `429` × 2, with a clean JSON
+  body (`{"error":"CLIENT_ERROR","message":"Rate limit exceeded, retry in
+  15 minutes"}`) rather than a stack-trace leak; an ordinary unauthenticated
+  request elsewhere still returned a normal `401`, confirming the fix
+  didn't disturb existing error handling.
+- **Retry/circuit-breaker audit across all external calls.** Inventory:
+  `shared/erpnext-client` (all ERPNext `/api/resource` reads/writes —
+  the vast majority of external calls in the app) already has
+  `cockatiel` retry-with-backoff + a consecutive-failure circuit breaker
+  from Phase 1, confirmed still correctly wired. The AI Gateway's
+  "two-level failover" (rotate key → fall back to next provider, §3.1)
+  is a different resilience strategy for a different failure mode
+  (unreliable/rate-limited third-party providers, not a single backend
+  of record) — auditing it surfaced one real gap: `generateWithFailover`
+  only treated `AIProviderRateLimitError` (HTTP 429) as failover-worthy;
+  a plain network error or a `5xx` from a provider — clearly transient,
+  same as a 429 — fell through the same `throw error` path as a genuine
+  bug, aborting the entire multi-provider pool instead of trying the
+  next key. Fixed by adding a `retryable` flag to `AIProviderError`
+  (true for network errors and 5xx, false for other 4xx/malformed
+  responses — mirrors `shared/erpnext-client`'s own `isRetryable` split),
+  and having the failover loop rotate to the next key/provider on any
+  retryable `AIProviderError`, not just rate-limit ones (without marking
+  the key on cooldown, since a transient blip isn't evidence the key
+  itself is exhausted). Covered by new tests in
+  `apps/api/test/ai-gateway-failover.test.ts`. Two calls remain
+  deliberately without retry/circuit-breaker, both already documented at
+  the point of the decision: the WhatsApp Cloud API client
+  (`modules/whatsapp/infrastructure/whatsapp-client.ts` — a failed send
+  just means a reply doesn't go out, no partial-write risk) and the
+  ERPNext login call in `modules/auth/infrastructure/erpnext-session.ts`
+  (a human is already in the loop and will just press "log in" again,
+  unlike the automated/background callers the shared client protects).
+  BullMQ's piutang-reminder job runs with default (no) job-level retry;
+  left as-is since the job is self-healing by design — it's a daily
+  recurring "due within N days" check, so a single failed run doesn't
+  lose a reminder, it just reappears on the next day's check.
+- **Optional Sentry error tracking** (`apps/api/src/shared/observability/sentry.ts`).
+  `SENTRY_DSN` was a Phase 0 placeholder env var with nothing behind it;
+  now `createSentryReporter(dsn, environment, client)` is a real,
+  injectable wrapper around `@sentry/node` (same factory-plus-singleton
+  shape as `createErpNextClient`) — a no-op when `SENTRY_DSN` is empty
+  (the default), so every environment without a configured Sentry
+  project still boots and runs identically. Wired into the four places
+  an error would otherwise go unreported: the Fastify error handler's
+  generic-500 branch (real bugs, not expected `AppError`s or framework
+  4xxs); the `close-with-grace` shutdown callback (the only hook for an
+  `uncaughtException`/`unhandledRejection` that's about to crash the
+  whole process — arguably the single worst class of failure to miss);
+  the piutang-reminder BullMQ worker's `failed` event; and two
+  operational (not per-request) events surfaced by the retry audit
+  above — the ERPNext circuit breaker opening and the AI Gateway
+  exhausting every provider/key.
+  Genuinely live-verified, not just mocked: pointed a real `SENTRY_DSN`
+  at a throwaway local HTTP listener and ran the actual `@sentry/node`
+  SDK (not a fake), which sent real envelope `POST` requests over the
+  wire containing the exact test error/message text — proving the SDK
+  really activates and really sends data when configured, the one part
+  of this that a unit test with a mocked client can't prove by itself.
+  (No live Sentry account/project exists to verify against yet — that's
+  a real external dependency this environment doesn't have, called out
+  here rather than silently assumed working.)
+- **Real load test against the confirmed §13 VPS specs** (2 vCPU / 2 GB).
+  `infra/docker/docker-compose.yml` already had per-container `mem_limit`s
+  from Phase 1; added explicit `cpus` limits too (0.7 backend, 0.7 db, the
+  rest split across queue/scheduler/frontend/websocket/redis, summing to
+  2.0) so the stack is genuinely capped at the VPS's CPU budget regardless
+  of how many cores the dev machine actually has — otherwise a load test
+  on bigger hardware would just hide the real contention. New reusable
+  `apps/api/scripts/load-test.ts` (`npm run load-test --workspace=apps/api
+  -- <email> <password>`) drives real HTTP traffic at the real running
+  API + capped ERPNext stack across three scenarios sized to how a single
+  small store actually uses this system, not an arbitrary stress number:
+  product search at 20 connections (the highest-frequency real action,
+  tested well past real concurrency to find the ceiling), the dashboard
+  summary at 5 connections (the heaviest single query, but the owner only
+  opens it occasionally), and POS transaction creation at 3 connections
+  (the real write path — deliberately low, matching "one or two
+  simultaneous cashiers," and the script deletes every draft invoice it
+  creates afterward so the load test doesn't leave throwaway data in the
+  real store).
+  Real results: product search held at 20 concurrent with 0 errors
+  (p50 563ms, p99 666ms). The dashboard summary's ~1.9s p50 at 5
+  concurrent looked concerning until checked against a single unloaded
+  request (~0.6s) — most of that gap is `GUNICORN_WORKERS=1` (spec §13's
+  own deliberate low-memory tradeoff) serializing concurrent requests, not
+  the query itself being slow; `docker stats` confirmed it, with
+  `backend` peaking at ~71% CPU against its 0.7 vCPU cap while `db` stayed
+  at ~23% of its own 0.7 cap and every container's memory stayed
+  comfortably inside its limit — CPU, not RAM, is the real ceiling on this
+  VPS, exactly what §13 predicted.
+  The write-path test surfaced a genuine bug: concurrent Sales Invoice
+  creation hit MariaDB's naming-series row lock and threw a real
+  `frappe.exceptions.QueryDeadlockError` (`HTTP 500`) — correctly
+  classified as retryable by `shared/erpnext-client`'s `isRetryable`, but
+  the previous default of 3 total attempts (200ms-2000ms backoff)
+  sometimes wasn't enough to outlast the contention: an initial run saw
+  13/59 requests (22%) fail this way. Fixed by raising the client's
+  default `maxAttempts` from 3 to 5 — re-running the identical test
+  afterward dropped the failure rate to 3/54 (~6%), confirmed via server
+  logs to be the same error class, now just needing more attempts to
+  clear rather than exhausting them. A small residual failure rate
+  remains under this specific synthetic load (three simultaneous
+  zero-delay writes, harsher than a real cashier's think-time between
+  checkouts) — documented honestly rather than chased to zero with an
+  unreasonably large retry budget that would just stack up latency
+  instead.
+- **Security pass: input validation + secrets handling.** Audited every
+  route across every module for zod validation on its input, every place
+  a secret could leak (logs, error responses, URLs), CORS config,
+  webhook-signature comparison, and every ERPNext query for
+  string-concatenated (vs. parameterized) filters. Most of the codebase
+  was already sound — every business-write route already validated with
+  zod, both webhook signature checks already used `timingSafeEqual` (not
+  `===`), no secret-embedding URL (e.g. Gemini's key-in-query-string) is
+  ever passed to the logger, every ERPNext query already goes through the
+  parameterized `filters: [[field, op, value]]` array form, and the
+  dashboard has no `dangerouslySetInnerHTML`/raw HTML injection anywhere.
+  Two real gaps found and fixed:
+  - **No production guard on insecure defaults.** `JWT_SECRET` had a
+    placeholder default (`CHANGE_ME_TO_A_RANDOM_32_CHAR_MINIMUM_SECRET`,
+    passes the 32-char zod check, and is sitting in this very repo's
+    history) with nothing stopping the app from booting on it in
+    production — anyone who read this code could forge an Owner-role
+    token against a deployment that forgot to override it. Likewise
+    `ERPNEXT_WEBHOOK_SECRET` unset silently skips signature verification
+    (a `logger.warn`, not a refusal) — fine for local dev, not fine
+    unnoticed in production. Fixed with `assertProductionSafety()` in
+    `apps/api/src/config/env.ts`: when `NODE_ENV=production`, the app now
+    refuses to boot (`process.exit(1)`, clear message listing every
+    problem) if `JWT_SECRET` is still the placeholder, if
+    `ERPNEXT_WEBHOOK_SECRET` is empty, or if `WHATSAPP_APP_SECRET` is
+    empty while WhatsApp is actually configured (`WHATSAPP_ACCESS_TOKEN`
+    set) — conditional, since an app that never set up WhatsApp has no
+    webhook traffic there to protect. Wildcard `CORS_ALLOWED_ORIGINS` in
+    production gets a loud warning rather than a hard refusal (bearer
+    tokens in an `Authorization` header aren't the same CSRF-style risk
+    cookies would be, and blocking boot on a config choice the user
+    hasn't necessarily finalized yet felt disproportionate) — still
+    called out rather than silently carried forward. Live-verified, not
+    just unit-tested: ran the real app with
+    `NODE_ENV=production JWT_SECRET=<placeholder> ERPNEXT_WEBHOOK_SECRET=`
+    and confirmed it printed both problems and exited `1` rather than
+    booting.
+  - **`/api/v1/products/search` had no runtime input validation** — a TS
+    type annotation on the query string only, unenforced at request time,
+    inconsistent with every other route's zod pattern (not itself
+    exploitable, since Frappe's array-filter format isn't susceptible to
+    string-concatenation injection, but still worth fixing for
+    consistency and to cap unbounded input). Added a zod schema
+    (`q`/`customer_tier`, both capped at a sane max length);
+    live-verified an over-long `q` now gets a clean `400
+    VALIDATION_ERROR` instead of silently reaching ERPNext.
+  Also hardened `apps/api/src/modules/auth/infrastructure/jwt.ts` to pass
+  an explicit `algorithms: ['HS256']` allowlist to `jwt.verify` (and
+  `algorithm: 'HS256'` to `jwt.sign`) — defense in depth against
+  algorithm-confusion attacks, even though this app only ever signs with
+  HS256 today.
+  One finding reviewed and *not* changed:
+  `customer-membership`'s `/customers/:id` family lets any authenticated
+  Cashier/Manager/Owner look up any customer's piutang/purchase history
+  by ID with no additional ownership check. Flagged by the audit as an
+  IDOR pattern in general, but this is a single-store internal-staff ERP,
+  not a multi-tenant app — every role gated onto this route is a trusted
+  employee who legitimately needs to pull up any customer's balance to
+  process a sale, the same as they could by opening the physical ledger.
+  Documented here as a reviewed-and-accepted design choice rather than
+  silently dropped.
+
 ### Renaming the placeholder company
 
 `ERPNEXT_DEFAULT_COMPANY` / `ERPNEXT_DEFAULT_WAREHOUSE` default to a
@@ -362,6 +634,19 @@ Opens on `http://localhost:5173`, talking to the API at
 its origin — the default `CORS_ALLOWED_ORIGINS=*` covers this out of the
 box for local dev. See [apps/pwa-scanner/README.md](apps/pwa-scanner/README.md)
 for how to exercise the offline queue.
+
+## Running the dashboard locally
+
+```bash
+npm run dev --workspace=apps/dashboard
+```
+
+Opens on `http://localhost:5174`, talking to the API at
+`http://localhost:3000` by default (override with `VITE_API_BASE_URL` in a
+`.env` in `apps/dashboard`, same convention as the PWA scanner). No login
+yet — `apps/api`'s `auth` module is still unimplemented (Phase 0
+placeholder), so every view is open; don't expose this outside a trusted
+network until that lands.
 
 ## Setting up AI providers
 

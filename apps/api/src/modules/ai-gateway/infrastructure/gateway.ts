@@ -6,7 +6,9 @@
 import { auditLogger } from '../../../shared/audit/index.js';
 import { ServiceUnavailableError } from '../../../shared/errors/index.js';
 import { logger } from '../../../shared/logger/index.js';
+import { sentry } from '../../../shared/observability/sentry.js';
 import {
+  AIProviderError,
   AIProviderRateLimitError,
   type AIProvider,
   type AIRequest,
@@ -51,6 +53,21 @@ export async function generateWithFailover(
           });
           continue;
         }
+        // A transient failure (network error, 5xx) that isn't specifically
+        // a rate limit — the key itself may still be healthy, so no
+        // cooldown, but it's still worth trying the next key/provider
+        // rather than aborting the whole two-level failover on what's
+        // likely a momentary blip (mirrors shared/erpnext-client's
+        // transient-vs-permanent retry distinction).
+        if (error instanceof AIProviderError && error.retryable) {
+          logger.warn({ provider: pool.name, err: error }, 'ai_gateway.transient_error_failover');
+          await auditLogger.record({
+            actor: 'ai-gateway',
+            action: 'provider_transient_error_failover',
+            after: { provider: pool.name, message: error.message },
+          });
+          continue;
+        }
         throw error;
       }
     }
@@ -65,5 +82,11 @@ export async function generateWithFailover(
     }
   }
 
+  // Every pool exhausted, not just one — the whole AI Gateway is down, not
+  // a single provider blip. Worth an alert (this is exactly the AppError
+  // branch of the Fastify error handler, which never gets Sentry-reported
+  // since it's an expected/handled error path from the request's point of
+  // view — but "expected" doesn't mean "fine to miss silently in ops").
+  sentry.captureMessage('ai_gateway.all_providers_exhausted');
   throw new AllProvidersExhaustedError();
 }

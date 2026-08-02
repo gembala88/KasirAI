@@ -44,6 +44,26 @@
 #   a service is added or a limit changes — it's meant to be the one place
 #   that answers "how much headroom is left" without adding up the file.
 #
+# --- CPU budget (spec §13's 2 vCPU ceiling, added Phase 8 for load
+#     testing) --------------------------------------------------------
+#   Service          cpus
+#   backend          0.7   (gunicorn, single worker — the main request path)
+#   db               0.7   (MariaDB — the other heavy hitter under write load)
+#   queue            0.2
+#   scheduler        0.1
+#   frontend         0.1
+#   websocket        0.05
+#   redis-queue      0.05
+#   redis-cache      0.05
+#   hermes-redis     0.05
+#   ------------------------------------------------------------------
+#   Total cpus: 2.0 — a dev machine with more cores than the VPS would
+#   otherwise mask real contention; this makes `docker compose up` behave
+#   like the real 2 vCPU box regardless of host hardware. The Node API
+#   itself isn't in this file yet (runs on the host until Phase 9), so its
+#   CPU usage isn't cgroup-capped by this — see the Phase 8 load test
+#   writeup in README.md for how that gap was handled.
+#
 # Usage: see README.md "Running ERPNext locally / on the VPS".
 
 services:
@@ -52,6 +72,7 @@ services:
     networks:
       - hermes_network
     mem_limit: 400m
+    cpus: 0.7
     deploy:
       restart_policy:
         condition: on-failure
@@ -145,6 +166,7 @@ services:
     networks:
       - hermes_network
     mem_limit: 512m
+    cpus: 0.7
     healthcheck:
       test: ['CMD', 'healthcheck.sh', '--connect', '--innodb_initialized']
       start_period: 5s
@@ -170,6 +192,7 @@ services:
     networks:
       - hermes_network
     mem_limit: 128m
+    cpus: 0.1
     depends_on:
       - websocket
       - backend
@@ -198,6 +221,7 @@ services:
     networks:
       - hermes_network
     mem_limit: 300m
+    cpus: 0.2
     deploy:
       restart_policy:
         condition: on-failure
@@ -221,6 +245,7 @@ services:
     networks:
       - hermes_network
     mem_limit: 64m
+    cpus: 0.05
     deploy:
       restart_policy:
         condition: on-failure
@@ -232,6 +257,7 @@ services:
     networks:
       - hermes_network
     mem_limit: 32m
+    cpus: 0.05
     deploy:
       restart_policy:
         condition: on-failure
@@ -241,6 +267,7 @@ services:
     networks:
       - hermes_network
     mem_limit: 64m
+    cpus: 0.05
     deploy:
       restart_policy:
         condition: on-failure
@@ -254,6 +281,7 @@ services:
     networks:
       - hermes_network
     mem_limit: 150m
+    cpus: 0.1
     deploy:
       restart_policy:
         condition: on-failure
@@ -272,6 +300,7 @@ services:
     networks:
       - hermes_network
     mem_limit: 100m
+    cpus: 0.05
     deploy:
       restart_policy:
         condition: on-failure

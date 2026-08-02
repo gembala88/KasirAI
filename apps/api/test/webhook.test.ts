@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 import { env } from '../src/config/env.js';
 import { buildApp } from '../src/main.js';
 
-const app = buildApp();
+const app = await buildApp();
 afterAll(async () => {
   await app.close();
 });

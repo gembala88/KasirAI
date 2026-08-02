@@ -40,4 +40,8 @@ export interface PosTransaction {
   grandTotal: number;
   paidAmount: number;
   outstandingAmount: number;
+  /** Source Sales Order name, set only for invoices created via the WhatsApp payment flow (§10 Phase 6). */
+  poNo?: string;
+  /** Customer's phone number, for the dashboard's payment-confirmation UI (§10 Phase 7) to notify without a second lookup. */
+  contactMobile?: string;
 }

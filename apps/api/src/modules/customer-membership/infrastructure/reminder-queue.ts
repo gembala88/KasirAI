@@ -16,6 +16,7 @@ import { env } from '../../../config/env.js';
 import { auditLogger } from '../../../shared/audit/index.js';
 import { eventBus } from '../../../shared/event-bus/index.js';
 import { logger } from '../../../shared/logger/index.js';
+import { sentry } from '../../../shared/observability/sentry.js';
 import { getRedisConnection } from '../../../shared/queue/index.js';
 import { findDuePiutangReminders } from '../application/piutang.js';
 
@@ -56,6 +57,7 @@ export function startPiutangReminderWorker(): Worker {
   });
   worker.on('failed', (job: Job | undefined, err: Error) => {
     logger.error({ err, jobId: job?.id }, 'piutang_reminder.job_failed');
+    sentry.captureException(err, { jobId: job?.id });
   });
   return worker;
 }

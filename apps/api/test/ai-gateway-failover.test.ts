@@ -5,7 +5,7 @@ import {
   type ProviderPool,
 } from '../src/modules/ai-gateway/infrastructure/gateway.js';
 import type { KeyHealthStore } from '../src/modules/ai-gateway/infrastructure/key-rotation.js';
-import { AIProviderRateLimitError } from '../src/modules/ai-gateway/providers/errors.js';
+import { AIProviderError, AIProviderRateLimitError } from '../src/modules/ai-gateway/providers/errors.js';
 import type { AIProvider, AIResponse } from '../src/modules/ai-gateway/providers/types.js';
 
 /** In-memory KeyHealthStore fake — no Redis needed for these tests (CI has none). */
@@ -187,7 +187,7 @@ describe('generateWithFailover', () => {
     ).rejects.toThrow(AllProvidersExhaustedError);
   });
 
-  it('propagates a non-rate-limit error immediately without rotating', async () => {
+  it('propagates a non-rate-limit, non-provider error immediately without rotating', async () => {
     const calls: string[] = [];
     const pools: ProviderPool[] = [
       {
@@ -214,6 +214,70 @@ describe('generateWithFailover', () => {
     await expect(
       generateWithFailover(pools, { prompt: 'hi' }, createInMemoryKeyHealthStore()),
     ).rejects.toThrow('boom');
+    expect(calls).toEqual(['k1']);
+  });
+
+  it('rotates to the next key on a retryable provider error (network error / 5xx), not just rate limits', async () => {
+    const calls: string[] = [];
+    const store = createInMemoryKeyHealthStore();
+    const pools: ProviderPool[] = [
+      {
+        name: 'nvidia',
+        instances: [
+          {
+            apiKey: 'key-1',
+            provider: fakeProvider('nvidia', () => {
+              calls.push('key-1');
+              throw new AIProviderError('nvidia', 'network error: ECONNRESET', true);
+            }),
+          },
+          {
+            apiKey: 'key-2',
+            provider: fakeProvider('nvidia', async () => {
+              calls.push('key-2');
+              return { text: 'from key 2' };
+            }),
+          },
+        ],
+      },
+    ];
+
+    const result = await generateWithFailover(pools, { prompt: 'hi' }, store);
+
+    expect(result.text).toBe('from key 2');
+    expect(calls).toEqual(['key-1', 'key-2']);
+    // A transient failure isn't a rate limit — the key itself may still be
+    // healthy, so it must not be put on cooldown.
+    expect(await store.isOnCooldown('nvidia', 'key-1')).toBe(false);
+  });
+
+  it('propagates a non-retryable provider error (e.g. a real 4xx) immediately without rotating', async () => {
+    const calls: string[] = [];
+    const pools: ProviderPool[] = [
+      {
+        name: 'gemini',
+        instances: [
+          {
+            apiKey: 'k1',
+            provider: fakeProvider('gemini', () => {
+              calls.push('k1');
+              throw new AIProviderError('gemini', 'HTTP 400: bad request', false);
+            }),
+          },
+          {
+            apiKey: 'k2',
+            provider: fakeProvider('gemini', async () => {
+              calls.push('k2');
+              return { text: 'unreachable' };
+            }),
+          },
+        ],
+      },
+    ];
+
+    await expect(
+      generateWithFailover(pools, { prompt: 'hi' }, createInMemoryKeyHealthStore()),
+    ).rejects.toThrow('HTTP 400');
     expect(calls).toEqual(['k1']);
   });
 });

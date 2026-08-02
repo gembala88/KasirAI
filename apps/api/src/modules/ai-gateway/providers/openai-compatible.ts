@@ -49,6 +49,7 @@ export function createOpenAiCompatibleProvider(config: OpenAiCompatibleConfig): 
         throw new AIProviderError(
           config.name,
           `network error: ${cause instanceof Error ? cause.message : String(cause)}`,
+          true,
         );
       }
 
@@ -57,7 +58,11 @@ export function createOpenAiCompatibleProvider(config: OpenAiCompatibleConfig): 
       }
       if (!response.ok) {
         const body = await response.text().catch(() => '');
-        throw new AIProviderError(config.name, `HTTP ${response.status}: ${body.slice(0, 300)}`);
+        throw new AIProviderError(
+          config.name,
+          `HTTP ${response.status}: ${body.slice(0, 300)}`,
+          response.status >= 500,
+        );
       }
 
       const json = (await response.json()) as ChatCompletionResponse;

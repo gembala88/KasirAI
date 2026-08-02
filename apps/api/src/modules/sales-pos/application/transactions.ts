@@ -27,6 +27,8 @@ interface SalesInvoiceDoc {
   grand_total: number;
   paid_amount: number;
   outstanding_amount: number;
+  po_no?: string;
+  contact_mobile?: string;
 }
 
 function toPosTransaction(doc: SalesInvoiceDoc): PosTransaction {
@@ -37,6 +39,8 @@ function toPosTransaction(doc: SalesInvoiceDoc): PosTransaction {
     grandTotal: doc.grand_total,
     paidAmount: doc.paid_amount,
     outstandingAmount: doc.outstanding_amount,
+    ...(doc.po_no ? { poNo: doc.po_no } : {}),
+    ...(doc.contact_mobile ? { contactMobile: doc.contact_mobile } : {}),
   };
 }
 
@@ -156,6 +160,33 @@ export async function listParkedTransactions(): Promise<PosTransaction[]> {
       ['docstatus', '=', 0],
     ],
     fields: ['name', 'status', 'customer', 'grand_total', 'paid_amount', 'outstanding_amount'],
+  });
+  return docs.map(toPosTransaction);
+}
+
+/**
+ * WhatsApp orders awaiting the owner/cashier's manual payment
+ * confirmation (§7, §10 Phase 6/7) — same underlying shape as a
+ * cashier-parked POS sale (`is_pos=1`, `docstatus=0`), distinguished by
+ * `po_no` being set (only `createInvoiceFromSalesOrder` sets it).
+ */
+export async function listPendingPaymentConfirmations(): Promise<PosTransaction[]> {
+  const docs = await erpNextClient.list<SalesInvoiceDoc>('Sales Invoice', {
+    filters: [
+      ['is_pos', '=', 1],
+      ['docstatus', '=', 0],
+      ['po_no', '!=', ''],
+    ],
+    fields: [
+      'name',
+      'status',
+      'customer',
+      'grand_total',
+      'paid_amount',
+      'outstanding_amount',
+      'po_no',
+      'contact_mobile',
+    ],
   });
   return docs.map(toPosTransaction);
 }

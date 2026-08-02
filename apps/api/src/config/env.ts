@@ -148,6 +148,61 @@ const envSchema = z.object({
 
 export type Env = z.infer<typeof envSchema>;
 
+const PLACEHOLDER_JWT_SECRET = 'CHANGE_ME_TO_A_RANDOM_32_CHAR_MINIMUM_SECRET';
+
+/**
+ * Defaults that are fine for local dev (an unset value just disables the
+ * feature, or a placeholder makes the schema pass without a real secret)
+ * become real vulnerabilities if silently carried into production — spec
+ * §8.1's "never fabricate" principle extended to config: an insecure
+ * default must fail loudly, not run quietly. Found live (Phase 8 security
+ * pass) that nothing previously stopped the app from booting in
+ * production on the placeholder JWT_SECRET, which is committed in plain
+ * text in this very repo's docs/history — anyone could forge an
+ * Owner-role token against a deployment that never overrode it.
+ */
+export function assertProductionSafety(parsedEnv: Env): void {
+  if (parsedEnv.NODE_ENV !== 'production') {
+    return;
+  }
+
+  const problems: string[] = [];
+
+  if (parsedEnv.JWT_SECRET === PLACEHOLDER_JWT_SECRET) {
+    problems.push('JWT_SECRET is still the placeholder default — set a real random secret.');
+  }
+  if (!parsedEnv.ERPNEXT_WEBHOOK_SECRET) {
+    problems.push(
+      'ERPNEXT_WEBHOOK_SECRET is unset — /webhooks/erpnext would accept unsigned requests.',
+    );
+  }
+  // Only required if WhatsApp is actually configured — an app that never
+  // set up WhatsApp integration has no webhook traffic to protect here.
+  if (parsedEnv.WHATSAPP_ACCESS_TOKEN && !parsedEnv.WHATSAPP_APP_SECRET) {
+    problems.push(
+      'WHATSAPP_ACCESS_TOKEN is set but WHATSAPP_APP_SECRET is unset — /whatsapp/webhook would accept unsigned requests.',
+    );
+  }
+
+  if (problems.length > 0) {
+    console.error(
+      `Refusing to start in production with insecure configuration:\n${problems.map((p) => `  - ${p}`).join('\n')}`,
+    );
+    process.exit(1);
+  }
+
+  // Not a boot-blocker (bearer-token auth means wildcard CORS isn't a
+  // direct CSRF-style hole the way it would be for cookie-based sessions),
+  // but still worth a loud warning — §10 Phase 8 flagged this default as
+  // something to replace before going live, and a silent wildcard in
+  // production is exactly the kind of thing to surface, not assume.
+  if (parsedEnv.CORS_ALLOWED_ORIGINS === true) {
+    console.warn(
+      'WARNING: CORS_ALLOWED_ORIGINS is "*" in production — replace with the real dashboard/PWA origins before going live (see README "Renaming the placeholder company" section neighbors for other pre-launch checklist items).',
+    );
+  }
+}
+
 function loadEnv(): Env {
   const parsed = envSchema.safeParse(process.env);
 
@@ -159,6 +214,7 @@ function loadEnv(): Env {
     process.exit(1);
   }
 
+  assertProductionSafety(parsed.data);
   return parsed.data;
 }
 

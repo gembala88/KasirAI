@@ -48,20 +48,30 @@ interface WebhookPayload {
   }>;
 }
 
+// §1.4 NFR "Security" names this endpoint specifically: "rate limiting on
+// public WhatsApp webhook". Generous enough for real Meta traffic bursts,
+// tight enough to blunt a flood/abuse attempt against an unauthenticated
+// public endpoint.
+const WEBHOOK_RATE_LIMIT = { max: 60, timeWindow: '1 minute' };
+
 export function registerWhatsappWebhookRoute(app: FastifyInstance): void {
   // Verification handshake (Meta calls this once when you configure the
   // webhook URL in the Meta App dashboard).
-  app.get<{ Querystring: Record<string, string> }>('/whatsapp/webhook', async (request, reply) => {
-    const mode = request.query['hub.mode'];
-    const token = request.query['hub.verify_token'];
-    const challenge = request.query['hub.challenge'];
+  app.get<{ Querystring: Record<string, string> }>(
+    '/whatsapp/webhook',
+    { config: { rateLimit: WEBHOOK_RATE_LIMIT } },
+    async (request, reply) => {
+      const mode = request.query['hub.mode'];
+      const token = request.query['hub.verify_token'];
+      const challenge = request.query['hub.challenge'];
 
-    if (mode === 'subscribe' && token === env.WHATSAPP_WEBHOOK_VERIFY_TOKEN) {
-      reply.status(200).type('text/plain').send(challenge ?? '');
-      return;
-    }
-    throw new UnauthorizedError('Webhook verification failed');
-  });
+      if (mode === 'subscribe' && token === env.WHATSAPP_WEBHOOK_VERIFY_TOKEN) {
+        reply.status(200).type('text/plain').send(challenge ?? '');
+        return;
+      }
+      throw new UnauthorizedError('Webhook verification failed');
+    },
+  );
 
   void app.register(async (scope) => {
     scope.removeAllContentTypeParsers();
@@ -75,6 +85,7 @@ export function registerWhatsappWebhookRoute(app: FastifyInstance): void {
 
     scope.post<{ Body: { raw: Buffer; json: WebhookPayload } }>(
       '/whatsapp/webhook',
+      { config: { rateLimit: WEBHOOK_RATE_LIMIT } },
       async (request, reply) => {
         const signature = request.headers['x-hub-signature-256'];
         const signatureHeader = Array.isArray(signature) ? signature[0] : signature;

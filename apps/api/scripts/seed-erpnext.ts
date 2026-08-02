@@ -83,6 +83,35 @@ const PRICE_LISTS = ['Retail', 'Grosir', 'Member'];
 
 const UOMS = ['Pcs', 'Lusin', 'Karton'];
 
+// --- Phase 8 auth prerequisites ---
+// hermes_role is a Custom Field on ERPNext's own User doctype rather than
+// a parallel Hermes-owned user table — the spec's own data model (§5)
+// only calls for a Hermes-side `user_roles_extended` table "if RBAC needs
+// finer grain than Frappe's native roles"; a single Select field is not
+// that case. Password verification also delegates to ERPNext's own
+// `/api/method/login` (see auth module) — Hermes never stores a password.
+const USER_ROLE_FIELD: CustomFieldSpec = {
+  fieldname: 'hermes_role',
+  label: 'Hermes Role',
+  fieldtype: 'Select',
+  insertAfter: 'first_name',
+  options: 'Owner\nManager\nCashier\nWarehouse Staff',
+  description:
+    'RBAC role for the Hermes application layer (spec §1.4 NFR Security) — distinct from ERPNext\'s own native Roles.',
+};
+
+// Dev-only seed accounts, one per §1.4's required role, so Phase 8's
+// auth can be verified end-to-end without a manual ERPNext setup step.
+// Same shared password for all four, deliberately simple for local
+// verification — change or remove these before any non-local deployment.
+const SEED_USER_PASSWORD = 'Hermes123!';
+const SEED_USERS: Array<{ email: string; firstName: string; role: string }> = [
+  { email: 'owner@hermes.local', firstName: 'Owner', role: 'Owner' },
+  { email: 'manager@hermes.local', firstName: 'Manager', role: 'Manager' },
+  { email: 'cashier@hermes.local', firstName: 'Cashier', role: 'Cashier' },
+  { email: 'warehouse@hermes.local', firstName: 'Warehouse', role: 'Warehouse Staff' },
+];
+
 // --- Phase 2 prerequisites ---
 
 const COMPANY_NAME = env.ERPNEXT_DEFAULT_COMPANY;
@@ -392,6 +421,27 @@ async function ensureUomConversionFactor(from: string, to: string, value: number
   logger.info({ from, to, value }, 'seed.uom_conversion.created');
 }
 
+async function ensureSeedUser(spec: { email: string; firstName: string; role: string }): Promise<void> {
+  try {
+    await erpNextClient.get('User', spec.email);
+    logger.info({ email: spec.email }, 'seed.user.exists');
+    return;
+  } catch (error) {
+    if (!(error instanceof ErpNextApiError) || error.statusCode !== 404) {
+      throw error;
+    }
+  }
+
+  await erpNextClient.create('User', {
+    email: spec.email,
+    first_name: spec.firstName,
+    send_welcome_email: 0,
+    new_password: SEED_USER_PASSWORD,
+    hermes_role: spec.role,
+  });
+  logger.info({ email: spec.email, role: spec.role }, 'seed.user.created');
+}
+
 async function main(): Promise<void> {
   for (const field of CUSTOMER_CUSTOM_FIELDS) {
     await ensureCustomField('Customer', field);
@@ -419,6 +469,11 @@ async function main(): Promise<void> {
   await ensureModesOfPayment(company.name, company.defaultCashAccount);
   await ensureWalkInCustomer();
   await ensureErpNextWebhooks();
+
+  await ensureCustomField('User', USER_ROLE_FIELD);
+  for (const user of SEED_USERS) {
+    await ensureSeedUser(user);
+  }
 
   logger.info('seed.done');
 }
