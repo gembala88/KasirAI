@@ -1,0 +1,28 @@
+# Multi-stage build for @hermes/pwa-scanner (apps/pwa-scanner). Build
+# context must be the monorepo root, e.g.:
+#   docker build -f infra/docker/Dockerfile.pwa-scanner \
+#     --build-arg VITE_API_BASE_URL=https://example.com/api \
+#     -t hermes-pwa-scanner .
+#
+# Same VITE_API_BASE_URL build-time caveat as Dockerfile.dashboard.
+FROM node:20-alpine AS build
+WORKDIR /repo
+COPY package.json package-lock.json ./
+COPY apps/pwa-scanner/package.json apps/pwa-scanner/package.json
+RUN npm ci --workspace=apps/pwa-scanner --include-workspace-root
+COPY tsconfig.base.json ./
+COPY apps/pwa-scanner apps/pwa-scanner
+ARG VITE_API_BASE_URL=/api
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+RUN npm run build --workspace=apps/pwa-scanner
+
+FROM nginx:1.27-alpine AS runtime
+COPY --from=build /repo/apps/pwa-scanner/dist /usr/share/nginx/html
+RUN printf 'server {\n\
+    listen 80;\n\
+    root /usr/share/nginx/html;\n\
+    location / {\n\
+        try_files $uri $uri/ /index.html;\n\
+    }\n\
+}\n' > /etc/nginx/conf.d/default.conf
+EXPOSE 80

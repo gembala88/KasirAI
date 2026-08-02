@@ -1,27 +1,49 @@
-# Production reverse proxy template — spec §10 Phase 9 ("Deploy via Docker +
-# Nginx on Ubuntu server"). Not wired into infra/docker/docker-compose.yml
-# yet: apps/dashboard and apps/pwa-scanner don't have builds to serve until
-# their respective phases (§10 Phase 2, 7) land. Kept here now only to match
-# the folder structure in §4 and document the intended routing.
+# Production reverse proxy — spec §10 Phase 9 ("Deploy via Docker + Nginx
+# on Ubuntu server"). Nginx runs on the VPS host (not containerized) and
+# reverse-proxies to the app/dashboard/pwa-scanner/erpnext containers via
+# their host-published, 127.0.0.1-only ports (see infra/docker/docker-compose.yml
+# — api/dashboard/pwa-scanner publish to 127.0.0.1 specifically, not
+# 0.0.0.0, so they're unreachable from outside the box except through
+# this proxy).
 #
-# Intended routing once all pieces exist:
-#   /            -> apps/dashboard  (owner/cashier/warehouse web UI)
-#   /scan/       -> apps/pwa-scanner
-#   /api/        -> Hermes API (apps/api, Fastify, this repo's main service)
-#   /erp/        -> ERPNext frontend container (infra/docker/docker-compose.yml)
+# Routing:
+#   /                  -> apps/dashboard  (owner/cashier/warehouse web UI)
+#   /scan/             -> apps/pwa-scanner
+#   /api/              -> Hermes API (apps/api)
+#   /webhooks/erpnext  -> Hermes API (ERPNext -> Hermes webhook, HMAC-verified internally)
+#   /whatsapp/webhook  -> Hermes API (Meta -> Hermes webhook, HMAC-verified internally)
+#   /health            -> Hermes API (uptime checks)
+#   /erp/              -> ERPNext frontend container
 #
-# Replace ${...} placeholders and copy to /etc/nginx/sites-available/hermes
-# on the VPS, then symlink into sites-enabled.
+# The last two webhook routes are NOT under /api/ — they're top-level on
+# the Fastify app (see apps/api/src/modules/auth/interfaces/auth-plugin.ts's
+# PUBLIC_PATHS) and must be routed as their own locations, not folded into
+# the /api/ prefix strip.
+#
+# Setup on the VPS:
+#   1. Replace ${...} placeholders below (envsubst, or by hand) and copy to
+#      /etc/nginx/sites-available/hermes, symlink into sites-enabled.
+#   2. Get this working over plain HTTP first (`nginx -t && systemctl reload nginx`,
+#      confirm `curl http://${DOMAIN}/health` responds) — DNS must already
+#      point ${DOMAIN} at this VPS before step 3.
+#   3. Run `certbot --nginx -d ${DOMAIN}` — certbot's Nginx plugin rewrites
+#      this file in place to add the TLS `listen 443` block, the cert paths,
+#      and an HTTP->HTTPS redirect. Don't hand-write the SSL directives
+#      yourselves; let certbot generate them so its auto-renewal (a systemd
+#      timer it installs itself) keeps matching what's actually on disk.
 
 server {
     listen 80;
     server_name ${DOMAIN};
+
+    client_max_body_size 50m;
 
     location / {
         proxy_pass http://127.0.0.1:${DASHBOARD_PORT};
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     location /scan/ {
@@ -29,6 +51,7 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     location /api/ {
@@ -36,7 +59,29 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
         proxy_read_timeout 120s;
+    }
+
+    location = /webhooks/erpnext {
+        proxy_pass http://127.0.0.1:${API_PORT}/webhooks/erpnext;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location = /whatsapp/webhook {
+        proxy_pass http://127.0.0.1:${API_PORT}/whatsapp/webhook;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location = /health {
+        proxy_pass http://127.0.0.1:${API_PORT}/health;
+        proxy_set_header Host $host;
     }
 
     location /erp/ {
@@ -44,6 +89,6 @@ server {
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        client_max_body_size 50m;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }

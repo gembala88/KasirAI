@@ -1,7 +1,14 @@
 # Multi-stage build for @hermes/api (apps/api). Build context must be the
 # monorepo root, e.g.:
 #   docker build -f infra/docker/Dockerfile.api -t hermes-api .
-FROM node:20-alpine AS base
+#
+# node:22-alpine, not node:20 — found live (Phase 9 deploy) that this
+# image had never actually been rebuilt/run since Phase 0: apps/api has
+# used the `node:sqlite` built-in since Phase 4 (ai_action_audit), which
+# doesn't exist before Node 22.5 — Node 20 fails at startup with
+# `ERR_UNKNOWN_BUILTIN_MODULE`, not a build-time error, so this had
+# nothing to catch it until a real container was actually started.
+FROM node:22-alpine AS base
 WORKDIR /repo
 
 FROM base AS deps
@@ -21,5 +28,7 @@ COPY apps/api/package.json apps/api/package.json
 RUN npm ci --workspace=apps/api --include-workspace-root --omit=dev
 COPY --from=build /repo/apps/api/dist apps/api/dist
 
+# Metadata only — the actual bound port is whatever PORT resolves to at
+# runtime (docker-compose.yml sets PORT=3001 for this deployment).
 EXPOSE 3000
 CMD ["node", "apps/api/dist/main.js"]

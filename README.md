@@ -757,6 +757,119 @@ default, never explicitly configured. All of it built for real this pass:
   cleaned up afterward (cancelled + deleted, or deleted while still
   draft) so nothing lingers in the real books.
 
+## Phase 9: Production Launch (smoke-tested on a shared VPS)
+
+Deployed for real to `43.128.68.124`, per the user's explicit go-ahead
+after §15 was confirmed solid. Full detail in `RUNBOOK.md` and
+`DEPLOY_CHECKLIST.md` — this section is the summary.
+
+**This VPS is shared, not dedicated — confirmed live before touching
+anything, per explicit instruction.** The SSH key found on this
+environment was aliased `paybox-vps`; rather than assume it was the
+right target, the user was asked directly, and confirmed it is the real
+Hermes VPS despite the name — reused from an earlier unrelated project.
+A read-only survey (before any install/deploy step) found it already
+running two other live projects: `robin_darkpools` (four Node bots) and
+`paybox-bot` (a pm2-managed server on port 3000 — the same port Hermes'
+API would have defaulted to). Real numbers at that point: 1.9 GB RAM,
+861 MB already committed, ~546 MB genuinely free (up to ~1.1 GB counting
+reclaimable cache), 1.9 GB swap with ~1.5 GB free. Per explicit
+instruction, neither project was touched, stopped, or modified at any
+point — confirmed again at the end of this phase (same PIDs, same
+processes, still running).
+
+**Scope decision (explicit):** deploy scoped down to fit this shared
+box's real headroom rather than wait for a dedicated VPS, understood
+and stated up front as a functional smoke test only ("untuk coba"), not
+representative of §13's intended dedicated-VPS performance. A dedicated
+VPS is required before real go-live — not a suggestion, an agreed
+prerequisite.
+
+- **`infra/docker/docker-compose.shared-vps-test.yml`** — a Compose
+  override with a further-trimmed memory/CPU budget specific to this one
+  box, layered on top of (not replacing) `docker-compose.yml`'s own
+  numbers, which remain correct for a dedicated 2 vCPU/2 GB VPS matching
+  §13. The base file also gained real `api`/`dashboard`/`pwa-scanner`
+  services (finally containerizing apps/api, which ran on the host
+  through Phase 8) and had its own budget re-balanced to fit all three
+  alongside ERPNext within the original 2 GB dedicated-VPS target.
+  Confirmed live after deploy: swap usage rose from 399 MB to 986 MB
+  (`free -h`, before vs. after) — the stack genuinely leans on swap on
+  this box, exactly the accepted trade-off, not a surprise.
+- **Hermes' API moved off port 3000** (paybox-bot's port) to 3001,
+  reachable only via `127.0.0.1` (never `0.0.0.0`) — same for
+  `dashboard` (`:5175`) and `pwa-scanner` (`:5176`). Nginx (host-level,
+  not containerized) is the only thing meant to be internet-facing.
+- **A real deployment-only bug, found live:** `Dockerfile.api` used
+  `node:20-alpine` — the container crash-looped on every single start
+  with `ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite`. `node:sqlite` has been
+  used since Phase 4 (`ai_action_audit`) but this Dockerfile was written
+  in Phase 0 and never actually rebuilt/run again until now — local dev
+  never touches it (runs on the host with whatever Node version is
+  locally installed), so nothing had ever caught the drift. Fixed:
+  `node:22-alpine`.
+- **Nginx** (`infra/nginx/hermes.conf.template`) fixed to also route
+  `/webhooks/erpnext` and `/whatsapp/webhook` — both are top-level paths
+  on the Fastify app (not under `/api/`), and the original template only
+  routed `/`, `/scan/`, `/api/`, `/erp/`; these two would have 404'd.
+  Installed and verified live on the VPS: every route
+  (`/`, `/scan/`, `/api/v1/auth/login`, `/health`, `/erp/`,
+  `/webhooks/erpnext`) returns the correct response — including
+  `/webhooks/erpnext` correctly returning `401` for an unsigned test
+  request, confirming signature verification is live end-to-end through
+  the proxy, not bypassed.
+- **Real backup automation, not just a script that exists:** a systemd
+  timer (`hermes-backup.timer`, daily at 02:00 + jitter) runs
+  `infra/scripts/backup.sh`, which uses Frappe's own `bench backup
+  --with-files` (not a hand-rolled mysqldump — bench's own command is
+  what correctly captures the site's encryption key alongside the DB
+  dump; a DB-only backup without it would be a real file that's
+  practically useless on restore) with daily/weekly/monthly retention
+  tiers. Live-verified two ways: (1) manually started the actual systemd
+  *service* the timer invokes (`systemctl start hermes-backup.service`)
+  and confirmed via `journalctl` it completed with `status=0/SUCCESS`,
+  not just that the shell script works when run by hand; (2) ran
+  `infra/scripts/restore.sh --verify-only` against the real backup file
+  produced — this restores onto a throwaway ERPNext site (never the real
+  one), runs a real data query against it, then tears the throwaway site
+  down. Completed successfully, proving the backup is genuinely
+  restorable, not merely present on disk.
+- **A real, un-worked-around blocker found and reported, not
+  papered over:** the VPS's cloud security group blocks every port
+  except 22 (SSH) from the public internet — confirmed by testing port
+  80 and port 8080 from outside (both time out) versus from inside the
+  box itself (both work instantly), and confirming the OS-level firewall
+  (`ufw` inactive, `iptables` INPUT policy `ACCEPT`) isn't the cause.
+  This is infrastructure-level, outside SSH's reach — opening it requires
+  the VPS provider's own console/API. Everything below this point is
+  therefore verified working *from inside the VPS only* (via SSH +
+  `curl localhost`), which is genuine, real evidence of the application
+  stack's correctness, but is not the same as public reachability.
+- **HTTPS not yet issued** — certbot is installed and confirmed working
+  (`certbot --version`), and the Nginx config is ready for it, but Let's
+  Encrypt's HTTP-01 challenge needs both a real domain pointing at this
+  VPS and port 80 reachable from the internet — neither exists yet (no
+  domain was provided; see the firewall item above). Not attempted
+  against Let's Encrypt's real servers, since it would just fail against
+  their rate limits for no reason without those two prerequisites.
+  Full instructions for the actual `certbot --nginx -d <domain>` run are
+  in the Nginx template's own header comment, ready for whenever DNS +
+  firewall are in place.
+- **WhatsApp: nothing to test live, honestly, because nothing has ever
+  been configured.** Checked directly (not assumed): all four WhatsApp
+  credentials (`WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_ACCESS_TOKEN`,
+  `WHATSAPP_WEBHOOK_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`) are empty both
+  locally and on the VPS — this project has never had a real Meta
+  Business API connection at any point, in any earlier phase. The
+  webhook *endpoint* is deployed and its signature verification is
+  confirmed live (see the Nginx bullet above), but no real Meta traffic
+  has ever reached it. Getting real credentials and configuring Meta's
+  app dashboard (with a matching verify token, and a reachable HTTPS
+  URL — which needs the two items above first) is the user's own action.
+- See `DEPLOY_CHECKLIST.md` for the complete, itemized state of every
+  secret/credential/DNS/firewall item — done vs. outstanding — and
+  `RUNBOOK.md` for restart/log/rollback/failure-mode procedures.
+
 ### Renaming the placeholder company
 
 `ERPNEXT_DEFAULT_COMPANY` / `ERPNEXT_DEFAULT_WAREHOUSE` default to a

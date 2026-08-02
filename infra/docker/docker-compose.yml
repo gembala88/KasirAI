@@ -21,48 +21,64 @@
 # `hermes-redis` (below) is a separate Redis instance for the Node API's
 # own use (BullMQ job queues, later caching) — distinct from redis-cache/
 # redis-queue above, which belong to ERPNext's Frappe workers only (per the
-# architecture diagram in spec §2). Published to the host, unlike the
-# ERPNext-internal ones, since apps/api runs on the host, not in this
-# compose file, until it's containerized in Phase 9.
+# architecture diagram in spec §2).
 #
-# --- Memory budget (spec §13's 2 GB ceiling) ---------------------------
+# Phase 9: `api`, `dashboard`, and `pwa-scanner` are now real services in
+# this file — apps/api ran on the host through Phase 8 (see the git
+# history of this comment block), containerized here since a production
+# VPS deploy needs it managed the same way as everything else (restart
+# policy, mem_limit, no bare `node` process babysat by hand).
+#
+# --- Memory budget (spec §13's 2 GB ceiling, dedicated VPS) -------------
 #   Service          mem_limit   idle usage (docker stats, Phase 3)
-#   backend          400m        ~232 MiB
-#   db               512m        ~268 MiB
-#   queue            300m        ~54 MiB
-#   scheduler        150m        ~51 MiB
-#   frontend         128m        ~8 MiB
-#   websocket        100m        ~26 MiB
-#   redis-queue      64m         ~11 MiB
-#   hermes-redis     64m         ~8 MiB   (added Phase 3, for BullMQ)
-#   redis-cache      32m         ~14 MiB
+#   backend          380m        ~232 MiB
+#   db               480m        ~268 MiB
+#   queue            280m        ~54 MiB
+#   scheduler        140m        ~51 MiB
+#   frontend         110m        ~8 MiB
+#   websocket        90m         ~26 MiB
+#   redis-queue      60m         ~11 MiB
+#   hermes-redis     60m         ~8 MiB   (added Phase 3, for BullMQ)
+#   redis-cache      30m         ~14 MiB
+#   api              180m        (added Phase 9)
+#   dashboard        40m         (added Phase 9 — static nginx, trivial footprint)
+#   pwa-scanner      40m         (added Phase 9 — static nginx, trivial footprint)
 #   ------------------------------------------------------------------
-#   Total mem_limit: 1750m (~1.71 GB) of the 2 GB VPS, leaving ~250 MB
-#   for the host OS + the Node API (runs on the host, not in this
-#   compose file, until Phase 9) + the 2 GB swap buffer configured by
-#   infra/erpnext/scripts/setup-vps-swap.sh. Re-check this table whenever
-#   a service is added or a limit changes — it's meant to be the one place
-#   that answers "how much headroom is left" without adding up the file.
+#   Total mem_limit: 1890m (~1.85 GB) of the 2 GB VPS, leaving ~150 MB
+#   for the host OS + the reverse-proxy Nginx (runs on the host, not in
+#   this compose file — see infra/nginx) + the 2 GB swap buffer configured
+#   by infra/erpnext/scripts/setup-vps-swap.sh. Re-check this table
+#   whenever a service is added or a limit changes — it's meant to be the
+#   one place that answers "how much headroom is left" without adding up
+#   the file.
+#
+#   These are the numbers for a *dedicated* 2 vCPU/2 GB VPS, matching
+#   spec §13's own assumption. For the specific shared VPS this project
+#   was smoke-tested against (already running unrelated projects,
+#   ~860 MB committed before Hermes even starts), see
+#   docker-compose.shared-vps-test.yml — a Compose override with a
+#   further-trimmed budget and an explicit note on the performance
+#   trade-off, not a replacement for these numbers.
 #
 # --- CPU budget (spec §13's 2 vCPU ceiling, added Phase 8 for load
 #     testing) --------------------------------------------------------
 #   Service          cpus
-#   backend          0.7   (gunicorn, single worker — the main request path)
-#   db               0.7   (MariaDB — the other heavy hitter under write load)
-#   queue            0.2
-#   scheduler        0.1
-#   frontend         0.1
+#   backend          0.55  (gunicorn, single worker — the main request path)
+#   db               0.55  (MariaDB — the other heavy hitter under write load)
+#   queue            0.15
+#   scheduler        0.05
+#   frontend         0.05
 #   websocket        0.05
-#   redis-queue      0.05
-#   redis-cache      0.05
-#   hermes-redis     0.05
+#   redis-queue      0.03
+#   redis-cache      0.03
+#   hermes-redis     0.03
+#   api              0.35
+#   dashboard        0.05
+#   pwa-scanner      0.05
 #   ------------------------------------------------------------------
-#   Total cpus: 2.0 — a dev machine with more cores than the VPS would
+#   Total cpus: 1.94 — a dev machine with more cores than the VPS would
 #   otherwise mask real contention; this makes `docker compose up` behave
-#   like the real 2 vCPU box regardless of host hardware. The Node API
-#   itself isn't in this file yet (runs on the host until Phase 9), so its
-#   CPU usage isn't cgroup-capped by this — see the Phase 8 load test
-#   writeup in README.md for how that gap was handled.
+#   like the real 2 vCPU box regardless of host hardware.
 #
 # Usage: see README.md "Running ERPNext locally / on the VPS".
 
@@ -71,8 +87,8 @@ services:
     image: frappe/erpnext:${ERPNEXT_VERSION:-v16.30.0}
     networks:
       - hermes_network
-    mem_limit: 400m
-    cpus: 0.7
+    mem_limit: 380m
+    cpus: 0.55
     deploy:
       restart_policy:
         condition: on-failure
@@ -165,8 +181,8 @@ services:
     image: mariadb:11.8
     networks:
       - hermes_network
-    mem_limit: 512m
-    cpus: 0.7
+    mem_limit: 480m
+    cpus: 0.55
     healthcheck:
       test: ['CMD', 'healthcheck.sh', '--connect', '--innodb_initialized']
       start_period: 5s
@@ -191,8 +207,8 @@ services:
     image: frappe/erpnext:${ERPNEXT_VERSION:-v16.30.0}
     networks:
       - hermes_network
-    mem_limit: 128m
-    cpus: 0.1
+    mem_limit: 110m
+    cpus: 0.05
     depends_on:
       - websocket
       - backend
@@ -220,8 +236,8 @@ services:
     image: frappe/erpnext:${ERPNEXT_VERSION:-v16.30.0}
     networks:
       - hermes_network
-    mem_limit: 300m
-    cpus: 0.2
+    mem_limit: 280m
+    cpus: 0.15
     deploy:
       restart_policy:
         condition: on-failure
@@ -244,8 +260,8 @@ services:
     image: redis:6.2-alpine
     networks:
       - hermes_network
-    mem_limit: 64m
-    cpus: 0.05
+    mem_limit: 60m
+    cpus: 0.03
     deploy:
       restart_policy:
         condition: on-failure
@@ -256,8 +272,8 @@ services:
     image: redis:6.2-alpine
     networks:
       - hermes_network
-    mem_limit: 32m
-    cpus: 0.05
+    mem_limit: 30m
+    cpus: 0.03
     deploy:
       restart_policy:
         condition: on-failure
@@ -266,8 +282,8 @@ services:
     image: redis:6.2-alpine
     networks:
       - hermes_network
-    mem_limit: 64m
-    cpus: 0.05
+    mem_limit: 60m
+    cpus: 0.03
     deploy:
       restart_policy:
         condition: on-failure
@@ -280,8 +296,8 @@ services:
     image: frappe/erpnext:${ERPNEXT_VERSION:-v16.30.0}
     networks:
       - hermes_network
-    mem_limit: 150m
-    cpus: 0.1
+    mem_limit: 140m
+    cpus: 0.05
     deploy:
       restart_policy:
         condition: on-failure
@@ -299,7 +315,7 @@ services:
     image: frappe/erpnext:${ERPNEXT_VERSION:-v16.30.0}
     networks:
       - hermes_network
-    mem_limit: 100m
+    mem_limit: 90m
     cpus: 0.05
     deploy:
       restart_policy:
@@ -317,12 +333,90 @@ services:
       configurator:
         condition: service_completed_successfully
 
+  # --- Hermes application layer (Phase 9) ---------------------------------
+  # apps/api ran on the host through Phase 8; containerized here so a real
+  # deploy manages it the same way as everything else. Talks to ERPNext and
+  # Redis by their in-network service names (`frontend`, `hermes-redis`),
+  # not localhost/host.docker.internal — see .env.vps.example for the
+  # container-network-aware values this needs that differ from local dev.
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.api
+    networks:
+      - hermes_network
+    mem_limit: 180m
+    cpus: 0.35
+    deploy:
+      restart_policy:
+        condition: on-failure
+    env_file:
+      - ../../.env
+    environment:
+      PORT: '3001'
+      ERPNEXT_BASE_URL: http://frontend:8080
+      REDIS_URL: redis://hermes-redis:6379
+      ERPNEXT_WEBHOOK_CALLBACK_URL: http://api:3001/webhooks/erpnext
+    volumes:
+      - api-data:/repo/apps/api/data
+    depends_on:
+      - frontend
+      - hermes-redis
+    # 127.0.0.1-only, not 0.0.0.0 — reachable from the host's own Nginx
+    # (infra/nginx), never directly from the public internet. Nginx is
+    # the only thing that should be internet-facing on this box.
+    ports:
+      - '127.0.0.1:${API_PUBLISH_PORT:-3001}:3001'
+
+  # Static builds only (no Node runtime) — Nginx serving pre-built files,
+  # trivial memory footprint. VITE_API_BASE_URL is baked in at image build
+  # time (see infra/docker/Dockerfile.dashboard), not runtime-configurable.
+  dashboard:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.dashboard
+      args:
+        VITE_API_BASE_URL: ${DASHBOARD_API_BASE_URL:-/api}
+    networks:
+      - hermes_network
+    mem_limit: 40m
+    cpus: 0.05
+    deploy:
+      restart_policy:
+        condition: on-failure
+    depends_on:
+      - api
+    ports:
+      - '127.0.0.1:${DASHBOARD_PUBLISH_PORT:-5175}:80'
+
+  pwa-scanner:
+    build:
+      context: ../..
+      dockerfile: infra/docker/Dockerfile.pwa-scanner
+      args:
+        VITE_API_BASE_URL: ${PWA_SCANNER_API_BASE_URL:-/api}
+    networks:
+      - hermes_network
+    mem_limit: 40m
+    cpus: 0.05
+    deploy:
+      restart_policy:
+        condition: on-failure
+    depends_on:
+      - api
+    ports:
+      - '127.0.0.1:${PWA_SCANNER_PUBLISH_PORT:-5176}:80'
+
 volumes:
   db-data:
   redis-queue-data:
   hermes-redis-data:
   sites:
   logs:
+  # Hermes' own SQLite (ai_action_audit, offline_sync_queue, etc., spec
+  # §5) — a named volume, not bind-mounted, so it survives a container
+  # rebuild/restart the same way the ERPNext volumes above do.
+  api-data:
 
 networks:
   hermes_network:

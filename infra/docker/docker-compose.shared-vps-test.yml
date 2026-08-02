@@ -1,0 +1,63 @@
+# Compose override for the SPECIFIC shared VPS this deployment was smoke-
+# tested against (43.128.68.124) — NOT a general-purpose config, and not
+# a replacement for docker-compose.yml's own numbers, which remain the
+# correct ones for a dedicated 2 vCPU/2 GB VPS matching spec §13.
+#
+# This box already runs unrelated live projects (robin_darkpools,
+# paybox-bot) committing ~860 MB of its 1.9 GB RAM before Hermes even
+# starts — confirmed live via `free -h` before any of this was written,
+# not assumed. Real free RAM at deploy time was ~546 MB (up to ~1.1 GB
+# counting reclaimable cache), against 1.9 GB swap with ~1.5 GB free.
+#
+# These limits are trimmed as far as reasonably possible while staying
+# functional, and lean on that swap headroom for the rest — which means
+# this deployment WILL be slower under load than a dedicated VPS would
+# be (real disk-backed swap I/O instead of RAM). That degradation is the
+# accepted, explicit trade-off for smoke-testing on this box rather than
+# waiting on a dedicated one — not a bug in Hermes itself. Confirmed
+# acceptable for "untuk coba" (a functional test), not representative of
+# true production performance; a dedicated VPS is required before real
+# go-live (see README.md's Phase 9 section).
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.shared-vps-test.yml up -d
+services:
+  backend:
+    mem_limit: 260m
+    cpus: 0.4
+  db:
+    mem_limit: 300m
+    cpus: 0.4
+    volumes:
+      - db-data:/var/lib/mysql
+      - ../erpnext/mariadb/hermes-tuning-shared-vps-test.cnf:/etc/mysql/conf.d/hermes-tuning.cnf:ro
+  queue:
+    mem_limit: 150m
+    cpus: 0.1
+  scheduler:
+    mem_limit: 70m
+    cpus: 0.03
+  frontend:
+    mem_limit: 70m
+    cpus: 0.03
+  websocket:
+    mem_limit: 60m
+    cpus: 0.03
+  redis-queue:
+    mem_limit: 40m
+    cpus: 0.02
+  redis-cache:
+    mem_limit: 24m
+    cpus: 0.02
+  hermes-redis:
+    mem_limit: 40m
+    cpus: 0.02
+  api:
+    mem_limit: 150m
+    cpus: 0.25
+  dashboard:
+    mem_limit: 30m
+    cpus: 0.03
+  pwa-scanner:
+    mem_limit: 30m
+    cpus: 0.03

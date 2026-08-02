@@ -1,4 +1,35 @@
-# Placeholder — apps/dashboard is not implemented yet (spec §10 Phase 7).
-# This file exists to match the folder structure in §4 of the spec.
-# Replace with a real multi-stage Vite build once apps/dashboard has code,
-# following the same pattern as Dockerfile.api.
+# Multi-stage build for @hermes/dashboard (apps/dashboard). Build context
+# must be the monorepo root, e.g.:
+#   docker build -f infra/docker/Dockerfile.dashboard \
+#     --build-arg VITE_API_BASE_URL=https://example.com/api \
+#     -t hermes-dashboard .
+#
+# VITE_API_BASE_URL is baked in at build time (Vite inlines import.meta.env
+# values into the bundle — there's no runtime env var to change after the
+# image is built), so this must be set to wherever Nginx will actually
+# route /api/ before building for a given environment.
+FROM node:20-alpine AS build
+WORKDIR /repo
+COPY package.json package-lock.json ./
+COPY apps/dashboard/package.json apps/dashboard/package.json
+RUN npm ci --workspace=apps/dashboard --include-workspace-root
+COPY tsconfig.base.json ./
+COPY apps/dashboard apps/dashboard
+ARG VITE_API_BASE_URL=/api
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+RUN npm run build --workspace=apps/dashboard
+
+# Static output only — no Node runtime needed, keeps this container's
+# memory footprint minimal (spec §13's shared-VPS budget).
+FROM nginx:1.27-alpine AS runtime
+COPY --from=build /repo/apps/dashboard/dist /usr/share/nginx/html
+# SPA fallback: any unmatched path serves index.html so React Router-less
+# client-side navigation (if ever added) and hard-refreshes both work.
+RUN printf 'server {\n\
+    listen 80;\n\
+    root /usr/share/nginx/html;\n\
+    location / {\n\
+        try_files $uri $uri/ /index.html;\n\
+    }\n\
+}\n' > /etc/nginx/conf.d/default.conf
+EXPOSE 80
