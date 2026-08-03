@@ -176,6 +176,7 @@ export default function WarehouseScan({ isOnline }: { isOnline: boolean }) {
             <li key={item.uuid}>
               {ACTION_LABELS[item.actionType]} — {item.action.itemCode} ({item.action.qty}) —{' '}
               {item.status}
+              {item.lastError && <div className="hint">{item.lastError}</div>}
             </li>
           ))}
         </ul>

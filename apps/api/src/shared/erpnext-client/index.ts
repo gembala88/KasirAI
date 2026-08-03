@@ -45,6 +45,48 @@ export class ErpNextApiError extends Error {
 }
 
 /**
+ * Frappe's error responses bury the actually-useful, human-readable reason
+ * (e.g. "Could not find Row #1: Item Code: 8997212800288") inside
+ * `_server_messages` (a JSON-stringified array of JSON-stringified `{message}`
+ * objects — the same field Frappe's own UI reads) or `exception` (a single
+ * "ExceptionClassName: reason" line). Without this, every validation error —
+ * wrong item code, negative stock, a missing warehouse — surfaced identically
+ * as "ERPNext request to X failed with status 417", which is technically
+ * true but tells a cashier/warehouse staff member nothing about what to fix.
+ * Found live: a real scanned barcode with no matching ERPNext Item showed
+ * only "Failed" in the offline queue, with the actual reason visible only in
+ * server logs.
+ */
+function extractErpNextMessage(responseBody: string | undefined): string | undefined {
+  if (!responseBody) return undefined;
+  try {
+    const parsed = JSON.parse(responseBody) as {
+      _server_messages?: string;
+      exception?: string;
+      message?: string;
+    };
+    if (parsed._server_messages) {
+      const messages = JSON.parse(parsed._server_messages) as string[];
+      const first = messages[0];
+      if (first) {
+        const inner = JSON.parse(first) as { message?: string };
+        if (inner.message) return inner.message;
+      }
+    }
+    if (parsed.exception) {
+      const separatorIndex = parsed.exception.indexOf(': ');
+      return separatorIndex >= 0 ? parsed.exception.slice(separatorIndex + 2) : parsed.exception;
+    }
+    if (parsed.message) return parsed.message;
+  } catch {
+    // responseBody wasn't the JSON shape we expect (e.g. an HTML error
+    // page from a proxy/gateway failure) — nothing to extract, fall back
+    // to the generic status-code message.
+  }
+  return undefined;
+}
+
+/**
  * Only transient failures are worth retrying: network-level errors (no
  * status code — the request never got a response) and 5xx/429 from the
  * server. A 4xx like 404 or 417 (validation error) means the request itself
@@ -138,8 +180,11 @@ export function createErpNextClient(options: ErpNextClientOptions): ErpNextClien
 
       if (!response.ok) {
         const responseBody = await response.text().catch(() => undefined);
+        const detail = extractErpNextMessage(responseBody);
         throw new ErpNextApiError(
-          `ERPNext request to ${path} failed with status ${response.status}`,
+          detail
+            ? `ERPNext request to ${path} failed with status ${response.status}: ${detail}`
+            : `ERPNext request to ${path} failed with status ${response.status}`,
           response.status,
           responseBody,
         );

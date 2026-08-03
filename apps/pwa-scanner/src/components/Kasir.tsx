@@ -350,6 +350,7 @@ export default function Kasir() {
               <li key={item.uuid}>
                 {formatRupiah(item.action.amount)} ({item.action.lines.length} barang) —{' '}
                 {item.status}
+                {item.lastError && <div className="hint">{item.lastError}</div>}
               </li>
             ))}
           </ul>

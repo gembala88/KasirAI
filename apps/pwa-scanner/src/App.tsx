@@ -64,6 +64,14 @@ export default function App() {
           <span className="hint">
             {user.fullName} · {user.role}
           </span>
+          {/* Cross-app link — this is a separate deployment from apps/dashboard
+              (Nginx routes / to the dashboard, /scan/ to this app), so a plain
+              same-origin anchor is correct here, not client-side routing.
+              Real UX gap found live: there was previously no way to reach the
+              dashboard from here except typing the URL by hand. */}
+          <a href="/" className="theme-toggle">
+            Dashboard
+          </a>
           <button
             type="button"
             className="theme-toggle"

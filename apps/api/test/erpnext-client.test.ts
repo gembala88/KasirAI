@@ -75,6 +75,54 @@ describe('ErpNextClient', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  it('surfaces the real ERPNext validation reason in the error message, not just the status code', async () => {
+    // Real shape captured live from a genuine LinkValidationError (a
+    // scanned barcode with no matching Item) — found because the app was
+    // only ever showing "Failed" with no detail, all the way up through
+    // the UI, even though ERPNext's own response already explains exactly
+    // what's wrong.
+    const realErpNextErrorBody = {
+      exception: 'frappe.exceptions.LinkValidationError: Could not find Row #1: Item Code: 8997212800288',
+      exc_type: 'LinkValidationError',
+      _server_messages:
+        '["{\\"message\\": \\"Could not find Row #1: Item Code: 8997212800288\\", \\"indicator\\": \\"red\\"}"]',
+    };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify(realErpNextErrorBody), {
+          status: 417,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    const client = buildClient(fetchImpl as unknown as typeof fetch);
+
+    await expect(client.create('Stock Entry', {})).rejects.toThrow(
+      'Could not find Row #1: Item Code: 8997212800288',
+    );
+  });
+
+  it('falls back to the exception field when _server_messages is absent', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ exception: 'frappe.exceptions.ValidationError: Stock cannot go negative' }),
+        { status: 417, headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    const client = buildClient(fetchImpl as unknown as typeof fetch);
+
+    await expect(client.create('Stock Entry', {})).rejects.toThrow('Stock cannot go negative');
+  });
+
+  it('falls back to the generic status message when the body is not JSON', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(new Response('<html>502 Bad Gateway</html>', { status: 502 }));
+    const client = buildClient(fetchImpl as unknown as typeof fetch, { maxAttempts: 1 });
+
+    await expect(client.get('Customer', 'A')).rejects.toThrow('failed with status 502');
+  });
+
   it('opens the circuit after consecutive transient failures and fails fast', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ exc_type: 'boom' }, 503));
     const client = buildClient(fetchImpl as unknown as typeof fetch, {

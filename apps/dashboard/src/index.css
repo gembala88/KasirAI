@@ -115,10 +115,14 @@ select {
 }
 
 .theme-toggle {
+  display: inline-flex;
+  align-items: center;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.4rem 0.75rem;
+  color: inherit;
+  text-decoration: none;
   cursor: pointer;
 }
 

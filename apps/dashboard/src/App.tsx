@@ -57,6 +57,14 @@ export default function App() {
           <span className="hint">
             {user.fullName} · {user.role}
           </span>
+          {/* Cross-app link — apps/pwa-scanner is a separate deployment
+              (Nginx routes /scan/ to it, / to this app), so a plain
+              same-origin anchor is correct, not client-side routing. Real
+              UX gap found live: there was previously no way to reach Kasir
+              or Gudang from here except typing the URL by hand. */}
+          <a href="/scan/" className="theme-toggle">
+            Kasir / Gudang
+          </a>
           <button
             type="button"
             className="theme-toggle"

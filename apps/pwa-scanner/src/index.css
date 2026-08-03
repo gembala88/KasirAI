@@ -101,12 +101,15 @@ h1 {
 }
 
 .theme-toggle {
+  display: inline-flex;
+  align-items: center;
   min-height: 2.5rem;
   padding: 0.4rem 0.9rem;
   border-radius: 0.5rem;
   border: 1px solid #374151;
   background: #1f2937;
   color: #f3f4f6;
+  text-decoration: none;
   cursor: pointer;
 }
 

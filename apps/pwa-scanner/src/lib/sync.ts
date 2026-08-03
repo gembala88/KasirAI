@@ -31,11 +31,17 @@ async function trySyncOne(queued: QueuedAction): Promise<SubmitResult> {
   let response: SyncResponse;
   try {
     response = await syncAction(queued);
-  } catch {
+  } catch (err) {
     // Network/API error — leave it Pending-equivalent (Failed) in the
     // local queue; the next sync sweep (reconnect or manual button)
     // carries the identical UUID, so a retry here is always safe.
-    await updateActionStatus(queued.uuid, 'Failed');
+    // Real bug found live: this used to discard the caught error
+    // entirely, so a real, specific ERPNext validation reason (e.g.
+    // "Could not find Row #1: Item Code: X" for a barcode with no
+    // matching Item) only ever showed up as "Failed" in the UI, visible
+    // nowhere except server logs.
+    const message = err instanceof Error ? err.message : String(err);
+    await updateActionStatus(queued.uuid, 'Failed', message);
     return { outcome: 'queued' };
   }
 
