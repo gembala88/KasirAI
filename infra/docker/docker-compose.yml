@@ -413,12 +413,16 @@ services:
   # Static builds only (no Node runtime) — Nginx serving pre-built files,
   # trivial memory footprint. VITE_API_BASE_URL is baked in at image build
   # time (see infra/docker/Dockerfile.dashboard), not runtime-configurable.
+  # Must default to empty, not "/api" — every call site in src/lib/api.ts
+  # already includes the full "/api/v1/..." path itself; a "/api" default
+  # here produced a real, previously-undetected "/api/api/v1/..." 404/401
+  # bug, only found by testing a real browser login through Nginx.
   dashboard:
     build:
       context: ../..
       dockerfile: infra/docker/Dockerfile.dashboard
       args:
-        VITE_API_BASE_URL: ${DASHBOARD_API_BASE_URL:-/api}
+        VITE_API_BASE_URL: ${DASHBOARD_API_BASE_URL:-}
     logging: *default-logging
     networks:
       - hermes_network
@@ -437,7 +441,7 @@ services:
       context: ../..
       dockerfile: infra/docker/Dockerfile.pwa-scanner
       args:
-        VITE_API_BASE_URL: ${PWA_SCANNER_API_BASE_URL:-/api}
+        VITE_API_BASE_URL: ${PWA_SCANNER_API_BASE_URL:-}
     logging: *default-logging
     networks:
       - hermes_network

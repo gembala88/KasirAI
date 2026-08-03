@@ -51,31 +51,37 @@ below — this smoke-test box is not that VPS).
 
 ## Network & domain
 
-- [ ] **No domain is pointed at this VPS.** Nginx is installed, configured
-  (`/etc/nginx/sites-available/hermes`), and confirmed working — but only
-  tested via `curl http://localhost/...` *from inside the VPS itself*,
-  because of the next item.
-- [ ] **The VPS's cloud security group blocks everything except port 22
-  (SSH)** — confirmed live: port 80 and port 8080 both time out from
-  outside the box, while working instantly from inside it (`ufw` is
-  inactive and the OS-level `iptables` rules allow everything — this is
-  an *external*, cloud-console-level firewall, not something fixable via
-  SSH). **Action needed from you:** open ports 80 and 443 (and only those
-  — not 3001/5175/5176/6380/8080, which should stay internal, reached
-  only through Nginx) in the VPS provider's security group / firewall
-  console.
-- [ ] **HTTPS (Let's Encrypt) not yet issued** — blocked on both items
-  above (needs a real domain pointing here, *and* port 80 reachable for
-  the ACME HTTP-01 challenge). certbot is installed and ready
-  (`certbot --version` confirmed working); once DNS + firewall are in
-  place, run `certbot --nginx -d <your-domain>` per the instructions at
-  the top of `infra/nginx/hermes.conf.template`.
+- [x] **Domain live**: `newpelangi.duckdns.org` (DuckDNS) points at this
+  VPS — confirmed via DNS resolution and a real external HTTP request,
+  not just from inside the box.
+- [x] **Cloud firewall open**: ports 80/443 opened in the VPS provider's
+  console (Tencent Cloud Lighthouse's Firewall panel — this VPS's actual
+  provider, confirmed via the "Stargate" agent found in its crontab).
+  Confirmed reachable from a genuinely external vantage point (not just
+  `curl localhost` on the box itself).
+- [x] **HTTPS (Let's Encrypt) issued and verified**: real certificate via
+  `certbot --nginx -d newpelangi.duckdns.org`, confirmed with
+  `openssl s_client` (not `curl -k`) showing a real Let's Encrypt-issued
+  cert for the right domain, HTTP→HTTPS redirect confirmed (301), and
+  auto-renewal confirmed via a real `certbot renew --dry-run` (systemd
+  timer active, simulated renewal succeeded).
+- [x] **Real browser logins verified through the actual domain** for both
+  apps (dashboard and `/scan/`) — not just `curl`. This uncovered and
+  fixed three real bugs invisible to every earlier curl-only check: an
+  asset-path routing collision, a service-worker scope collision, and a
+  doubled `/api/api/` login URL. See README.md's "Domain, HTTPS, and
+  camera scanning" section for the full story.
 
 ## Shared VPS vs. dedicated VPS
 
-- [x] **Confirmed this VPS is shared with other live, unrelated projects**
-  (`robin_darkpools`, `paybox-bot`) — found and reported before touching
-  anything, per your explicit instruction. Hermes was deployed with a
+- [x] **Confirmed this VPS is shared with another live, unrelated project**
+  (`robin_darkpools`) — found and reported before touching anything, per
+  your explicit instruction. A second unrelated project (`paybox-bot`)
+  was also present but was later removed from this box at your explicit
+  request (confirmed clean removal — PM2 process, `pm2 save`d so it
+  doesn't resurrect on reboot, and its project directory deleted).
+  `robin_darkpools` remains completely untouched throughout every change
+  made to this VPS across every session. Hermes was deployed with a
   deliberately trimmed memory/CPU budget
   (`docker-compose.shared-vps-test.yml`) to coexist without touching
   those other projects, and is genuinely relying on swap to fit (~986 MB
@@ -125,9 +131,26 @@ below — this smoke-test box is not that VPS).
   never been caught before because the image was never actually rebuilt
   and run since Phase 0.
 
-## Not yet possible to verify (blocked on items above, not on Hermes' code)
+## Verified working — domain, HTTPS, camera scanning (real browser, not curl)
 
-- [ ] Public HTTPS URL reachability (needs domain + firewall, above).
+- [x] Public HTTPS URL reachability — `https://newpelangi.duckdns.org`
+  loads for real from an external vantage point.
+- [x] Real cashier login on `/scan/` and real owner login on `/`, both
+  through the actual production HTTPS path, confirmed via network
+  requests showing `200 OK` on fresh (not cached) login attempts.
+- [x] Camera-based barcode scanning added to the warehouse screens only
+  (Kasir intentionally keeps its USB/Bluetooth scanner text input, per
+  spec §14). The scan button correctly triggers a real
+  `getUserMedia`/`BarcodeDetector` attempt and handles a missing-camera
+  error gracefully — verified as far as possible without a physical
+  device (the automated test browser has no camera hardware). **Action
+  recommended from you:** one quick real-phone check that the actual
+  "allow camera access?" browser prompt appears and a real barcode
+  scans correctly — this is the one thing that genuinely can't be
+  verified without physical hardware.
+
+## Not yet possible to verify (blocked on items below, not on Hermes' code)
+
 - [ ] A real WhatsApp message hitting the deployed webhook (needs Meta
   credentials, above — the webhook *code* is deployed and its signature
   verification is confirmed working against a synthetic unsigned

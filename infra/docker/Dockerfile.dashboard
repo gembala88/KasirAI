@@ -15,7 +15,11 @@ COPY apps/dashboard/package.json apps/dashboard/package.json
 RUN npm ci --workspace=apps/dashboard --include-workspace-root
 COPY tsconfig.base.json ./
 COPY apps/dashboard apps/dashboard
-ARG VITE_API_BASE_URL=/api
+# Empty, not "/api" — src/lib/api.ts already includes the full
+# "/api/v1/..." path in every fetch call; "/api" here doubles it into
+# "/api/api/v1/..." which 401s. Real bug found live via a browser login
+# through the actual Nginx proxy, not caught by any earlier curl-only test.
+ARG VITE_API_BASE_URL=
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 RUN npm run build --workspace=apps/dashboard
 

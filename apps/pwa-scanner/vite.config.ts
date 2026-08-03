@@ -3,7 +3,18 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { STORE_NAME } from './src/branding';
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  // Nginx routes /scan/ to this app (infra/nginx/hermes.conf.template),
+  // stripping nothing off the path when it proxies through — so the built
+  // index.html must reference its own assets as /scan/assets/... , not
+  // /assets/... (Vite's default). Without this, a request for an asset
+  // path collides with whatever's actually mounted at the domain root
+  // (apps/dashboard) and silently gets served *that* app's HTML instead —
+  // a real bug found live while verifying HTTPS end-to-end: the page
+  // loaded (200 OK) but React never mounted, because the "JS" the browser
+  // fetched was actually dashboard's index.html. Local dev is unaffected
+  // — only the production build serves under a subpath.
+  base: command === 'build' ? '/scan/' : '/',
   plugins: [
     react(),
     VitePWA({
@@ -17,7 +28,8 @@ export default defineConfig({
         theme_color: '#111827',
         background_color: '#111827',
         display: 'standalone',
-        start_url: '/',
+        start_url: '/scan/',
+        scope: '/scan/',
         icons: [
           { src: 'icon-192.svg', sizes: '192x192', type: 'image/svg+xml' },
           { src: 'icon-512.svg', sizes: '512x512', type: 'image/svg+xml' },
@@ -33,4 +45,4 @@ export default defineConfig({
   server: {
     port: 5173,
   },
-});
+}));

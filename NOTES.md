@@ -127,3 +127,43 @@ matter" summary. New entries get added to the bottom as work continues.
   because the server's firewall was blocking outside access anyway at the
   time. Fixed to only be reachable the proper way, as a safety net
   independent of the firewall.
+
+## Going live for real: domain, HTTPS, camera scanning (2026-08-03)
+
+- The real domain (newpelangi.duckdns.org) and a real security certificate
+  are now live. Confirmed the cloud firewall on the VPS's provider
+  (Tencent Cloud Lighthouse) was the reason it took two rounds to actually
+  open the right ports — the firewall itself was configured correctly the
+  whole time, it just took a bit for the change to take effect.
+- **This was the first time either app had ever actually been opened in a
+  real web browser through the real website address** — every check
+  before this used technical shortcuts that skipped past the exact path a
+  real customer's or staff member's browser would take. That difference
+  mattered: it uncovered three real, serious bugs that nothing before had
+  caught, because nothing before had actually tried loading the real
+  pages the real way.
+  1. The warehouse scanning app was loading a blank page — it was
+     accidentally pulling in the owner dashboard's files instead of its
+     own, due to a technical path mismatch. Fixed.
+  2. Once that was fixed, a second, sneakier problem showed up: a
+     background caching feature (meant to make the apps work offline)
+     could permanently "hijack" the warehouse app and keep serving the
+     wrong content to any phone/computer that had ever opened the owner
+     dashboard even once — this would have kept happening indefinitely
+     until deliberately fixed, not something that fixes itself. Fixed.
+  3. Once real pages were finally loading, logging in still failed — for
+     both apps — because of a duplicated address in the login request.
+     Also fixed.
+  All three were re-tested for real afterward with genuinely fresh logins
+  (not just reloading a page that already worked) — both apps' logins now
+  work correctly through the real website address.
+- Added real camera-based barcode scanning to the warehouse app only
+  (not the cashier checkout screen, which keeps using a physical barcode
+  scanner device, exactly as the original plan called for). Tested as far
+  as technically possible without a real phone in hand: the scan button
+  correctly asks the browser for real camera access every time, and shows
+  a clear error message if no camera is available (which is what happened
+  in this testing environment, since it doesn't have a physical camera
+  attached) — recommend a quick one-time check on an actual phone to see
+  the real "allow camera access?" prompt and confirm scanning works on a
+  real barcode.

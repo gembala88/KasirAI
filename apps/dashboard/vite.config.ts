@@ -27,6 +27,18 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg}'],
+        // Real bug found live: Workbox's generateSW mode auto-adds a
+        // NavigationRoute serving this app's own index.html for *every*
+        // navigation within its scope — and this app's scope is "/"
+        // (correct, since it's genuinely served at the domain root), which
+        // technically covers /scan/ too. Once this service worker is
+        // active and has clientsClaim()'d, it hijacks navigations to
+        // /scan/ before apps/pwa-scanner's own (more specifically scoped)
+        // service worker ever gets a chance to register — permanently, for
+        // any device that has ever loaded this dashboard even once. This
+        // denylist tells Workbox's auto-generated NavigationRoute to pass
+        // /scan/ requests through instead of serving this app's shell.
+        navigateFallbackDenylist: [/^\/scan\//],
       },
     }),
   ],

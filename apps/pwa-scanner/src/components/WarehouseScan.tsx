@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import CameraScanner from './CameraScanner';
 import { buildAction } from '../lib/build-action';
 import { listQueuedActions, type QueuedAction } from '../lib/offline-queue';
 import { submitOrQueue, syncPendingQueue } from '../lib/sync';
@@ -31,6 +32,7 @@ export default function WarehouseScan({ isOnline }: { isOnline: boolean }) {
   const [rate, setRate] = useState('');
   const [warehouse, setWarehouse] = useState('');
   const [toWarehouse, setToWarehouse] = useState('');
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   const refreshQueue = useCallback(async () => {
     setQueue((await listQueuedActions()).filter(isScanAction));
@@ -102,12 +104,17 @@ export default function WarehouseScan({ isOnline }: { isOnline: boolean }) {
 
         <label>
           Kode Barang
-          <input
-            value={itemCode}
-            onChange={(e) => setItemCode(e.target.value)}
-            placeholder="mis. BRG-001 (scan atau ketik manual)"
-            inputMode="text"
-          />
+          <div className="scan-input-row">
+            <input
+              value={itemCode}
+              onChange={(e) => setItemCode(e.target.value)}
+              placeholder="mis. BRG-001 (scan atau ketik manual)"
+              inputMode="text"
+            />
+            <button type="button" className="camera-scan-button" onClick={() => setCameraOpen(true)}>
+              📷 Scan
+            </button>
+          </div>
         </label>
 
         <label>
@@ -173,6 +180,16 @@ export default function WarehouseScan({ isOnline }: { isOnline: boolean }) {
           ))}
         </ul>
       </section>
+
+      {cameraOpen && (
+        <CameraScanner
+          onDetect={(value) => {
+            setItemCode(value);
+            setCameraOpen(false);
+          }}
+          onClose={() => setCameraOpen(false)}
+        />
+      )}
     </>
   );
 }

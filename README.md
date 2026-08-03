@@ -880,6 +880,80 @@ in ERPNext's UI (Company rename cascades to linked accounts/warehouses
 automatically), then update both env vars to match. `apps/api`'s modules
 never hardcode the name — they only read these two env vars.
 
+## Domain, HTTPS, and camera scanning (2026-08-03)
+
+Real domain (`newpelangi.duckdns.org` via DuckDNS) pointed at the VPS,
+ports 80/443 opened in Tencent Cloud Lighthouse's firewall panel, and a
+real Let's Encrypt certificate issued via `certbot --nginx` — verified
+with `openssl s_client` (not `curl -k`), a real dry-run renewal
+(`certbot renew --dry-run`), and the HTTP→HTTPS redirect.
+
+**This was the first time either app had ever been loaded in a real
+browser through the actual domain/Nginx path** — every earlier check used
+direct `curl` to a container's own port, which doesn't exercise Nginx
+routing or the frontend's build-time configuration at all. That surfaced
+three real, previously-invisible bugs, found and fixed in order as each
+one unblocked the next:
+
+1. **Asset routing collision:** `apps/pwa-scanner`'s build referenced its
+   own JS/CSS at the domain root (`/assets/...`, Vite's default) instead
+   of under its actual served path (`/scan/assets/...`). A request for
+   `/scan/assets/...` doesn't match Nginx's `/scan/` location, so it fell
+   through to `apps/dashboard`'s location block and silently got served
+   *dashboard's* HTML instead — the page returned 200 OK but React never
+   mounted, no console error. Fixed with `base: '/scan/'` in
+   `vite.config.ts`, conditional on the build command so local dev
+   (served at its own root) is unaffected.
+2. **Service worker scope collision** (found immediately after #1): both
+   apps generate their own Workbox service worker via `vite-plugin-pwa`.
+   Dashboard's registers at scope `/` (correct — it's genuinely served at
+   the domain root), but Workbox's `generateSW` mode auto-adds a
+   `NavigationRoute` that serves that app's own `index.html` for *every*
+   navigation within its scope — and `/` technically covers `/scan/` too.
+   Once active, this permanently hijacked navigation to `/scan/` for any
+   device that had ever loaded the dashboard even once, before pwa-scanner's
+   own more-specifically-scoped service worker ever got a chance to
+   register. Fixed with `navigateFallbackDenylist: [/^\/scan\//]` in
+   dashboard's workbox config.
+3. **Doubled `/api/api/` URL** (found once #1/#2 let the real page load
+   far enough to attempt a login): both apps' `VITE_API_BASE_URL` build
+   arg defaulted to `/api`, but `src/lib/api.ts` in both apps already
+   builds full `/api/v1/...` paths itself — producing
+   `/api/api/v1/auth/login`, a 401. This broke login for **both** apps
+   through the real Nginx path, never caught because nothing had tested a
+   real browser login that way before. Fixed by changing the default to
+   empty in `docker-compose.yml`, both Dockerfiles, and `.env.example`
+   (and the VPS's own `.env`, which explicitly set `/api`).
+
+All three fixed, rebuilt, redeployed, and **re-verified with genuine
+fresh logins** (service workers/caches explicitly unregistered first, to
+rule out stale state) — cashier login on `/scan/` and owner login on `/`
+both confirmed working through the real production HTTPS path, via
+network requests showing `200 OK` on `/api/v1/auth/login`, not a cached
+result.
+
+**Camera-based barcode scanning** (spec §1.3 FR-7, §14 — reserved for
+warehouse/stock-opname use, *not* the Kasir checkout counter, which keeps
+its USB/Bluetooth keyboard-emulation text input per §14's hardware
+recommendation): added to `WarehouseScan.tsx` only. Prefers the native
+`BarcodeDetector` API (Chrome/Edge on Android) and falls back to
+`@zxing/browser` where it isn't available (notably Safari/iOS, which has
+never shipped `BarcodeDetector`) — the fallback library (~450KB) is
+dynamically imported only inside that code path, so Kasir users and
+Android Chrome users (who have native support) never load it at all;
+confirmed via a real production build (167KB main bundle vs. a separate
+454KB chunk) and via live network request timing on the deployed VPS
+(the chunk only loads when "📷 Scan" is actually tapped). Live-verified
+on the real HTTPS domain, logged in as Warehouse Staff: the scan button
+correctly triggers a real `getUserMedia`/`BarcodeDetector` attempt (not a
+mock) and the code's error handling correctly surfaces a clear Indonesian
+message when no camera is available — the automated browser environment
+used for this verification has no physical camera device attached, so a
+literal "tap Allow" permission dialog can't be produced here; a real
+phone's browser will show the actual OS-level permission prompt the
+first time a store staff member taps Scan, which is worth one manual
+confirmation on an actual device.
+
 ## Pre-launch polish pass (2026-08-03)
 
 Requested after Phase 9: domain/HTTPS setup (in progress — blocked on the

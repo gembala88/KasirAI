@@ -12,7 +12,11 @@ COPY apps/pwa-scanner/package.json apps/pwa-scanner/package.json
 RUN npm ci --workspace=apps/pwa-scanner --include-workspace-root
 COPY tsconfig.base.json ./
 COPY apps/pwa-scanner apps/pwa-scanner
-ARG VITE_API_BASE_URL=/api
+# Empty, not "/api" — src/lib/api.ts already includes the full
+# "/api/v1/..." path in every fetch call; "/api" here doubles it into
+# "/api/api/v1/..." which 401s. Real bug found live via a browser login
+# through the actual Nginx proxy, not caught by any earlier curl-only test.
+ARG VITE_API_BASE_URL=
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 RUN npm run build --workspace=apps/pwa-scanner
 
