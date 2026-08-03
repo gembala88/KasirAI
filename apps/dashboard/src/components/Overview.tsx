@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { IconCash, IconReportMoney, IconTruck, IconUsers } from '@tabler/icons-react';
 import { fetchDashboardSummary } from '../lib/api';
 import { formatRupiah } from '../lib/format';
 import type { DashboardSummary } from '../lib/types';
@@ -45,15 +46,18 @@ export default function Overview() {
     <div className="overview">
       <div className="card-grid">
         <div className="card">
+          <IconCash size={22} className="stat-card-icon" />
           <span className="card-label">Omzet Hari Ini</span>
           <span className="card-value">{formatRupiah(summary.today.revenue)}</span>
           <span className="card-sub">{summary.today.invoiceCount} transaksi</span>
         </div>
         <div className="card">
+          <IconReportMoney size={22} className="stat-card-icon" />
           <span className="card-label">Profit Hari Ini</span>
           <span className="card-value">{formatRupiah(summary.today.profit)}</span>
         </div>
         <div className="card">
+          <IconTruck size={22} className="stat-card-icon" />
           <span className="card-label">Supplier Terbaik ({summary.rankingWindowDays} hari)</span>
           <span className="card-value">{summary.bestSupplier?.supplierName ?? '—'}</span>
           <span className="card-sub">
@@ -61,6 +65,7 @@ export default function Overview() {
           </span>
         </div>
         <div className="card">
+          <IconUsers size={22} className="stat-card-icon" />
           <span className="card-label">Pelanggan Paling Aktif ({summary.rankingWindowDays} hari)</span>
           <span className="card-value">{summary.mostActiveCustomer?.customerName ?? '—'}</span>
           <span className="card-sub">

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { IconCircleCheck } from '@tabler/icons-react';
 import { confirmPendingPayment, fetchPendingPayments } from '../lib/api';
 import { formatRupiah } from '../lib/format';
 import type { PaymentMethod, PendingPaymentOrder } from '../lib/types';
@@ -133,7 +134,9 @@ export default function Payments() {
                   </td>
                   <td>
                     {confirmed ? (
-                      <span className="badge badge--success">Dikonfirmasi ✓</span>
+                      <span className="status-badge status-badge--synced">
+                        <IconCircleCheck size={14} /> Dikonfirmasi
+                      </span>
                     ) : (
                       <button
                         type="button"

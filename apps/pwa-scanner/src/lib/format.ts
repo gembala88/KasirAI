@@ -5,3 +5,29 @@ export function formatRupiah(amount: number): string {
     maximumFractionDigits: 0,
   }).format(amount);
 }
+
+const STATUS_LABELS: Record<string, string> = {
+  Pending: 'Menunggu',
+  Processing: 'Memproses',
+  Failed: 'Gagal',
+  Retry: 'Mencoba Lagi',
+  Conflict: 'Konflik',
+  Synced: 'Tersinkron',
+};
+
+const STATUS_CLASS: Record<string, string> = {
+  Pending: 'status-badge--pending',
+  Processing: 'status-badge--processing',
+  Failed: 'status-badge--failed',
+  Retry: 'status-badge--pending',
+  Conflict: 'status-badge--conflict',
+  Synced: 'status-badge--synced',
+};
+
+/** One color per sync-status meaning, shared across every offline-queue list (design system, UI polish pass). */
+export function statusBadge(status: string): { label: string; className: string } {
+  return {
+    label: STATUS_LABELS[status] ?? status,
+    className: `status-badge ${STATUS_CLASS[status] ?? 'status-badge--pending'}`,
+  };
+}

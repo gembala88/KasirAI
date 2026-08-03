@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { IconSend } from '@tabler/icons-react';
 import { askOwnerChat } from '../lib/api';
 
 interface ChatMessage {
@@ -75,8 +76,12 @@ export default function OwnerChat() {
           placeholder="Tanya soal omzet, stok, pelanggan, dst..."
           disabled={sending}
         />
-        <button type="submit" disabled={sending || !input.trim()}>
-          Kirim
+        <button
+          type="submit"
+          disabled={sending || !input.trim()}
+          style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+        >
+          <IconSend size={16} /> Kirim
         </button>
       </form>
     </div>

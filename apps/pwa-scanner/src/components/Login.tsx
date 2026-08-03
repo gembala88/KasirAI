@@ -26,7 +26,7 @@ export default function Login({ onLoggedIn }: { onLoggedIn: (user: AuthUser) => 
   return (
     <div className="login-screen">
       <form className="login-card" onSubmit={(e) => void handleSubmit(e)}>
-        <h1>{STORE_NAME}</h1>
+        <h1 className="page-title">{STORE_NAME}</h1>
         <p className="hint">Masuk dengan akun ERPNext Anda.</p>
 
         <label>

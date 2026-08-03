@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { IconAlertTriangle } from '@tabler/icons-react';
 import { fetchSyncConflicts } from '../lib/api';
 import type { SyncConflict } from '../lib/types';
 
@@ -45,7 +46,8 @@ export default function SyncConflicts() {
 
   return (
     <div className="sync-conflicts">
-      <p className="hint">
+      <p className="hint" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <IconAlertTriangle size={16} style={{ color: 'var(--color-warning)', flexShrink: 0 }} />
         Transaksi offline yang gagal disinkron karena konflik nyata (mis. stok akan menjadi
         negatif) — tidak diterapkan otomatis, perlu ditinjau manual (§15.2).
       </p>
@@ -67,7 +69,11 @@ export default function SyncConflicts() {
             {conflicts.map((conflict) => (
               <tr key={conflict.uuid}>
                 <td>{new Date(conflict.clientTimestamp).toLocaleString('id-ID')}</td>
-                <td>{ACTION_TYPE_LABELS[conflict.actionType] ?? conflict.actionType}</td>
+                <td>
+                  <span className="status-badge status-badge--conflict">
+                    {ACTION_TYPE_LABELS[conflict.actionType] ?? conflict.actionType}
+                  </span>
+                </td>
                 <td>{conflict.errorMessage ?? '—'}</td>
                 <td className="hint">{conflict.uuid}</td>
               </tr>

@@ -1,27 +1,54 @@
+/* --- Design tokens (shared visual language, UI polish pass) ---
+   Same token names AND same values as apps/pwa-scanner's index.css —
+   the two apps are separate deployments but should read as one product.
+   One accent per meaning: blue primary, green success, amber warning,
+   red danger — not one color reused for everything. */
 :root {
-  --bg: #0f172a;
-  --bg-elevated: #1e293b;
-  --border: #334155;
-  --text: #f1f5f9;
-  --text-muted: #94a3b8;
-  --accent: #38bdf8;
-  --accent-text: #0f172a;
-  --success: #4ade80;
-  --danger: #f87171;
+  --color-bg: #0f172a;
+  --color-surface: #1f2937;
+  --color-surface-raised: #263143;
+  --color-border: #374151;
+  --color-text: #f3f4f6;
+  --color-text-muted: #9ca3af;
+  --color-primary: #3b82f6;
+  --color-primary-text: #ffffff;
+  --color-success: #22c55e;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
   color-scheme: dark;
 }
 
 :root[data-theme='light'] {
-  --bg: #f8fafc;
-  --bg-elevated: #ffffff;
-  --border: #e2e8f0;
-  --text: #0f172a;
-  --text-muted: #64748b;
-  --accent: #0284c7;
-  --accent-text: #ffffff;
-  --success: #16a34a;
-  --danger: #dc2626;
+  --color-bg: #f8fafc;
+  --color-surface: #ffffff;
+  --color-surface-raised: #f1f5f9;
+  --color-border: #e2e8f0;
+  --color-text: #0f172a;
+  --color-text-muted: #64748b;
+  --color-primary: #2563eb;
+  --color-primary-text: #ffffff;
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
   color-scheme: light;
+}
+
+:root {
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+
+  --font-size-title: 1.5rem;
+  --font-size-section: 1.05rem;
+  --font-size-body: 1rem;
+  --font-size-muted: 0.875rem;
 }
 
 * {
@@ -36,8 +63,8 @@ body {
     'Segoe UI',
     Roboto,
     sans-serif;
-  background: var(--bg);
-  color: var(--text);
+  background: var(--color-bg);
+  color: var(--color-text);
 }
 
 button,
@@ -77,9 +104,9 @@ select {
 }
 
 .login-card {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
   padding: 2rem;
   width: 100%;
   max-width: 340px;
@@ -98,15 +125,15 @@ select {
   flex-direction: column;
   gap: 0.3rem;
   font-size: 0.85rem;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
 }
 
 .login-card input {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   padding: 0.5rem 0.7rem;
-  color: var(--text);
+  color: var(--color-text);
 }
 
 .app-header h1 {
@@ -117,9 +144,9 @@ select {
 .theme-toggle {
   display: inline-flex;
   align-items: center;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   padding: 0.4rem 0.75rem;
   color: inherit;
   text-decoration: none;
@@ -129,7 +156,7 @@ select {
 .tabs {
   display: flex;
   gap: 0.5rem;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--color-border);
   margin-bottom: 1.25rem;
   flex-wrap: wrap;
 }
@@ -138,28 +165,186 @@ select {
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
   padding: 0.6rem 0.25rem;
   cursor: pointer;
   font-size: 0.95rem;
 }
 
 .tab--active {
-  color: var(--text);
-  border-bottom-color: var(--accent);
+  color: var(--color-text);
+  border-bottom-color: var(--color-primary);
 }
 
 .hint {
-  color: var(--text-muted);
+  color: var(--color-text-muted);
   font-size: 0.9rem;
 }
 
+/* --- Shared typography scale (same as apps/pwa-scanner) --- */
+.page-title {
+  font-size: var(--font-size-title);
+  font-weight: 700;
+  margin: 0;
+}
+
+.section-label {
+  font-size: var(--font-size-section);
+  font-weight: 600;
+  margin: 0 0 var(--space-3);
+}
+
+.text-muted {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-muted);
+}
+
+/* --- Home screen: stat cards --- */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.stat-card-icon {
+  color: var(--color-primary);
+}
+
+.stat-card-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.stat-card-label {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-muted);
+}
+
+/* --- Home screen: tappable menu cards (icon + title + subtitle + chevron) --- */
+.menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.menu-card {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s ease;
+}
+
+.menu-card:active {
+  border-color: var(--color-primary);
+}
+
+.menu-card-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  color: var(--color-primary);
+}
+
+.menu-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.menu-card-title {
+  font-weight: 600;
+  font-size: var(--font-size-body);
+}
+
+.menu-card-subtitle {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-muted);
+}
+
+.menu-card-chevron {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+
+.home-greeting {
+  margin-bottom: var(--space-5);
+}
+
+.home-greeting .page-title {
+  margin-bottom: var(--space-1);
+}
+
+.home-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  background: none;
+  border: none;
+  color: var(--color-primary);
+  cursor: pointer;
+  padding: 0;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+/* --- Status badges — one color per meaning (same convention as
+   apps/pwa-scanner's offline-queue status badges) --- */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-muted);
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  padding: 2px var(--space-2);
+}
+
+.status-badge--pending,
+.status-badge--processing {
+  color: var(--color-text-muted);
+  background: color-mix(in srgb, var(--color-text-muted) 15%, transparent);
+}
+
+.status-badge--failed {
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 15%, transparent);
+}
+
+.status-badge--conflict {
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 15%, transparent);
+}
+
+.status-badge--synced {
+  color: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 15%, transparent);
+}
+
 .error-box {
-  background: color-mix(in srgb, var(--danger) 15%, transparent);
-  border: 1px solid var(--danger);
-  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-danger) 15%, transparent);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-sm);
   padding: 0.75rem 1rem;
-  color: var(--text);
+  color: var(--color-text);
 }
 
 .card-grid {
@@ -170,18 +355,18 @@ select {
 }
 
 .card {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 1rem 1.1rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
+  gap: var(--space-2);
 }
 
 .card-label {
   font-size: 0.8rem;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
 }
 
 .card-value {
@@ -191,7 +376,7 @@ select {
 
 .card-sub {
   font-size: 0.8rem;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
 }
 
 .table-grid {
@@ -201,16 +386,17 @@ select {
 }
 
 section h2 {
-  font-size: 1rem;
-  margin: 0 0 0.5rem;
+  font-size: var(--font-size-section);
+  font-weight: 600;
+  margin: 0 0 var(--space-3);
 }
 
 table {
   width: 100%;
   border-collapse: collapse;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
@@ -218,12 +404,12 @@ th,
 td {
   text-align: left;
   padding: 0.5rem 0.7rem;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--color-border);
   font-size: 0.88rem;
 }
 
 th {
-  color: var(--text-muted);
+  color: var(--color-text-muted);
   font-weight: 500;
 }
 
@@ -237,18 +423,18 @@ tbody tr:last-child td {
 
 .payments input,
 .payments select {
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   padding: 0.3rem 0.5rem;
   width: 100%;
 }
 
 button {
-  background: var(--accent);
-  color: var(--accent-text);
+  background: var(--color-primary);
+  color: var(--color-primary-text);
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 0.45rem 0.9rem;
   cursor: pointer;
   font-weight: 500;
@@ -267,8 +453,8 @@ button:disabled {
 }
 
 .badge--success {
-  background: color-mix(in srgb, var(--success) 20%, transparent);
-  color: var(--success);
+  background: color-mix(in srgb, var(--color-success) 20%, transparent);
+  color: var(--color-success);
 }
 
 .owner-chat {
@@ -284,9 +470,9 @@ button:disabled {
 }
 
 .suggestions button {
-  background: var(--bg-elevated);
-  color: var(--text);
-  border: 1px solid var(--border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
   font-weight: 400;
   font-size: 0.85rem;
 }
@@ -299,9 +485,9 @@ button:disabled {
 }
 
 .chat-message {
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
   padding: 0.55rem 0.8rem;
   max-width: 80%;
 }
@@ -312,12 +498,12 @@ button:disabled {
 
 .chat-message-role {
   font-size: 0.75rem;
-  color: var(--text-muted);
+  color: var(--color-text-muted);
 }
 
 .chat-message--owner {
   align-self: flex-end;
-  border-color: var(--accent);
+  border-color: var(--color-primary);
 }
 
 .chat-input {
@@ -327,8 +513,8 @@ button:disabled {
 
 .chat-input input {
   flex: 1;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   padding: 0.5rem 0.75rem;
 }

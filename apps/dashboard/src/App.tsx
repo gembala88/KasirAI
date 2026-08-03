@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import { IconArrowLeft } from '@tabler/icons-react';
 import { STORE_NAME } from './branding';
+import Home, { type HomeTab } from './components/Home';
 import Login from './components/Login';
 import Overview from './components/Overview';
 import OwnerChat from './components/OwnerChat';
@@ -9,7 +11,8 @@ import { logout } from './lib/api';
 import { getStoredAuth, setOnAuthRequired, type AuthUser } from './lib/auth';
 import { getStoredTheme, storeTheme, type Theme } from './lib/theme';
 
-type Tab = 'overview' | 'chat' | 'payments' | 'sync-conflicts';
+type Tab = HomeTab;
+type View = 'home' | Tab;
 
 // Which roles see which tabs (backend enforces this too — see
 // report-dashboard/ai-gateway/whatsapp/sync routes' requireRole calls;
@@ -24,7 +27,7 @@ const TABS: Array<{ id: Tab; label: string; roles: AuthUser['role'][] }> = [
 
 export default function App() {
   const [user, setUser] = useState<AuthUser | null>(() => getStoredAuth()?.user ?? null);
-  const [tab, setTab] = useState<Tab | null>(null);
+  const [view, setView] = useState<View>('home');
   const [theme, setTheme] = useState<Theme>(getStoredTheme);
 
   useEffect(() => {
@@ -40,10 +43,10 @@ export default function App() {
   const visibleTabs = user ? TABS.filter((t) => t.roles.includes(user.role)) : [];
 
   useEffect(() => {
-    if (visibleTabs.length > 0 && (tab === null || !visibleTabs.some((t) => t.id === tab))) {
-      setTab(visibleTabs[0]?.id ?? null);
-    }
-  }, [user, tab, visibleTabs]);
+    // Reset to the home screen on login/logout/role change, rather than
+    // trying to land back on a tab that role might not even have.
+    setView('home');
+  }, [user]);
 
   if (!user) {
     return <Login onLoggedIn={setUser} />;
@@ -52,19 +55,14 @@ export default function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>{STORE_NAME}</h1>
+        {view === 'home' ? (
+          <h1 className="page-title">{STORE_NAME}</h1>
+        ) : (
+          <button type="button" className="home-back" onClick={() => setView('home')}>
+            <IconArrowLeft size={18} /> Beranda
+          </button>
+        )}
         <div className="header-actions">
-          <span className="hint">
-            {user.fullName} · {user.role}
-          </span>
-          {/* Cross-app link — apps/pwa-scanner is a separate deployment
-              (Nginx routes /scan/ to it, / to this app), so a plain
-              same-origin anchor is correct, not client-side routing. Real
-              UX gap found live: there was previously no way to reach Kasir
-              or Gudang from here except typing the URL by hand. */}
-          <a href="/scan/" className="theme-toggle">
-            Kasir / Gudang
-          </a>
           <button
             type="button"
             className="theme-toggle"
@@ -85,28 +83,34 @@ export default function App() {
         </div>
       </header>
 
-      {visibleTabs.length === 0 ? (
+      {view === 'home' && <Home user={user} onNavigate={(tab) => setView(tab)} />}
+
+      {view !== 'home' && visibleTabs.length === 0 && (
         <p className="hint">Belum ada tampilan dashboard untuk role Anda ({user.role}).</p>
-      ) : (
+      )}
+
+      {view !== 'home' && visibleTabs.length > 0 && (
         <>
-          <nav className="tabs">
-            {visibleTabs.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className={tab === item.id ? 'tab tab--active' : 'tab'}
-                onClick={() => setTab(item.id)}
-              >
-                {item.label}
-              </button>
-            ))}
-          </nav>
+          {visibleTabs.length > 1 && (
+            <nav className="tabs">
+              {visibleTabs.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={view === item.id ? 'tab tab--active' : 'tab'}
+                  onClick={() => setView(item.id)}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </nav>
+          )}
 
           <main className="app-main">
-            {tab === 'overview' && <Overview />}
-            {tab === 'chat' && <OwnerChat />}
-            {tab === 'payments' && <Payments />}
-            {tab === 'sync-conflicts' && <SyncConflicts />}
+            {view === 'overview' && <Overview />}
+            {view === 'chat' && <OwnerChat />}
+            {view === 'payments' && <Payments />}
+            {view === 'sync-conflicts' && <SyncConflicts />}
           </main>
         </>
       )}

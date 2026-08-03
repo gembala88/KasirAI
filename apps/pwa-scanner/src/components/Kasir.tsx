@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
+import { IconArrowLeft, IconBuildingBank, IconCash, IconQrcode } from '@tabler/icons-react';
 import { openReceipt, searchProducts, type PosTransaction, type ProductSearchResult } from '../lib/api';
-import { formatRupiah } from '../lib/format';
+import { formatRupiah, statusBadge } from '../lib/format';
 import { listQueuedActions, type QueuedAction } from '../lib/offline-queue';
 import { submitOrQueue, syncPendingQueue } from '../lib/sync';
 import type { PosSaleAction } from '../lib/types';
@@ -12,7 +13,11 @@ interface CartLine {
   rate: number;
 }
 
-const PAYMENT_METHODS = ['Cash', 'QRIS', 'Transfer'] as const;
+const PAYMENT_METHODS = [
+  { id: 'Cash', label: 'Tunai', icon: <IconCash size={24} /> },
+  { id: 'QRIS', label: 'QRIS', icon: <IconQrcode size={24} /> },
+  { id: 'Transfer', label: 'Transfer', icon: <IconBuildingBank size={24} /> },
+] as const;
 const KEYPAD_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', '⌫'] as const;
 
 /**
@@ -31,7 +36,7 @@ export default function Kasir() {
   const [pendingQty, setPendingQty] = useState('1');
   const [customerId, setCustomerId] = useState('');
   const [stage, setStage] = useState<'cart' | 'payment'>('cart');
-  const [paymentMethod, setPaymentMethod] = useState<(typeof PAYMENT_METHODS)[number]>('Cash');
+  const [paymentMethod, setPaymentMethod] = useState<(typeof PAYMENT_METHODS)[number]['id']>('Cash');
   const [amountTendered, setAmountTendered] = useState('');
   const [printReceipt, setPrintReceipt] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -205,8 +210,8 @@ export default function Kasir() {
   if (stage === 'payment') {
     return (
       <div className="kasir">
-        <button type="button" className="link-button" onClick={() => setStage('cart')}>
-          ← Kembali ke keranjang
+        <button type="button" className="link-button home-back" onClick={() => setStage('cart')}>
+          <IconArrowLeft size={18} /> Kembali ke keranjang
         </button>
 
         <div className="payment-summary card">
@@ -215,7 +220,7 @@ export default function Kasir() {
         </div>
 
         <section className="cart card">
-          <h2>Ringkasan Pesanan</h2>
+          <h2 className="section-label">Ringkasan Pesanan</h2>
           <ul>
             {cart.map((line) => (
               <li key={line.itemCode} className="cart-line cart-line--review">
@@ -228,21 +233,28 @@ export default function Kasir() {
           </ul>
         </section>
 
-        <form className="scan-form payment-form" onSubmit={(e) => e.preventDefault()}>
-          <label>
-            Metode Pembayaran
-            <select
-              value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value as (typeof PAYMENT_METHODS)[number])}
+        <h2 className="section-label">Metode Pembayaran</h2>
+        <div className="payment-method-list" role="radiogroup" aria-label="Metode Pembayaran">
+          {PAYMENT_METHODS.map((method) => (
+            <button
+              key={method.id}
+              type="button"
+              role="radio"
+              aria-checked={paymentMethod === method.id}
+              className={
+                paymentMethod === method.id
+                  ? 'card payment-method-option payment-method-option--selected'
+                  : 'card payment-method-option'
+              }
+              onClick={() => setPaymentMethod(method.id)}
             >
-              {PAYMENT_METHODS.map((method) => (
-                <option key={method} value={method}>
-                  {method}
-                </option>
-              ))}
-            </select>
-          </label>
+              <span className="stat-card-icon">{method.icon}</span>
+              {method.label}
+            </button>
+          ))}
+        </div>
 
+        <form className="scan-form payment-form" onSubmit={(e) => e.preventDefault()}>
           <label>
             Jumlah Diterima
             <input
@@ -346,19 +358,22 @@ export default function Kasir() {
             </button>
           </h2>
           <ul>
-            {pendingSales.map((item) => (
-              <li key={item.uuid}>
-                {formatRupiah(item.action.amount)} ({item.action.lines.length} barang) —{' '}
-                {item.status}
-                {item.lastError && <div className="hint">{item.lastError}</div>}
-              </li>
-            ))}
+            {pendingSales.map((item) => {
+              const badge = statusBadge(item.status);
+              return (
+                <li key={item.uuid}>
+                  {formatRupiah(item.action.amount)} ({item.action.lines.length} barang){' '}
+                  <span className={badge.className}>{badge.label}</span>
+                  {item.lastError && <div className="hint">{item.lastError}</div>}
+                </li>
+              );
+            })}
           </ul>
         </section>
       )}
 
       <section className="cart">
-        <h2>Keranjang</h2>
+        <h2 className="section-label">Keranjang</h2>
         {cart.length === 0 ? (
           <p className="hint">Belum ada barang.</p>
         ) : (

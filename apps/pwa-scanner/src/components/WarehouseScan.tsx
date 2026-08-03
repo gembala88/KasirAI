@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
+import { IconCamera } from '@tabler/icons-react';
 import CameraScanner from './CameraScanner';
 import { buildAction } from '../lib/build-action';
+import { statusBadge } from '../lib/format';
 import { listQueuedActions, type QueuedAction } from '../lib/offline-queue';
 import { submitOrQueue, syncPendingQueue } from '../lib/sync';
 import type { ScanAction, ScanActionType } from '../lib/types';
@@ -89,6 +91,7 @@ export default function WarehouseScan({ isOnline }: { isOnline: boolean }) {
 
   return (
     <>
+      <h2 className="section-label">Input Stok</h2>
       <form onSubmit={(e) => void handleSubmit(e)} className="scan-form">
         <label>
           Aksi
@@ -112,7 +115,7 @@ export default function WarehouseScan({ isOnline }: { isOnline: boolean }) {
               inputMode="text"
             />
             <button type="button" className="camera-scan-button" onClick={() => setCameraOpen(true)}>
-              📷 Scan
+              <IconCamera size={20} /> Scan
             </button>
           </div>
         </label>
@@ -172,13 +175,16 @@ export default function WarehouseScan({ isOnline }: { isOnline: boolean }) {
           </button>
         </h2>
         <ul>
-          {queue.map((item) => (
-            <li key={item.uuid}>
-              {ACTION_LABELS[item.actionType]} — {item.action.itemCode} ({item.action.qty}) —{' '}
-              {item.status}
-              {item.lastError && <div className="hint">{item.lastError}</div>}
-            </li>
-          ))}
+          {queue.map((item) => {
+            const badge = statusBadge(item.status);
+            return (
+              <li key={item.uuid}>
+                {ACTION_LABELS[item.actionType]} — {item.action.itemCode} ({item.action.qty}){' '}
+                <span className={badge.className}>{badge.label}</span>
+                {item.lastError && <div className="hint">{item.lastError}</div>}
+              </li>
+            );
+          })}
         </ul>
       </section>
 

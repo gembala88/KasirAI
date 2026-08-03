@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { IconArrowLeft } from '@tabler/icons-react';
+import Home, { type HomeDestination } from './components/Home';
 import Kasir from './components/Kasir';
 import Login from './components/Login';
 import WarehouseScan from './components/WarehouseScan';
@@ -6,7 +8,8 @@ import { STORE_NAME } from './branding';
 import { logout } from './lib/api';
 import { getStoredAuth, setOnAuthRequired, type AuthUser } from './lib/auth';
 
-type Tab = 'warehouse' | 'kasir';
+type Tab = HomeDestination;
+type View = 'home' | Tab;
 
 // Which roles see which tabs (the backend enforces this too — see
 // inventory.routes.ts's INVENTORY_MANAGE_ROLES and sales-pos.routes.ts's
@@ -19,7 +22,7 @@ const TABS: Array<{ id: Tab; label: string; roles: AuthUser['role'][] }> = [
 
 export default function App() {
   const [user, setUser] = useState<AuthUser | null>(() => getStoredAuth()?.user ?? null);
-  const [tab, setTab] = useState<Tab | null>(null);
+  const [view, setView] = useState<View>('home');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
@@ -41,10 +44,10 @@ export default function App() {
   const visibleTabs = user ? TABS.filter((t) => t.roles.includes(user.role)) : [];
 
   useEffect(() => {
-    if (visibleTabs.length > 0 && (tab === null || !visibleTabs.some((t) => t.id === tab))) {
-      setTab(visibleTabs[0]?.id ?? null);
-    }
-  }, [user, tab, visibleTabs]);
+    // Reset to the home screen on login/logout/role change, rather than
+    // trying to land back on a tab that role might not even have.
+    setView('home');
+  }, [user]);
 
   if (!user) {
     return <Login onLoggedIn={setUser} />;
@@ -59,19 +62,14 @@ export default function App() {
       )}
 
       <header className="app-header">
-        <h1>{STORE_NAME}</h1>
+        {view === 'home' ? (
+          <h1>{STORE_NAME}</h1>
+        ) : (
+          <button type="button" className="link-button home-back" onClick={() => setView('home')}>
+            <IconArrowLeft size={18} /> Beranda
+          </button>
+        )}
         <div className="header-actions">
-          <span className="hint">
-            {user.fullName} · {user.role}
-          </span>
-          {/* Cross-app link — this is a separate deployment from apps/dashboard
-              (Nginx routes / to the dashboard, /scan/ to this app), so a plain
-              same-origin anchor is correct here, not client-side routing.
-              Real UX gap found live: there was previously no way to reach the
-              dashboard from here except typing the URL by hand. */}
-          <a href="/" className="theme-toggle">
-            Dashboard
-          </a>
           <button
             type="button"
             className="theme-toggle"
@@ -85,9 +83,15 @@ export default function App() {
         </div>
       </header>
 
-      {visibleTabs.length === 0 ? (
+      {view === 'home' && (
+        <Home user={user} isOnline={isOnline} onNavigate={(destination) => setView(destination)} />
+      )}
+
+      {view !== 'home' && visibleTabs.length === 0 && (
         <p className="hint">Belum ada tampilan untuk role Anda ({user.role}).</p>
-      ) : (
+      )}
+
+      {view !== 'home' && visibleTabs.length > 0 && (
         <>
           {visibleTabs.length > 1 && (
             <nav className="tabs">
@@ -95,8 +99,8 @@ export default function App() {
                 <button
                   key={item.id}
                   type="button"
-                  className={tab === item.id ? 'tab tab--active' : 'tab'}
-                  onClick={() => setTab(item.id)}
+                  className={view === item.id ? 'tab tab--active' : 'tab'}
+                  onClick={() => setView(item.id)}
                 >
                   {item.label}
                 </button>
@@ -104,8 +108,8 @@ export default function App() {
             </nav>
           )}
 
-          {tab === 'warehouse' && <WarehouseScan isOnline={isOnline} />}
-          {tab === 'kasir' && <Kasir />}
+          {view === 'warehouse' && <WarehouseScan isOnline={isOnline} />}
+          {view === 'kasir' && <Kasir />}
         </>
       )}
     </main>
