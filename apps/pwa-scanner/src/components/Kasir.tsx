@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
-import { IconArrowLeft, IconBuildingBank, IconCash, IconQrcode } from '@tabler/icons-react';
+import {
+  IconAlertTriangle,
+  IconArrowLeft,
+  IconBuildingBank,
+  IconCash,
+  IconCloudCheck,
+  IconQrcode,
+} from '@tabler/icons-react';
 import { openReceipt, searchProducts, type PosTransaction, type ProductSearchResult } from '../lib/api';
-import { formatRupiah, statusBadge } from '../lib/format';
+import { getLastSyncedAt } from '../lib/catalog-cache';
+import { formatRupiah, formatSyncedAt, statusBadge } from '../lib/format';
 import { listQueuedActions, type QueuedAction } from '../lib/offline-queue';
 import { submitOrQueue, syncPendingQueue } from '../lib/sync';
 import type { PosSaleAction } from '../lib/types';
@@ -11,6 +19,17 @@ interface CartLine {
   itemName: string;
   qty: number;
   rate: number;
+  /** Carried from ProductSearchResult.stale — the price may not reflect this customer's real (Grosir/Member) tier. See searchProducts's doc comment. */
+  stale?: boolean;
+}
+
+/** Amber "needs a live check" warning — same convention as dashboard's SyncConflicts badge. */
+function StalePriceWarning() {
+  return (
+    <span className="status-badge status-badge--conflict">
+      <IconAlertTriangle size={12} /> Harga mungkin belum terbaru
+    </span>
+  );
 }
 
 const PAYMENT_METHODS = [
@@ -46,6 +65,7 @@ export default function Kasir() {
     [],
   );
   const [syncingQueue, setSyncingQueue] = useState(false);
+  const lastSyncedAt = getLastSyncedAt();
 
   const refreshPendingSales = useCallback(async () => {
     const all = await listQueuedActions();
@@ -78,10 +98,15 @@ export default function Kasir() {
       const existing = current.find((line) => line.itemCode === item.itemCode);
       if (existing) {
         return current.map((line) =>
-          line.itemCode === item.itemCode ? { ...line, qty: line.qty + qty } : line,
+          line.itemCode === item.itemCode
+            ? { ...line, qty: line.qty + qty, stale: line.stale || item.stale }
+            : line,
         );
       }
-      return [...current, { itemCode: item.itemCode, itemName: item.itemName, qty, rate: item.price ?? 0 }];
+      return [
+        ...current,
+        { itemCode: item.itemCode, itemName: item.itemName, qty, rate: item.price ?? 0, stale: item.stale },
+      ];
     });
   }
 
@@ -105,7 +130,7 @@ export default function Kasir() {
     setSearching(true);
     setError(null);
     try {
-      const { results } = await searchProducts(trimmed);
+      const { results } = await searchProducts(trimmed, !!customerId.trim());
       // A barcode scanner behaves like fast keyboard entry ending in
       // Enter — an exact single itemCode match means "scan", not "typed
       // a partial name to browse": add straight to cart, no picker.
@@ -226,6 +251,7 @@ export default function Kasir() {
               <li key={line.itemCode} className="cart-line cart-line--review">
                 <span>
                   {line.itemName} <span className="hint">× {line.qty}</span>
+                  {line.stale && <StalePriceWarning />}
                 </span>
                 <span>{formatRupiah(line.qty * line.rate)}</span>
               </li>
@@ -306,6 +332,19 @@ export default function Kasir() {
         </button>
       </form>
 
+      <p className="hint sync-indicator">
+        {lastSyncedAt ? (
+          <>
+            <IconCloudCheck size={14} /> Data tersinkron: {formatSyncedAt(lastSyncedAt)}
+          </>
+        ) : (
+          <>
+            <IconAlertTriangle size={14} style={{ color: 'var(--color-warning)' }} /> Katalog belum
+            tersinkron — pencarian offline belum tersedia
+          </>
+        )}
+      </p>
+
       {searchResults.length > 1 && (
         <ul className="search-results">
           {searchResults.map((item) => (
@@ -320,6 +359,7 @@ export default function Kasir() {
                 }}
               >
                 {item.itemName} — {item.price !== null ? formatRupiah(item.price) : 'Harga tidak tersedia'}
+                {item.stale && <StalePriceWarning />}
               </button>
             </li>
           ))}
@@ -385,6 +425,7 @@ export default function Kasir() {
                   <div className="hint">
                     {line.qty} × {formatRupiah(line.rate)} = {formatRupiah(line.qty * line.rate)}
                   </div>
+                  {line.stale && <StalePriceWarning />}
                 </div>
                 <div className="cart-line-actions">
                   <button type="button" onClick={() => adjustQty(line.itemCode, -1)}>

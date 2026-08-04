@@ -6,6 +6,7 @@ import {
   storeAuth,
   type AuthUser,
 } from './auth';
+import { searchLocalCatalog, syncCatalog, type CatalogItem } from './catalog-cache';
 import type { QueuedAction, SyncStatus } from './offline-queue';
 
 const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
@@ -28,7 +29,28 @@ export async function login(email: string, password: string): Promise<TokenPair>
   }
   const tokens = (await response.json()) as TokenPair;
   storeAuth(tokens);
+  // Fire-and-forget: populates the offline product-catalog cache (spec
+  // §15.3) for this session. Never blocks login, never surfaces an error
+  // to the cashier — a failed sync just means the cache stays at whatever
+  // it was left at (empty, on a brand-new device); see triggerCatalogSync.
+  void triggerCatalogSync();
   return tokens;
+}
+
+/** Also called on the browser's 'online' event (see App.tsx) so a long shift that starts offline still picks up the catalog once connectivity returns. */
+export async function triggerCatalogSync(): Promise<void> {
+  try {
+    await syncCatalog(fetchCatalogPage);
+  } catch (err) {
+    console.error('Catalog sync failed (will retry on next login/reconnect):', err);
+  }
+}
+
+function fetchCatalogPage(
+  offset: number,
+  limit: number,
+): Promise<{ items: CatalogItem[]; hasMore: boolean }> {
+  return get(`/api/v1/products/catalog?offset=${offset}&limit=${limit}`);
 }
 
 export function logout(): void {
@@ -143,6 +165,14 @@ export interface ProductSearchResult {
   stockUom: string;
   priceList: string;
   price: number | null;
+  /**
+   * True when this result came from the offline catalog cache while a
+   * customer ID was entered — the cache only ever holds Retail-tier
+   * pricing (spec §15.3), so a Grosir/Member customer's real price may
+   * differ and needs a live lookup to confirm. Never set for walk-in
+   * (no customer ID) results, since Retail is exactly what's cached.
+   */
+  stale?: boolean;
 }
 
 export interface PosTransaction {
@@ -154,7 +184,39 @@ export interface PosTransaction {
   outstandingAmount: number;
 }
 
-export function searchProducts(query: string): Promise<{ results: ProductSearchResult[] }> {
+/**
+ * Cache-first (spec §15.3 "kasir tetap bisa jualan walau internet mati"):
+ * checks the offline catalog before ever touching the network, so a hit is
+ * instant whether online or offline. Only falls back to a live search on a
+ * cache miss — and only while online, since there's no point attempting a
+ * request that can't succeed. `hasCustomer` flags cache-served results as
+ * possibly-stale-priced (see ProductSearchResult.stale) rather than trying
+ * to guess the customer's actual tier offline.
+ */
+export async function searchProducts(
+  query: string,
+  hasCustomer = false,
+): Promise<{ results: ProductSearchResult[] }> {
+  const cached = await searchLocalCatalog(query);
+  if (cached.length > 0) {
+    return {
+      results: cached.map((item) => ({
+        itemCode: item.itemCode,
+        itemName: item.itemName,
+        stockUom: item.stockUom,
+        priceList: 'Retail',
+        price: item.retailPrice,
+        stale: hasCustomer,
+      })),
+    };
+  }
+
+  if (!navigator.onLine) {
+    throw new Error(
+      'Barang tidak ditemukan di katalog offline, dan koneksi sedang terputus untuk memeriksa lebih lanjut.',
+    );
+  }
+
   return get<{ results: ProductSearchResult[] }>(
     `/api/v1/products/search?q=${encodeURIComponent(query)}`,
   );

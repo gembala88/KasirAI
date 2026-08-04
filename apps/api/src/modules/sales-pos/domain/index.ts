@@ -20,6 +20,20 @@ export interface ProductPrice {
   price: number | null;
 }
 
+/**
+ * One page of the full product catalog (spec §15.3 offline cache) — always
+ * Retail-tier pricing, since that's what a cache-served result defaults to
+ * for a walk-in customer. Grosir/Member pricing still requires a live
+ * lookup; the client is responsible for flagging that (see pwa-scanner's
+ * catalog-cache staleness handling).
+ */
+export interface CatalogItem {
+  itemCode: string;
+  itemName: string;
+  stockUom: string;
+  retailPrice: number | null;
+}
+
 export interface CartLineInput {
   itemCode: string;
   qty: number;

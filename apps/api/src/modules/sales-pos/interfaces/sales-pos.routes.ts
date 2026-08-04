@@ -7,6 +7,7 @@ import {
   createTransaction,
   getProductPrice,
   getReceiptHtml,
+  listCatalogPage,
   listParkedTransactions,
   parkTransaction,
   searchProducts,
@@ -37,6 +38,14 @@ const productSearchQuerySchema = z.object({
   customer_tier: z.string().max(50).optional(),
 });
 
+const catalogQuerySchema = z.object({
+  offset: z.coerce.number().int().nonnegative().optional().default(0),
+  // Capped well above any realistic page size a client would request —
+  // this is a server-side abuse guard, not a tuning knob; pwa-scanner's
+  // catalog-cache always asks for 200.
+  limit: z.coerce.number().int().positive().max(500).optional().default(200),
+});
+
 const POS_ROLES = ['Owner', 'Manager', 'Cashier'] as const;
 
 /**
@@ -65,6 +74,22 @@ export function registerSalesPosRoutes(app: FastifyInstance): void {
     '/api/v1/products/:id/price',
     { preHandler: requireRole(...POS_ROLES) },
     async (request) => getProductPrice(request.params.id, request.query.tier),
+  );
+
+  // Bulk catalog pull for pwa-scanner's offline product cache (spec §15.3
+  // "kasir tetap bisa jualan walau internet mati") — paged, not the
+  // single-shot /products/search. See listCatalogPage's doc comment for
+  // why it's a separate code path.
+  app.get<{ Querystring: { offset?: string; limit?: string } }>(
+    '/api/v1/products/catalog',
+    { preHandler: requireRole(...POS_ROLES) },
+    async (request) => {
+      const parsed = catalogQuerySchema.safeParse(request.query);
+      if (!parsed.success) {
+        throw new ValidationError(parsed.error.issues.map((i) => i.message).join('; '));
+      }
+      return listCatalogPage(parsed.data.offset, parsed.data.limit);
+    },
   );
 
   app.get(

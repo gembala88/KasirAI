@@ -1,4 +1,4 @@
-export { searchProducts, getProductPrice, resolvePriceList } from './pricing.js';
+export { searchProducts, getProductPrice, resolvePriceList, listCatalogPage } from './pricing.js';
 export {
   createTransaction,
   listParkedTransactions,

@@ -31,3 +31,16 @@ export function statusBadge(status: string): { label: string; className: string 
     className: `status-badge ${STATUS_CLASS[status] ?? 'status-badge--pending'}`,
   };
 }
+
+/** Catalog-sync freshness indicator (spec §15.3) — "HH:mm" for today, "dd/MM HH:mm" otherwise, so a shift spanning midnight still reads unambiguously. */
+export function formatSyncedAt(iso: string): string {
+  const date = new Date(iso);
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+  return date.toLocaleString('id-ID', {
+    day: isToday ? undefined : '2-digit',
+    month: isToday ? undefined : '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}

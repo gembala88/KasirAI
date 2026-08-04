@@ -5,7 +5,7 @@ import Kasir from './components/Kasir';
 import Login from './components/Login';
 import WarehouseScan from './components/WarehouseScan';
 import { STORE_NAME } from './branding';
-import { logout } from './lib/api';
+import { logout, triggerCatalogSync } from './lib/api';
 import { getStoredAuth, setOnAuthRequired, type AuthUser } from './lib/auth';
 
 type Tab = HomeDestination;
@@ -31,7 +31,14 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
+    const handleOnline = () => {
+      setIsOnline(true);
+      // Reconnect is exactly when a catalog sync matters most — a shift
+      // that started offline (or went offline mid-shift) should pick up
+      // the current catalog the moment connectivity comes back, not wait
+      // for the next login. No-ops harmlessly if not logged in yet.
+      void triggerCatalogSync();
+    };
     const handleOffline = () => setIsOnline(false);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
