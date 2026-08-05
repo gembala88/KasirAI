@@ -12,29 +12,43 @@ multi-tenant SaaS yet — that's premature before there's a real second
 client. The near-term goal is making per-client deployment fast and
 repeatable (a productized install), not a bespoke one-off each time.
 
-**What this item is:** a "new client setup" checklist/script that walks
-through provisioning a fresh VPS + domain + ERPNext instance + config for
-a brand-new store, based on everything learned deploying the first one.
-README.md's "Setting up Hermes for a new client" section is the current
-manual version of this walkthrough — this item is about turning that into
-something more automated and less error-prone:
+Confirmed (2026-08-05): each client gets their own fully isolated
+VPS/domain/WhatsApp Business account/QRIS image/bank account — not shared
+infrastructure between clients. The wizard below configures one isolated
+deployment per run; it does not introduce any cross-client sharing.
 
-- A single setup script (or a small number of them) that does what
-  README.md's steps 1–9 currently describe by hand: VPS provisioning
-  checks, Docker install, `.env` generation (with real random secrets,
-  not copy-pasted placeholders), ERPNext site creation, seed script run,
-  Nginx + certbot setup, and — closing a real gap found while writing
-  the README — the backup systemd timer/service unit files, which
-  currently only exist hand-created on the one deployed VPS, not
-  version-controlled or templated anywhere in this repo.
-- A per-client config file (store name, domain, default company/warehouse
-  names, price list names if they should differ from Retail/Grosir/
-  Member) that the setup script reads, instead of the current pattern of
-  manually renaming the seeded "Toko Hermes" placeholder after the fact.
-- Consider whether the WhatsApp/AI-provider account creation steps (which
-  involve external dashboards, not just this codebase) can be reduced to
-  a guided checklist with direct deep-links, even if they can't be fully
-  scripted.
+**What this item is:** an interactive setup wizard (not just a checklist)
+that walks through provisioning a fresh VPS + domain + ERPNext instance +
+config for a brand-new store, based on everything learned deploying the
+first one. README.md's "Setting up Hermes for a new client" section is
+the current manual version of this walkthrough — this item is about
+turning that into a guided, mostly-automated tool:
+
+- **Interactive**: prompts the operator for the new client's specific
+  values — VPS IP/hostname, domain name, store/company name, WhatsApp
+  Business credentials (phone number ID, access token, webhook verify
+  token, app secret), QRIS static image (file or URL), bank transfer
+  details (bank name, account number, account name) — and writes them
+  into the right places automatically: repo-root `.env`,
+  `infra/docker/.env`, `infra/nginx/hermes.conf.template` (domain
+  substitution), and the `infra/systemd/` unit files (`SITE_NAME`,
+  install path) — rather than the operator hand-editing each file.
+- Generates real random secrets itself (`JWT_SECRET`,
+  `ERPNEXT_WEBHOOK_SECRET`, DB/admin passwords) instead of the current
+  pattern of manually running `openssl rand` and pasting the result in.
+- Does what README.md's steps 1–11 currently describe by hand: VPS
+  provisioning checks, Docker install, ERPNext site creation, seed
+  script run (with the per-client company/warehouse names it already
+  collected, instead of seeding "Toko Hermes" and renaming after the
+  fact), Nginx + certbot setup, systemd backup timer installation
+  (`infra/systemd/`, added 2026-08-05), and WhatsApp webhook
+  registration reminders.
+- Consider whether the WhatsApp/AI-provider *account creation* steps
+  (which happen on external dashboards, not in this codebase — creating
+  the Meta Business App itself, generating an AI provider key) can be
+  reduced to a guided checklist with direct deep-links even if they
+  can't be fully scripted, since the wizard can't drive someone else's
+  web UI.
 
 **Investigate before building:** Frappe/ERPNext natively supports running
 multiple isolated sites on one `bench` instance (`bench new-site`, one

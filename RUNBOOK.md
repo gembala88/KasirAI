@@ -186,7 +186,9 @@ Automated: `hermes-backup.timer` (systemd, daily at 02:00 + up to 5 min
 random delay) runs `infra/scripts/backup.sh`, which uses Frappe's own
 `bench backup --with-files` (not a hand-rolled mysqldump — see the
 script's own header comment for why that matters) and keeps
-daily/weekly/monthly tiers under `/opt/hermes-backups`.
+daily/weekly/monthly tiers under `/opt/hermes-backups`. Unit files are
+checked into `infra/systemd/` — see README.md's "Setting up Hermes for a
+new client" step 9 for how to (re-)install them on a box.
 
 ```bash
 # Check the timer is alive and see when it last/next ran:

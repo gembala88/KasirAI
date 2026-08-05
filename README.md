@@ -87,6 +87,7 @@ infra/
   erpnext/         MariaDB tuning, VPS swap setup script
   nginx/           Reverse-proxy config template, logrotate config
   scripts/         Backup/restore scripts
+  systemd/         Backup timer/service unit files (see README step 9)
 docs/
   IMPLEMENTATION_LOG.md   Full phase-by-phase build history, technical
                           detail, and live-verification evidence
@@ -226,16 +227,24 @@ version of this walkthrough is a backlog item — see
    ```bash
    docker compose -f docker-compose.yml up -d --build api dashboard pwa-scanner
    ```
-9. **Set up automated backups** — a daily systemd timer running
-   `infra/scripts/backup.sh` (keeps daily/weekly/monthly tiers under
-   `/opt/hermes-backups`; uses `bench backup --with-files`, not a
-   hand-rolled mysqldump). The systemd unit files themselves aren't
-   checked into this repo yet (see [BACKLOG.md](BACKLOG.md)) — see
-   RUNBOOK.md's "Backups" section for how to check/trigger/verify one
-   once it's set up, and **test a real restore** before trusting it —
-   `infra/scripts/restore.sh` has a `--verify-only` mode that restores
-   onto a throwaway site rather than touching the real one; see
-   RUNBOOK.md's "Backups" section for the exact invocation.
+9. **Set up automated backups** — install the systemd unit files from
+   `infra/systemd/` (read the comment at the top of
+   `infra/systemd/hermes-backup.service` first: confirm `SITE_NAME`
+   matches `infra/docker/.env`'s value on this box, and that
+   `ExecStart`'s path matches where the repo is actually cloned):
+   ```bash
+   sudo cp infra/systemd/hermes-backup.* /etc/systemd/system/
+   sudo systemctl daemon-reload
+   sudo systemctl enable --now hermes-backup.timer
+   systemctl list-timers hermes-backup.timer   # confirm it's scheduled
+   ```
+   This runs `infra/scripts/backup.sh` daily (keeps daily/weekly/monthly
+   tiers under `/opt/hermes-backups`; uses `bench backup --with-files`,
+   not a hand-rolled mysqldump). See RUNBOOK.md's "Backups" section for
+   how to check/trigger a run manually, and **test a real restore**
+   before trusting it — `infra/scripts/restore.sh` has a `--verify-only`
+   mode that restores onto a throwaway site rather than touching the
+   real one; see RUNBOOK.md's "Backups" section for the exact invocation.
 10. **If using WhatsApp ordering**: set the four `WHATSAPP_*` values in
     `.env`, then configure the same webhook URL
     (`https://<domain>/whatsapp/webhook`) and

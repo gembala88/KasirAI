@@ -1,0 +1,13 @@
+# Daily trigger for hermes-backup.service — see that file for what the
+# backup actually does. Install both files together (see
+# README.md "Set up automated backups" / RUNBOOK.md "Backups").
+[Unit]
+Description=Daily Hermes ERPNext backup (spec §1.3 FR-2 precedent / Phase 9)
+
+[Timer]
+OnCalendar=*-*-* 02:00:00
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,21 @@
+# Real MariaDB + files backup, run daily by hermes-backup.timer.
+# See infra/scripts/backup.sh for what this actually does.
+#
+# Per-deployment values to check before installing on a new client's VPS:
+#   - SITE_NAME must match infra/docker/.env's SITE_NAME on this box
+#     (defaults to hermes.localhost for every deployment so far — this is
+#     an internal Frappe site identifier, not the public domain, so it
+#     rarely needs to change).
+#   - ExecStart assumes the repo is cloned to /opt/hermes-platform, the
+#     convention used throughout RUNBOOK.md. Edit the path here if a given
+#     deployment uses a different location.
+[Unit]
+Description=Hermes ERPNext backup (MariaDB + files, spec §1.3 FR-2 precedent / Phase 9)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+Environment=SITE_NAME=hermes.localhost
+Environment=BACKUP_ROOT=/opt/hermes-backups
+ExecStart=/opt/hermes-platform/infra/scripts/backup.sh
