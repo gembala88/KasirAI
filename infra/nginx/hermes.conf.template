@@ -9,16 +9,40 @@
 # Routing:
 #   /                  -> apps/dashboard  (owner/cashier/warehouse web UI)
 #   /scan/             -> apps/pwa-scanner
-#   /api/              -> Hermes API (apps/api)
+#   /api/v1/           -> Hermes API (apps/api)
+#   /api/              -> ERPNext frontend container (Frappe's own /api/method,
+#                         /api/resource — NOT the same namespace as Hermes'
+#                         versioned /api/v1/, which is why that block is listed
+#                         first: Nginx always matches the longest prefix
+#                         regardless of declaration order, so /api/v1/ wins
+#                         for its own requests and everything else under
+#                         /api/ falls through here to ERPNext.)
 #   /webhooks/erpnext  -> Hermes API (ERPNext -> Hermes webhook, HMAC-verified internally)
 #   /whatsapp/webhook  -> Hermes API (Meta -> Hermes webhook, HMAC-verified internally)
 #   /health            -> Hermes API (uptime checks)
-#   /erp/              -> ERPNext frontend container
+#   /erp/              -> ERPNext frontend container (the Desk/login page itself)
+#   /assets/, /files/, /private/, /app, /socket.io/,
+#   /website_script.js -> ERPNext frontend container (everything ERPNext's own
+#                         HTML/JS references as root-relative — Frappe apps
+#                         assume they own the whole origin, they have no idea
+#                         they're mounted under /erp/, so these can't be
+#                         folded into that location block; found live: without
+#                         these, /erp/'s login page loaded with zero CSS and a
+#                         non-functional login form, both silently swallowed
+#                         by the dashboard's catch-all "/" instead of a clean
+#                         404 — see docs/IMPLEMENTATION_LOG.md)
 #
-# The last two webhook routes are NOT under /api/ — they're top-level on
-# the Fastify app (see apps/api/src/modules/auth/interfaces/auth-plugin.ts's
+# The webhook routes are NOT under /api/ — they're top-level on the Fastify
+# app (see apps/api/src/modules/auth/interfaces/auth-plugin.ts's
 # PUBLIC_PATHS) and must be routed as their own locations, not folded into
-# the /api/ prefix strip.
+# the /api/v1/ prefix strip.
+#
+# frontend (ERPNext's own container) is itself a complete reverse proxy —
+# it already knows how to route /api/, /assets/, /socket.io/, etc. to its
+# own backend/websocket containers internally (see docker-compose.yml's
+# SOCKETIO env var on that service). The host Nginx below only needs to
+# forward each root-relative path to frontend once; frontend handles the
+# rest.
 #
 # Setup on the VPS:
 #   1. Replace ${...} placeholders below (envsubst, or by hand) and copy to
@@ -54,13 +78,82 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    location /api/ {
-        proxy_pass http://127.0.0.1:${API_PORT}/api/;
+    location /api/v1/ {
+        proxy_pass http://127.0.0.1:${API_PORT}/api/v1/;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_read_timeout 120s;
+    }
+
+    # Frappe's own /api/method/*, /api/resource/* — ERPNext's Desk/login UI
+    # calls these directly as root-relative paths (e.g. the login form POSTs
+    # to /api/method/login). No URI after the port below, so Nginx passes
+    # the original path through unchanged rather than stripping a prefix.
+    location /api/ {
+        proxy_pass http://127.0.0.1:${ERPNEXT_PORT};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+    }
+
+    location /assets/ {
+        proxy_pass http://127.0.0.1:${ERPNEXT_PORT};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /files/ {
+        proxy_pass http://127.0.0.1:${ERPNEXT_PORT};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /private/ {
+        proxy_pass http://127.0.0.1:${ERPNEXT_PORT};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location = /website_script.js {
+        proxy_pass http://127.0.0.1:${ERPNEXT_PORT};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Desk client app routes (post-login SPA) — Frappe serves these at /app
+    # when mounted at root, same reasoning as /assets/ above.
+    location /app {
+        proxy_pass http://127.0.0.1:${ERPNEXT_PORT};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Frappe's real-time (socket.io) bridge — needs the WebSocket upgrade
+    # headers forwarded through this hop too, not just set on the frontend
+    # container's own internal proxy.
+    location /socket.io/ {
+        proxy_pass http://127.0.0.1:${ERPNEXT_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     location = /webhooks/erpnext {
