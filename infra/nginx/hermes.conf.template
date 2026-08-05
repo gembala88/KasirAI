@@ -132,9 +132,22 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # Desk client app routes (post-login SPA) — Frappe serves these at /app
-    # when mounted at root, same reasoning as /assets/ above.
+    # Desk client app routes (post-login SPA). Found live: this ERPNext
+    # version (v16) actually 301-redirects /app -> /desk, so both need to
+    # be proxied — /app alone left the redirect target falling through to
+    # the dashboard's catch-all "/" exactly like /assets/ did before that
+    # fix, just one hop later (login succeeded, cookie was valid, but the
+    # browser landed on the Dashboard's own login screen after following
+    # the redirect, which looked like "bounced back to Sign In").
     location /app {
+        proxy_pass http://127.0.0.1:${ERPNEXT_PORT};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /desk {
         proxy_pass http://127.0.0.1:${ERPNEXT_PORT};
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
