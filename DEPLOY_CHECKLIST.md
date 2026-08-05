@@ -69,7 +69,7 @@ below — this smoke-test box is not that VPS).
   apps (dashboard and `/scan/`) — not just `curl`. This uncovered and
   fixed three real bugs invisible to every earlier curl-only check: an
   asset-path routing collision, a service-worker scope collision, and a
-  doubled `/api/api/` login URL. See README.md's "Domain, HTTPS, and
+  doubled `/api/api/` login URL. See docs/IMPLEMENTATION_LOG.md's "Domain, HTTPS, and
   camera scanning" section for the full story.
 
 ## Shared VPS vs. dedicated VPS

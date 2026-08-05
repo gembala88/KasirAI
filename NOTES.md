@@ -4,8 +4,9 @@ This is the non-technical version of the project history — what was
 decided and why, and what real problems were found and fixed, written so
 it's useful without reading code or git history. The technical version of
 each phase (with code paths, exact commands, live-verification evidence)
-is in README.md; this file is the "what actually happened and why does it
-matter" summary. New entries get added to the bottom as work continues.
+is in [docs/IMPLEMENTATION_LOG.md](docs/IMPLEMENTATION_LOG.md); this file
+is the "what actually happened and why does it matter" summary. New
+entries get added to the bottom as work continues.
 
 ## Foundation & core setup (Phase 0-1)
 

@@ -1,9 +1,9 @@
 # Hermes Operations Runbook
 
 Written against the real Phase 9 smoke-test deployment on `43.128.68.124`
-(a shared VPS, see README.md's Phase 9 section for why it's shared and
-what that means for the numbers below). Re-verify paths/ports if this is
-ever run against a different box.
+(a shared VPS, see [docs/IMPLEMENTATION_LOG.md](docs/IMPLEMENTATION_LOG.md)'s
+Phase 9 section for why it's shared and what that means for the numbers
+below). Re-verify paths/ports if this is ever run against a different box.
 
 For a plain-language (non-technical) summary of what's been decided and
 fixed throughout this project, see [NOTES.md](NOTES.md) instead of this
@@ -240,7 +240,7 @@ a code rollback.
 ## Failure-mode playbook (spec §15's brief: power/internet/VPS down)
 
 These describe what *should* happen given what's actually built — see
-README.md's §15 section for what's genuinely implemented vs. simplified.
+docs/IMPLEMENTATION_LOG.md's §15 section for what's genuinely implemented vs. simplified.
 
 - **Cashier's own internet drops mid-checkout:** handled entirely
   client-side (spec §15.2) — the sale is written to the browser's local
@@ -330,8 +330,8 @@ many rows were deleted on each run.
 ## VPS resource ceiling reminder
 
 This box's real numbers (confirmed live, not assumed) are tighter than a
-dedicated VPS would be — see README.md's Phase 9 section for the full
-story. If things get slow or `docker stats` shows containers pinned at
+dedicated VPS would be — see docs/IMPLEMENTATION_LOG.md's Phase 9 section
+for the full story. If things get slow or `docker stats` shows containers pinned at
 their `mem_limit`, that is the expected trade-off of a shared box, not
 necessarily a Hermes bug — but it's also the reason a dedicated VPS is
 required before real go-live, not just recommended.
