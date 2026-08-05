@@ -7,7 +7,10 @@ import type { AuthUser, TokenPair } from '../domain/index.js';
 import { fetchHermesRole, verifyErpNextCredentials } from '../infrastructure/erpnext-session.js';
 import { issueTokenPair, verifyRefreshToken } from '../infrastructure/jwt.js';
 
-export async function login(email: string, password: string): Promise<TokenPair & { user: AuthUser }> {
+export async function login(
+  email: string,
+  password: string,
+): Promise<TokenPair & { user: AuthUser }> {
   const credentials = await verifyErpNextCredentials(email, password);
   if (!credentials) {
     throw new UnauthorizedError('Invalid email or password');

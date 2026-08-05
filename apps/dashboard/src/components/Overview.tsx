@@ -61,12 +61,16 @@ export default function Overview() {
           <span className="card-label">Supplier Terbaik ({summary.rankingWindowDays} hari)</span>
           <span className="card-value">{summary.bestSupplier?.supplierName ?? '—'}</span>
           <span className="card-sub">
-            {summary.bestSupplier ? formatRupiah(summary.bestSupplier.totalPurchased) : 'Belum ada data'}
+            {summary.bestSupplier
+              ? formatRupiah(summary.bestSupplier.totalPurchased)
+              : 'Belum ada data'}
           </span>
         </div>
         <div className="card">
           <IconUsers size={22} className="stat-card-icon" />
-          <span className="card-label">Pelanggan Paling Aktif ({summary.rankingWindowDays} hari)</span>
+          <span className="card-label">
+            Pelanggan Paling Aktif ({summary.rankingWindowDays} hari)
+          </span>
           <span className="card-value">{summary.mostActiveCustomer?.customerName ?? '—'}</span>
           <span className="card-sub">
             {summary.mostActiveCustomer

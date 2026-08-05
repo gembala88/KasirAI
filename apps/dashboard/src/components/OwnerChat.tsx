@@ -40,13 +40,16 @@ export default function OwnerChat() {
 
   return (
     <div className="owner-chat">
-      <p className="hint">
-        Tanya langsung, dijawab dari data ERPNext nyata — bukan perkiraan.
-      </p>
+      <p className="hint">Tanya langsung, dijawab dari data ERPNext nyata — bukan perkiraan.</p>
 
       <div className="suggestions">
         {SUGGESTIONS.map((suggestion) => (
-          <button key={suggestion} type="button" onClick={() => void send(suggestion)} disabled={sending}>
+          <button
+            key={suggestion}
+            type="button"
+            onClick={() => void send(suggestion)}
+            disabled={sending}
+          >
             {suggestion}
           </button>
         ))}
@@ -55,7 +58,9 @@ export default function OwnerChat() {
       <div className="chat-log">
         {messages.map((message, index) => (
           <div key={index} className={`chat-message chat-message--${message.role}`}>
-            <span className="chat-message-role">{message.role === 'owner' ? 'Anda' : 'Hermes'}</span>
+            <span className="chat-message-role">
+              {message.role === 'owner' ? 'Anda' : 'Hermes'}
+            </span>
             <p>{message.text}</p>
           </div>
         ))}

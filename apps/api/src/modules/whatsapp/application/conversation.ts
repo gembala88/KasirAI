@@ -12,7 +12,12 @@ import { env } from '../../../config/env.js';
 import { logger } from '../../../shared/logger/index.js';
 import { runAiQuery } from '../../ai-gateway/interfaces/index.js';
 import { executeConversationAction } from './actions.js';
-import { buildTurnPrompt, HERMES_SYSTEM_PROMPT, parseModelJson, type ParsedTurn } from './persona.js';
+import {
+  buildTurnPrompt,
+  HERMES_SYSTEM_PROMPT,
+  parseModelJson,
+  type ParsedTurn,
+} from './persona.js';
 import {
   buildPaymentInstructionReply,
   containsUnverifiedPaymentDetails,
@@ -74,7 +79,10 @@ export async function handleInboundMessage(phoneNumber: string, text: string): P
         }
       }
     } else if (containsUnverifiedPaymentDetails(turnA.reply)) {
-      logger.warn({ phoneNumber, reply: turnA.reply }, 'whatsapp.blocked_unverified_payment_details');
+      logger.warn(
+        { phoneNumber, reply: turnA.reply },
+        'whatsapp.blocked_unverified_payment_details',
+      );
       finalReply = SAFE_PAYMENT_FALLBACK_REPLY;
     } else {
       finalReply = turnA.reply;

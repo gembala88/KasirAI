@@ -105,7 +105,7 @@ const USER_ROLE_FIELD: CustomFieldSpec = {
   insertAfter: 'first_name',
   options: 'Owner\nManager\nCashier\nWarehouse Staff',
   description:
-    'RBAC role for the Hermes application layer (spec §1.4 NFR Security) — distinct from ERPNext\'s own native Roles.',
+    "RBAC role for the Hermes application layer (spec §1.4 NFR Security) — distinct from ERPNext's own native Roles.",
 };
 
 // Dev-only seed accounts, one per §1.4's required role, so Phase 8's
@@ -499,7 +499,11 @@ async function ensureUomConversionFactor(from: string, to: string, value: number
   logger.info({ from, to, value }, 'seed.uom_conversion.created');
 }
 
-async function ensureSeedUser(spec: { email: string; firstName: string; role: string }): Promise<void> {
+async function ensureSeedUser(spec: {
+  email: string;
+  firstName: string;
+  role: string;
+}): Promise<void> {
   try {
     await erpNextClient.get('User', spec.email);
     logger.info({ email: spec.email }, 'seed.user.exists');

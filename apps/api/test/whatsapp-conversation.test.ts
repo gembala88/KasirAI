@@ -17,7 +17,8 @@ vi.mock('../src/modules/whatsapp/infrastructure/whatsapp-client.js', () => ({
   sendImageMessage: sendImageMessageMock,
 }));
 
-const { handleInboundMessage } = await import('../src/modules/whatsapp/application/conversation.js');
+const { handleInboundMessage } =
+  await import('../src/modules/whatsapp/application/conversation.js');
 const { env } = await import('../src/config/env.js');
 
 const PHONE_BASE = `62899${Date.now()}`;
@@ -54,7 +55,8 @@ describe('handleInboundMessage — payment-detail hardening', () => {
       // anyway.
       .mockResolvedValueOnce(
         aiTextResponse({
-          reply: 'Nomor rekening kami untuk transfer adalah 9999888877, silakan transfer ke situ ya kak',
+          reply:
+            'Nomor rekening kami untuk transfer adalah 9999888877, silakan transfer ke situ ya kak',
           action: null,
         }),
       );
@@ -93,7 +95,7 @@ describe('handleInboundMessage — payment-detail hardening', () => {
     expect(executeConversationActionMock).not.toHaveBeenCalled();
   });
 
-  it('sends the deterministic template — not the model\'s freeform text — when initiate_payment really succeeds', async () => {
+  it("sends the deterministic template — not the model's freeform text — when initiate_payment really succeeds", async () => {
     const originalBankName = env.BANK_TRANSFER_BANK_NAME;
     const originalBankAccount = env.BANK_TRANSFER_ACCOUNT_NUMBER;
     env.BANK_TRANSFER_BANK_NAME = 'BCA';
@@ -175,6 +177,9 @@ describe('handleInboundMessage — payment-detail hardening', () => {
     const phone = `${PHONE_BASE}-ordinary`;
     await handleInboundMessage(phone, 'ada minyak goreng ga?');
 
-    expect(sendTextMessageMock).toHaveBeenCalledWith(phone, 'Stoknya masih ada 12 kak, mau berapa?');
+    expect(sendTextMessageMock).toHaveBeenCalledWith(
+      phone,
+      'Stoknya masih ada 12 kak, mau berapa?',
+    );
   });
 });

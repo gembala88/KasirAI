@@ -66,27 +66,21 @@ const ALLOWED_ROLES_BY_ACTION: Record<OfflineActionType, Role[]> = {
 export function registerSyncRoutes(app: FastifyInstance): void {
   app.get('/api/v1/sync/_status', async () => ({ module: 'sync', status: 'scaffolded' }));
 
-  app.post(
-    '/api/v1/sync/actions',
-    { preHandler: requireRole(...SYNC_ROLES) },
-    async (request) => {
-      const parsed = syncRequestSchema.safeParse(request.body);
-      if (!parsed.success) {
-        throw new ValidationError(parsed.error.issues.map((i) => i.message).join('; '));
-      }
+  app.post('/api/v1/sync/actions', { preHandler: requireRole(...SYNC_ROLES) }, async (request) => {
+    const parsed = syncRequestSchema.safeParse(request.body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.issues.map((i) => i.message).join('; '));
+    }
 
-      const allowedRoles = ALLOWED_ROLES_BY_ACTION[parsed.data.action.type];
-      if (!request.user || !allowedRoles.includes(request.user.role)) {
-        throw new ForbiddenError(`Requires one of: ${allowedRoles.join(', ')}`);
-      }
+    const allowedRoles = ALLOWED_ROLES_BY_ACTION[parsed.data.action.type];
+    if (!request.user || !allowedRoles.includes(request.user.role)) {
+      throw new ForbiddenError(`Requires one of: ${allowedRoles.join(', ')}`);
+    }
 
-      return syncAction(parsed.data);
-    },
-  );
+    return syncAction(parsed.data);
+  });
 
-  app.get(
-    '/api/v1/sync/conflicts',
-    { preHandler: requireRole('Owner', 'Manager') },
-    async () => ({ conflicts: listConflicts() }),
-  );
+  app.get('/api/v1/sync/conflicts', { preHandler: requireRole('Owner', 'Manager') }, async () => ({
+    conflicts: listConflicts(),
+  }));
 }

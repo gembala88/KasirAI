@@ -156,7 +156,7 @@ Integration, Payments, Dashboard & Owner Analytics).
   `systemInstruction`; the OpenAI-compatible client prepends a `system`
   message) rather than string-concatenated into the prompt. The model
   always answers with one JSON envelope, `{"reply": ..., "action": null |
-  {...}}`; native LLM function-calling isn't used since the Phase 4
+{...}}`; native LLM function-calling isn't used since the Phase 4
   provider abstraction doesn't carry tool schemas — a documented scope
   simplification, not an oversight.
 - `application/conversation.ts` — `handleInboundMessage` runs up to two AI
@@ -166,18 +166,18 @@ Integration, Payments, Dashboard & Owner Analytics).
   `system_data` so the final reply is grounded, never guessed. Every
   fact-shaped action result the model can see is real — including
   `check_stock`'s `{found: false}` vs `{found: true, matches: [...,
-  {stockQty: 0}]}` distinction, added after live testing showed a
+{stockQty: 0}]}` distinction, added after live testing showed a
   small model conflating "no such product" with "out of stock" when both
   just looked like an empty/zero-quantity result.
 - 7 conversation actions, each routed through the module that owns that
   data (never straight to ERPNext from `whatsapp`): `check_stock` /
   `check_price` (sales-pos), `propose_sales_order` (ai-gateway's Phase 4
-  propose→confirm validated-action layer — proposed *and* confirmed in the
+  propose→confirm validated-action layer — proposed _and_ confirmed in the
   same turn once the model judges the request unambiguous, unlike the
   AI Gateway's own two-call HTTP endpoints), `get_order_status` /
   `cancel_order` (new `ai-gateway/application/orders.ts`), and
   `get_purchase_history` (customer-membership).
-- QRIS payment flow (§7): converts a confirmed Sales Order into a *draft*
+- QRIS payment flow (§7): converts a confirmed Sales Order into a _draft_
   Sales Invoice (`sales-pos/application/transactions.ts`'s
   `createInvoiceFromSalesOrder`, `is_pos: 1` — found live that Frappe only
   honours the `payments` child table on submit when `is_pos` is set,
@@ -225,14 +225,14 @@ Integration, Payments, Dashboard & Owner Analytics).
   QRIS confirmation stays as-is until then.
 - `whatsapp/domain/index.ts`'s `initiate_qris_payment` action is now the
   method-agnostic `initiate_payment`, taking `{orderName, method: "qris" |
-  "transfer" | "cod"}` — same underlying draft-invoice mechanics for all
+"transfer" | "cod"}` — same underlying draft-invoice mechanics for all
   three, different customer-facing instructions
   (`application/actions.ts`): QRIS sends the static image if configured,
   Transfer sends the real bank details (`BANK_TRANSFER_BANK_NAME` /
   `_ACCOUNT_NUMBER` / `_ACCOUNT_NAME`) if configured, COD always sends a
   confirmation (no external config needed — it's just "pay the courier").
   Each method maps 1:1 to a real ERPNext Mode of Payment: qris→`QRIS`,
-  transfer→`Transfer`, cod→`Cash` (COD *is* cash, just collected by the
+  transfer→`Transfer`, cod→`Cash` (COD _is_ cash, just collected by the
   courier instead of at a till).
 - `POST /api/v1/whatsapp/orders/:invoiceName/confirm-payment` now takes a
   required `method` alongside `phoneNumber`, validated against the same
@@ -240,7 +240,7 @@ Integration, Payments, Dashboard & Owner Analytics).
   actually used.
 - Bug found and fixed via live testing (initial version of this phase):
   the payment-instruction send (QRIS image / bank details / COD text) was
-  inside the *same* try/catch as the draft-invoice creation, so a
+  inside the _same_ try/catch as the draft-invoice creation, so a
   WhatsApp send failure after a successful ERPNext write got mislabeled
   as `invoice_failed` — the exact masking bug already fixed once for
   `confirmPayment`, recurring here. This class of bug (independent
@@ -248,7 +248,7 @@ Integration, Payments, Dashboard & Owner Analytics).
   payment-adjacent endpoint.
 - **Payment-detail hardening** (`application/payment-reply.ts`) —
   structural, not prompt-level. Live testing found the model can pick the
-  *wrong* action for a payment request (e.g. `get_order_status` instead
+  _wrong_ action for a payment request (e.g. `get_order_status` instead
   of `initiate_payment`) and then invent account details in its freeform
   reply anyway; a stronger persona-prompt example reduced how often this
   happened but doesn't prevent it, and the cost of failure (a customer
@@ -258,7 +258,7 @@ Integration, Payments, Dashboard & Owner Analytics).
   - `actions.ts`'s `initiate_payment` case no longer sends any WhatsApp
     message itself — it only creates the invoice and returns real facts
     (`invoiceName`, `grandTotal`, `method`).
-  - `conversation.ts` is now the *only* place a payment-instruction
+  - `conversation.ts` is now the _only_ place a payment-instruction
     reply is composed. Whenever this turn's action really was a
     successful `initiate_payment`, the customer-facing reply is always
     `buildPaymentInstructionReply(result)` — assembled from the real
@@ -307,7 +307,7 @@ Integration, Payments, Dashboard & Owner Analytics).
   real UI for `apps/api`'s data. Three views behind a tab bar: Ringkasan
   (Overview), Tanya Hermes (owner chat), Konfirmasi Pembayaran (the real
   UI for Phase 5/6's "API endpoint only, no UI" confirm-payment decision
-  — that decision was for *that* phase, not permanent). Dark mode by
+  — that decision was for _that_ phase, not permanent). Dark mode by
   default with a persisted light-mode toggle (`localStorage`), per §9.
   No auth/RBAC yet — `apps/api`'s `auth` module is still Phase 0's
   placeholder, so every dashboard view is unauthenticated for now; not
@@ -323,7 +323,7 @@ Integration, Payments, Dashboard & Owner Analytics).
   Real bug found and fixed via live testing: Sales Invoice Item's
   `gross_profit`/`valuation_rate` fields are **not** reliably populated
   on a plain document fetch (only ever confirmed populated on a Sales
-  *Order* item, which is a live projection, not the actual posted cost)
+  _Order_ item, which is a live projection, not the actual posted cost)
   — profit silently came out as `0` despite real revenue. Fixed by
   computing COGS from `Stock Ledger Entry.stock_value_difference`
   instead, the authoritative source, confirmed against a real invoice's
@@ -406,7 +406,7 @@ Integration, Payments, Dashboard & Owner Analytics).
   running server (not just `app.inject`): a curl loop of 12 wrong-password
   login attempts returned `401` × 10 then `429` × 2, with a clean JSON
   body (`{"error":"CLIENT_ERROR","message":"Rate limit exceeded, retry in
-  15 minutes"}`) rather than a stack-trace leak; an ordinary unauthenticated
+15 minutes"}`) rather than a stack-trace leak; an ordinary unauthenticated
   request elsewhere still returned a normal `401`, confirming the fix
   didn't disturb existing error handling.
 - **Retry/circuit-breaker audit across all external calls.** Inventory:
@@ -474,7 +474,7 @@ Integration, Payments, Dashboard & Owner Analytics).
   of how many cores the dev machine actually has — otherwise a load test
   on bigger hardware would just hide the real contention. New reusable
   `apps/api/scripts/load-test.ts` (`npm run load-test --workspace=apps/api
-  -- <email> <password>`) drives real HTTP traffic at the real running
+-- <email> <password>`) drives real HTTP traffic at the real running
   API + capped ERPNext stack across three scenarios sized to how a single
   small store actually uses this system, not an arbitrary stress number:
   product search at 20 connections (the highest-frequency real action,
@@ -556,22 +556,22 @@ Integration, Payments, Dashboard & Owner Analytics).
     consistency and to cap unbounded input). Added a zod schema
     (`q`/`customer_tier`, both capped at a sane max length);
     live-verified an over-long `q` now gets a clean `400
-    VALIDATION_ERROR` instead of silently reaching ERPNext.
-  Also hardened `apps/api/src/modules/auth/infrastructure/jwt.ts` to pass
-  an explicit `algorithms: ['HS256']` allowlist to `jwt.verify` (and
-  `algorithm: 'HS256'` to `jwt.sign`) — defense in depth against
-  algorithm-confusion attacks, even though this app only ever signs with
-  HS256 today.
-  One finding reviewed and *not* changed:
-  `customer-membership`'s `/customers/:id` family lets any authenticated
-  Cashier/Manager/Owner look up any customer's piutang/purchase history
-  by ID with no additional ownership check. Flagged by the audit as an
-  IDOR pattern in general, but this is a single-store internal-staff ERP,
-  not a multi-tenant app — every role gated onto this route is a trusted
-  employee who legitimately needs to pull up any customer's balance to
-  process a sale, the same as they could by opening the physical ledger.
-  Documented here as a reviewed-and-accepted design choice rather than
-  silently dropped.
+VALIDATION_ERROR` instead of silently reaching ERPNext.
+    Also hardened `apps/api/src/modules/auth/infrastructure/jwt.ts` to pass
+    an explicit `algorithms: ['HS256']` allowlist to `jwt.verify` (and
+    `algorithm: 'HS256'` to `jwt.sign`) — defense in depth against
+    algorithm-confusion attacks, even though this app only ever signs with
+    HS256 today.
+    One finding reviewed and _not_ changed:
+    `customer-membership`'s `/customers/:id` family lets any authenticated
+    Cashier/Manager/Owner look up any customer's piutang/purchase history
+    by ID with no additional ownership check. Flagged by the audit as an
+    IDOR pattern in general, but this is a single-store internal-staff ERP,
+    not a multi-tenant app — every role gated onto this route is a trusted
+    employee who legitimately needs to pull up any customer's balance to
+    process a sale, the same as they could by opening the physical ledger.
+    Documented here as a reviewed-and-accepted design choice rather than
+    silently dropped.
 
 **Pre-Phase 9: POS refinements (cashier checkout screen, receipt printing).**
 
@@ -596,7 +596,7 @@ for real, not defer it again.
 - **Barcode-scan quantity merge (item 1)** — fixed in two places, not
   one: `createTransaction` (`apps/api/src/modules/sales-pos/application/transactions.ts`)
   now merges cart lines with the same item code + warehouse by summing
-  quantity before creating the ERPNext Sales Invoice, so *any* caller gets
+  quantity before creating the ERPNext Sales Invoice, so _any_ caller gets
   this guarantee, not just the one UI; the Kasir screen also merges
   client-side so the cart visibly increments the instant the same item is
   scanned twice, not after a round trip. Live-verified through the actual
@@ -656,7 +656,7 @@ for real, not defer it again.
 - All of the above live-verified together in one real session: logged in
   as Cashier through the actual UI, scanned a real item twice (merged to
   qty 2), paid by Cash, confirmed the real ERPNext invoice (`status:
-  Paid`, `docstatus: 1`, correct `paid_amount`), then cancelled it again
+Paid`, `docstatus: 1`, correct `paid_amount`), then cancelled it again
   afterward so the test sale doesn't linger in the real books (`report-dashboard`'s
   queries already filter on `docstatus = 1`, so a cancelled invoice
   wouldn't have polluted real figures regardless — confirmed, not
@@ -690,7 +690,7 @@ default, never explicitly configured. All of it built for real this pass:
   then checks the UUID against `offline_sync_queue` — already `Synced` or
   `Conflict` means skip, never re-apply, exactly §15.2's wording. A
   `pos-sale` action is one offline action but two ERPNext writes (create
-  invoice, then pay it) — the invoice's name is persisted as a *partial*
+  invoice, then pay it) — the invoice's name is persisted as a _partial_
   `erpnext_reference` the moment it's known, before payment is even
   attempted, so a retry after a partial failure resumes from the existing
   invoice instead of creating a second one. `GET /api/v1/sync/conflicts`
@@ -713,10 +713,10 @@ default, never explicitly configured. All of it built for real this pass:
   drift apart), a client timestamp, and the full six-state status
   (`Pending`/`Processing`/`Synced`/`Failed`/`Retry`/`Conflict`).
   New unified `lib/sync.ts`: every action — online or not — is written
-  to the local queue *first*, then an immediate sync attempt is made.
+  to the local queue _first_, then an immediate sync attempt is made.
   This closes a real gap the old "try direct submit, catch → enqueue"
   pattern had: if a request reached the server and was applied but the
-  *response* never made it back (closed tab, connection drop right at the
+  _response_ never made it back (closed tab, connection drop right at the
   end), the old code would think it failed and retry, which — without
   server-side idempotency — would have silently created a duplicate sale
   or stock movement. Now every attempt, first or retried, carries the
@@ -750,8 +750,8 @@ default, never explicitly configured. All of it built for real this pass:
   the dead server). Restarted the real API server, clicked "Sinkron
   Sekarang", and confirmed against real ERPNext: **exactly one** new
   invoice (`status: Paid`, `docstatus: 1`) — not zero, not duplicated.
-  Then, for the strongest possible proof, manually replayed the *exact
-  same* sync request via curl (identical UUID) against the real running
+  Then, for the strongest possible proof, manually replayed the _exact
+  same_ sync request via curl (identical UUID) against the real running
   server: response came back `"skipped": true` with the same cached
   invoice, and ERPNext still showed exactly one invoice afterward, not
   two. The Conflict path was verified the same way — a real
@@ -826,12 +826,12 @@ prerequisite.
 - **Real backup automation, not just a script that exists:** a systemd
   timer (`hermes-backup.timer`, daily at 02:00 + jitter) runs
   `infra/scripts/backup.sh`, which uses Frappe's own `bench backup
-  --with-files` (not a hand-rolled mysqldump — bench's own command is
+--with-files` (not a hand-rolled mysqldump — bench's own command is
   what correctly captures the site's encryption key alongside the DB
   dump; a DB-only backup without it would be a real file that's
   practically useless on restore) with daily/weekly/monthly retention
   tiers. Live-verified two ways: (1) manually started the actual systemd
-  *service* the timer invokes (`systemctl start hermes-backup.service`)
+  _service_ the timer invokes (`systemctl start hermes-backup.service`)
   and confirmed via `journalctl` it completed with `status=0/SUCCESS`,
   not just that the shell script works when run by hand; (2) ran
   `infra/scripts/restore.sh --verify-only` against the real backup file
@@ -847,7 +847,7 @@ prerequisite.
   (`ufw` inactive, `iptables` INPUT policy `ACCEPT`) isn't the cause.
   This is infrastructure-level, outside SSH's reach — opening it requires
   the VPS provider's own console/API. Everything below this point is
-  therefore verified working *from inside the VPS only* (via SSH +
+  therefore verified working _from inside the VPS only_ (via SSH +
   `curl localhost`), which is genuine, real evidence of the application
   stack's correctness, but is not the same as public reachability.
 - **HTTPS not yet issued** — certbot is installed and confirmed working
@@ -866,7 +866,7 @@ prerequisite.
   `WHATSAPP_WEBHOOK_VERIFY_TOKEN`, `WHATSAPP_APP_SECRET`) are empty both
   locally and on the VPS — this project has never had a real Meta
   Business API connection at any point, in any earlier phase. The
-  webhook *endpoint* is deployed and its signature verification is
+  webhook _endpoint_ is deployed and its signature verification is
   confirmed live (see the Nginx bullet above), but no real Meta traffic
   has ever reached it. Getting real credentials and configuring Meta's
   app dashboard (with a matching verify token, and a reachable HTTPS
@@ -905,7 +905,7 @@ one unblocked the next:
    of under its actual served path (`/scan/assets/...`). A request for
    `/scan/assets/...` doesn't match Nginx's `/scan/` location, so it fell
    through to `apps/dashboard`'s location block and silently got served
-   *dashboard's* HTML instead — the page returned 200 OK but React never
+   _dashboard's_ HTML instead — the page returned 200 OK but React never
    mounted, no console error. Fixed with `base: '/scan/'` in
    `vite.config.ts`, conditional on the build command so local dev
    (served at its own root) is unaffected.
@@ -913,7 +913,7 @@ one unblocked the next:
    apps generate their own Workbox service worker via `vite-plugin-pwa`.
    Dashboard's registers at scope `/` (correct — it's genuinely served at
    the domain root), but Workbox's `generateSW` mode auto-adds a
-   `NavigationRoute` that serves that app's own `index.html` for *every*
+   `NavigationRoute` that serves that app's own `index.html` for _every_
    navigation within its scope — and `/` technically covers `/scan/` too.
    Once active, this permanently hijacked navigation to `/scan/` for any
    device that had ever loaded the dashboard even once, before pwa-scanner's
@@ -938,7 +938,7 @@ network requests showing `200 OK` on `/api/v1/auth/login`, not a cached
 result.
 
 **Camera-based barcode scanning** (spec §1.3 FR-7, §14 — reserved for
-warehouse/stock-opname use, *not* the Kasir checkout counter, which keeps
+warehouse/stock-opname use, _not_ the Kasir checkout counter, which keeps
 its USB/Bluetooth keyboard-emulation text input per §14's hardware
 recommendation): added to `WarehouseScan.tsx` only. Prefers the native
 `BarcodeDetector` API (Chrome/Edge on Android) and falls back to

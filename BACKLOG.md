@@ -43,7 +43,7 @@ turning that into a guided, mostly-automated tool:
   fact), Nginx + certbot setup, systemd backup timer installation
   (`infra/systemd/`, added 2026-08-05), and WhatsApp webhook
   registration reminders.
-- Consider whether the WhatsApp/AI-provider *account creation* steps
+- Consider whether the WhatsApp/AI-provider _account creation_ steps
   (which happen on external dashboards, not in this codebase — creating
   the Meta Business App itself, generating an AI provider key) can be
   reduced to a guided checklist with direct deep-links even if they

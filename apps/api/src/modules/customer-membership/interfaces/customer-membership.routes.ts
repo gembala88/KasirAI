@@ -55,17 +55,13 @@ export function registerCustomerMembershipRoutes(app: FastifyInstance): void {
     async () => triggerReminderCheck(),
   );
 
-  app.post(
-    '/api/v1/customers',
-    { preHandler: requireRole(...CUSTOMER_ROLES) },
-    async (request) => {
-      const parsed = createCustomerSchema.safeParse(request.body);
-      if (!parsed.success) {
-        throw new ValidationError(parsed.error.issues.map((i) => i.message).join('; '));
-      }
-      return createCustomer(parsed.data);
-    },
-  );
+  app.post('/api/v1/customers', { preHandler: requireRole(...CUSTOMER_ROLES) }, async (request) => {
+    const parsed = createCustomerSchema.safeParse(request.body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.issues.map((i) => i.message).join('; '));
+    }
+    return createCustomer(parsed.data);
+  });
 
   app.get<{ Params: { id: string } }>(
     '/api/v1/customers/:id',

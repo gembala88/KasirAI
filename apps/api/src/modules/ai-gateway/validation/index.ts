@@ -14,8 +14,16 @@
  */
 import { env } from '../../../config/env.js';
 import { erpNextClient } from '../../../shared/erpnext-client/index.js';
-import { getStockQty, lookupItemPrice, resolvePriceListForTier } from '../../../shared/erpnext-queries/index.js';
-import type { SalesOrderActionPayload, ValidationIssue, ValidationResult } from '../domain/index.js';
+import {
+  getStockQty,
+  lookupItemPrice,
+  resolvePriceListForTier,
+} from '../../../shared/erpnext-queries/index.js';
+import type {
+  SalesOrderActionPayload,
+  ValidationIssue,
+  ValidationResult,
+} from '../domain/index.js';
 
 interface ItemRecord {
   min_order_qty: number;

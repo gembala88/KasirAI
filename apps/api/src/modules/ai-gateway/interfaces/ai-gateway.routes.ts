@@ -37,17 +37,13 @@ export function registerAiGatewayRoutes(app: FastifyInstance): void {
   // pass-through to the AI provider (that was Phase 4's proof-of-life
   // version of this same endpoint; see report-dashboard/application/
   // owner-chat.ts for the real implementation).
-  app.post(
-    '/api/v1/ai/query',
-    { preHandler: requireRole('Owner', 'Manager') },
-    async (request) => {
-      const parsed = querySchema.safeParse(request.body);
-      if (!parsed.success) {
-        throw new ValidationError(parsed.error.issues.map((i) => i.message).join('; '));
-      }
-      return answerOwnerQuestion(parsed.data.prompt);
-    },
-  );
+  app.post('/api/v1/ai/query', { preHandler: requireRole('Owner', 'Manager') }, async (request) => {
+    const parsed = querySchema.safeParse(request.body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.issues.map((i) => i.message).join('; '));
+    }
+    return answerOwnerQuestion(parsed.data.prompt);
+  });
 
   app.post(
     '/api/v1/ai/action/propose',

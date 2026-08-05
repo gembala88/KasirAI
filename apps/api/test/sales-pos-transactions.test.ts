@@ -23,16 +23,17 @@ function mockPriceLookup(): void {
     if (doctype === 'Item Price') return Promise.resolve([PRICE_LIST]);
     return Promise.resolve([]);
   });
-  erpNextClientMock.create.mockImplementation((_doctype: string, payload: Record<string, unknown>) =>
-    Promise.resolve({
-      name: 'ACC-SINV-TEST',
-      status: 'Draft',
-      customer: payload.customer,
-      grand_total: 0,
-      paid_amount: 0,
-      outstanding_amount: 0,
-      items: payload.items,
-    }),
+  erpNextClientMock.create.mockImplementation(
+    (_doctype: string, payload: Record<string, unknown>) =>
+      Promise.resolve({
+        name: 'ACC-SINV-TEST',
+        status: 'Draft',
+        customer: payload.customer,
+        grand_total: 0,
+        paid_amount: 0,
+        outstanding_amount: 0,
+        items: payload.items,
+      }),
   );
 }
 
@@ -86,7 +87,11 @@ describe('createTransaction — duplicate barcode scan merging', () => {
     const createCall = erpNextClientMock.create.mock.calls.find(
       (call) => call[0] === 'Sales Invoice',
     );
-    const items = createCall?.[1].items as Array<{ item_code: string; warehouse: string; qty: number }>;
+    const items = createCall?.[1].items as Array<{
+      item_code: string;
+      warehouse: string;
+      qty: number;
+    }>;
 
     expect(items).toHaveLength(2);
     expect(items.every((i) => i.qty === 1)).toBe(true);

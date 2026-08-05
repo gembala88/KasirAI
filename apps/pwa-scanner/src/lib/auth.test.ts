@@ -1,11 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  clearAuth,
-  getStoredAuth,
-  notifyAuthRequired,
-  setOnAuthRequired,
-  storeAuth,
-} from './auth';
+import { clearAuth, getStoredAuth, notifyAuthRequired, setOnAuthRequired, storeAuth } from './auth';
 
 // jsdom isn't configured for this project (no DOM-dependent components are
 // unit tested), so localStorage is stubbed minimally here — just enough
@@ -27,7 +21,11 @@ describe('auth storage', () => {
     const auth = {
       accessToken: 'a.b.c',
       refreshToken: 'd.e.f',
-      user: { email: 'warehouse@hermes.local', fullName: 'Warehouse', role: 'Warehouse Staff' as const },
+      user: {
+        email: 'warehouse@hermes.local',
+        fullName: 'Warehouse',
+        role: 'Warehouse Staff' as const,
+      },
     };
     storeAuth(auth);
     expect(getStoredAuth()).toEqual(auth);

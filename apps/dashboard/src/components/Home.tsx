@@ -24,27 +24,87 @@ interface MenuItem {
 
 const MENU_BY_ROLE: Record<AuthUser['role'], MenuItem[]> = {
   Owner: [
-    { id: 'overview', label: 'Ringkasan', subtitle: 'Omzet, profit, produk terlaris', icon: <IconReportMoney /> },
-    { id: 'chat', label: 'Tanya Hermes', subtitle: 'Tanya jawab data toko', icon: <IconMessageCircle /> },
-    { id: 'payments', label: 'Konfirmasi Pembayaran', subtitle: 'Verifikasi pembayaran masuk', icon: <IconCreditCard /> },
-    { id: 'sync-conflicts', label: 'Konflik Sinkron', subtitle: 'Tinjau transaksi bermasalah', icon: <IconAlertTriangle /> },
+    {
+      id: 'overview',
+      label: 'Ringkasan',
+      subtitle: 'Omzet, profit, produk terlaris',
+      icon: <IconReportMoney />,
+    },
+    {
+      id: 'chat',
+      label: 'Tanya Hermes',
+      subtitle: 'Tanya jawab data toko',
+      icon: <IconMessageCircle />,
+    },
+    {
+      id: 'payments',
+      label: 'Konfirmasi Pembayaran',
+      subtitle: 'Verifikasi pembayaran masuk',
+      icon: <IconCreditCard />,
+    },
+    {
+      id: 'sync-conflicts',
+      label: 'Konflik Sinkron',
+      subtitle: 'Tinjau transaksi bermasalah',
+      icon: <IconAlertTriangle />,
+    },
     { id: 'kasir', label: 'Kasir', subtitle: 'Checkout & pembayaran', icon: <IconShoppingCart /> },
-    { id: 'gudang', label: 'Gudang', subtitle: 'Stok, transfer, scan barcode', icon: <IconBoxSeam /> },
+    {
+      id: 'gudang',
+      label: 'Gudang',
+      subtitle: 'Stok, transfer, scan barcode',
+      icon: <IconBoxSeam />,
+    },
   ],
   Manager: [
-    { id: 'overview', label: 'Ringkasan', subtitle: 'Omzet, profit, produk terlaris', icon: <IconReportMoney /> },
-    { id: 'chat', label: 'Tanya Hermes', subtitle: 'Tanya jawab data toko', icon: <IconMessageCircle /> },
-    { id: 'payments', label: 'Konfirmasi Pembayaran', subtitle: 'Verifikasi pembayaran masuk', icon: <IconCreditCard /> },
-    { id: 'sync-conflicts', label: 'Konflik Sinkron', subtitle: 'Tinjau transaksi bermasalah', icon: <IconAlertTriangle /> },
+    {
+      id: 'overview',
+      label: 'Ringkasan',
+      subtitle: 'Omzet, profit, produk terlaris',
+      icon: <IconReportMoney />,
+    },
+    {
+      id: 'chat',
+      label: 'Tanya Hermes',
+      subtitle: 'Tanya jawab data toko',
+      icon: <IconMessageCircle />,
+    },
+    {
+      id: 'payments',
+      label: 'Konfirmasi Pembayaran',
+      subtitle: 'Verifikasi pembayaran masuk',
+      icon: <IconCreditCard />,
+    },
+    {
+      id: 'sync-conflicts',
+      label: 'Konflik Sinkron',
+      subtitle: 'Tinjau transaksi bermasalah',
+      icon: <IconAlertTriangle />,
+    },
     { id: 'kasir', label: 'Kasir', subtitle: 'Checkout & pembayaran', icon: <IconShoppingCart /> },
-    { id: 'gudang', label: 'Gudang', subtitle: 'Stok, transfer, scan barcode', icon: <IconBoxSeam /> },
+    {
+      id: 'gudang',
+      label: 'Gudang',
+      subtitle: 'Stok, transfer, scan barcode',
+      icon: <IconBoxSeam />,
+    },
   ],
   Cashier: [
-    { id: 'payments', label: 'Konfirmasi Pembayaran', subtitle: 'Verifikasi pembayaran masuk', icon: <IconCreditCard /> },
+    {
+      id: 'payments',
+      label: 'Konfirmasi Pembayaran',
+      subtitle: 'Verifikasi pembayaran masuk',
+      icon: <IconCreditCard />,
+    },
     { id: 'kasir', label: 'Kasir', subtitle: 'Checkout & pembayaran', icon: <IconShoppingCart /> },
   ],
   'Warehouse Staff': [
-    { id: 'gudang', label: 'Gudang', subtitle: 'Stok, transfer, scan barcode', icon: <IconBoxSeam /> },
+    {
+      id: 'gudang',
+      label: 'Gudang',
+      subtitle: 'Stok, transfer, scan barcode',
+      icon: <IconBoxSeam />,
+    },
   ],
 };
 
@@ -114,12 +174,16 @@ export default function Home({
             <>
               <div className="card stat-card">
                 <IconCash size={22} className="stat-card-icon" />
-                <span className="stat-card-value">{revenue === null ? '—' : formatRupiah(revenue)}</span>
+                <span className="stat-card-value">
+                  {revenue === null ? '—' : formatRupiah(revenue)}
+                </span>
                 <span className="stat-card-label">Omzet Hari Ini</span>
               </div>
               <div className="card stat-card">
                 <IconReportMoney size={22} className="stat-card-icon" />
-                <span className="stat-card-value">{profit === null ? '—' : formatRupiah(profit)}</span>
+                <span className="stat-card-value">
+                  {profit === null ? '—' : formatRupiah(profit)}
+                </span>
                 <span className="stat-card-label">Profit Hari Ini</span>
               </div>
               <div className="card stat-card">

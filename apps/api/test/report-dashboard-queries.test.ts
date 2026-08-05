@@ -19,9 +19,8 @@ vi.mock('../src/modules/inventory/interfaces/index.js', () => ({
   listNearExpiry: listNearExpiryMock,
 }));
 
-const { getDashboardSummary, getSalesReport } = await import(
-  '../src/modules/report-dashboard/application/queries.js'
-);
+const { getDashboardSummary, getSalesReport } =
+  await import('../src/modules/report-dashboard/application/queries.js');
 
 const TODAY = new Date().toISOString().slice(0, 10);
 const TEN_DAYS_AGO = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -65,8 +64,12 @@ const STOCK_VALUE_DIFFERENCE_BY_INVOICE: Record<string, number> = {
 function mockSalesInvoiceQueries(): void {
   erpNextClientMock.list.mockImplementation((doctype: string, params: { filters: unknown[][] }) => {
     if (doctype === 'Sales Invoice') {
-      const fromDate = params.filters.find((f) => f[0] === 'posting_date' && f[1] === '>=')?.[2] as string;
-      const toDate = params.filters.find((f) => f[0] === 'posting_date' && f[1] === '<=')?.[2] as string;
+      const fromDate = params.filters.find(
+        (f) => f[0] === 'posting_date' && f[1] === '>=',
+      )?.[2] as string;
+      const toDate = params.filters.find(
+        (f) => f[0] === 'posting_date' && f[1] === '<=',
+      )?.[2] as string;
       // "today" call: from === to === today. "window" call: from is well before today.
       const names = fromDate === toDate ? ['INV-TODAY'] : ['INV-TODAY', 'INV-OLD-A', 'INV-OLD-B'];
       return Promise.resolve(names.map((name) => ({ name })));
@@ -100,8 +103,18 @@ function mockSalesInvoiceQueries(): void {
 describe('getDashboardSummary', () => {
   it('computes today vs 30-day-window figures separately from real invoice data, never fabricated', async () => {
     mockSalesInvoiceQueries();
-    listLowStockMock.mockResolvedValue([{ itemCode: 'ITEM-Z', itemName: 'Barang Z', warehouse: 'WH', actualQty: 2, threshold: 5 }]);
-    listNearExpiryMock.mockResolvedValue([{ batchId: 'B1', itemCode: 'ITEM-Z', expiryDate: '2026-09-01', daysUntilExpiry: 10, batchQty: 3 }]);
+    listLowStockMock.mockResolvedValue([
+      { itemCode: 'ITEM-Z', itemName: 'Barang Z', warehouse: 'WH', actualQty: 2, threshold: 5 },
+    ]);
+    listNearExpiryMock.mockResolvedValue([
+      {
+        batchId: 'B1',
+        itemCode: 'ITEM-Z',
+        expiryDate: '2026-09-01',
+        daysUntilExpiry: 10,
+        batchQty: 3,
+      },
+    ]);
 
     const summary = await getDashboardSummary();
 
@@ -109,21 +122,39 @@ describe('getDashboardSummary', () => {
     expect(summary.today).toEqual({ revenue: 20000, profit: 4000, invoiceCount: 1 });
 
     // Window (30d): all 3 invoices. Best seller by revenue: ITEM-X (10000+20000=30000) over ITEM-Y (5000).
-    expect(summary.bestSellers[0]).toMatchObject({ itemCode: 'ITEM-X', qtySold: 3, revenue: 30000 });
+    expect(summary.bestSellers[0]).toMatchObject({
+      itemCode: 'ITEM-X',
+      qtySold: 3,
+      revenue: 30000,
+    });
     expect(summary.worstSellers[0]).toMatchObject({ itemCode: 'ITEM-Y', revenue: 5000 });
 
     // Most active customer: CUST-A has 2 invoices (today + old-a) vs CUST-B's 1.
-    expect(summary.mostActiveCustomer).toMatchObject({ customer: 'CUST-A', invoiceCount: 2, totalSpent: 25000 });
+    expect(summary.mostActiveCustomer).toMatchObject({
+      customer: 'CUST-A',
+      invoiceCount: 2,
+      totalSpent: 25000,
+    });
 
     // Best supplier: SUP-A total 60000 (50000+10000) beats SUP-B's 30000.
-    expect(summary.bestSupplier).toEqual({ supplier: 'SUP-A', supplierName: 'Pemasok A', totalPurchased: 60000 });
+    expect(summary.bestSupplier).toEqual({
+      supplier: 'SUP-A',
+      supplierName: 'Pemasok A',
+      totalPurchased: 60000,
+    });
 
     // Real inventory-module data, passed through untouched.
     expect(summary.nearOutOfStock).toEqual([
       { itemCode: 'ITEM-Z', itemName: 'Barang Z', warehouse: 'WH', actualQty: 2, threshold: 5 },
     ]);
     expect(summary.expiringItems).toEqual([
-      { batchId: 'B1', itemCode: 'ITEM-Z', expiryDate: '2026-09-01', daysUntilExpiry: 10, batchQty: 3 },
+      {
+        batchId: 'B1',
+        itemCode: 'ITEM-Z',
+        expiryDate: '2026-09-01',
+        daysUntilExpiry: 10,
+        batchQty: 3,
+      },
     ]);
   });
 

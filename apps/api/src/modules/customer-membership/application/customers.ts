@@ -51,7 +51,14 @@ export async function getCustomerProfile(customerId: string): Promise<CustomerPr
 export async function findCustomerByMobile(mobileNo: string): Promise<CustomerProfile | null> {
   const [doc] = await erpNextClient.list<CustomerDoc>('Customer', {
     filters: [['mobile_no', '=', mobileNo]],
-    fields: ['name', 'customer_name', 'customer_tier', 'credit_limit', 'payment_term_days', 'mobile_no'],
+    fields: [
+      'name',
+      'customer_name',
+      'customer_tier',
+      'credit_limit',
+      'payment_term_days',
+      'mobile_no',
+    ],
     limit_page_length: '1',
   });
   return doc ? toProfile(doc) : null;

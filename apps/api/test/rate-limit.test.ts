@@ -17,7 +17,6 @@ const { buildApp } = await import('../src/main.js');
 const app = await buildApp();
 
 describe('POST /api/v1/auth/login rate limiting', () => {
-
   afterAll(async () => {
     await app.close();
   });

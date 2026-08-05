@@ -48,8 +48,8 @@ export default function SyncConflicts() {
     <div className="sync-conflicts">
       <p className="hint" style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
         <IconAlertTriangle size={16} style={{ color: 'var(--color-warning)', flexShrink: 0 }} />
-        Transaksi offline yang gagal disinkron karena konflik nyata (mis. stok akan menjadi
-        negatif) — tidak diterapkan otomatis, perlu ditinjau manual (§15.2).
+        Transaksi offline yang gagal disinkron karena konflik nyata (mis. stok akan menjadi negatif)
+        — tidak diterapkan otomatis, perlu ditinjau manual (§15.2).
       </p>
       {error && <p className="error-box">{error}</p>}
 

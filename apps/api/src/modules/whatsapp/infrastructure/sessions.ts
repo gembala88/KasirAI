@@ -16,7 +16,9 @@ interface SessionRow {
 export function getOrCreateSession(phoneNumber: string): WhatsAppSession {
   const db = getDb();
   const existing = db
-    .prepare('SELECT phone_number, customer_id, state FROM whatsapp_sessions WHERE phone_number = ?')
+    .prepare(
+      'SELECT phone_number, customer_id, state FROM whatsapp_sessions WHERE phone_number = ?',
+    )
     .get(phoneNumber) as SessionRow | undefined;
 
   if (existing) {
@@ -74,13 +76,11 @@ export function getRecentConversation(phoneNumber: string, limit: number): Conve
     )
     .all(phoneNumber, limit) as unknown as ConversationLogRow[];
 
-  return rows
-    .reverse()
-    .map((row) => ({
-      role: row.role as ConversationLogEntry['role'],
-      content: row.content,
-      createdAt: row.created_at,
-    }));
+  return rows.reverse().map((row) => ({
+    role: row.role as ConversationLogEntry['role'],
+    content: row.content,
+    createdAt: row.created_at,
+  }));
 }
 
 export function logNotification(
@@ -94,5 +94,13 @@ export function logNotification(
     .prepare(
       'INSERT INTO notification_log (id, phone_number, direction, message_type, content, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
     )
-    .run(randomUUID(), phoneNumber, direction, messageType, content, status, new Date().toISOString());
+    .run(
+      randomUUID(),
+      phoneNumber,
+      direction,
+      messageType,
+      content,
+      status,
+      new Date().toISOString(),
+    );
 }

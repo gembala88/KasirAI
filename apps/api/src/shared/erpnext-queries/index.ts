@@ -24,10 +24,7 @@ interface ItemPriceRecord {
   price_list_rate: number;
 }
 
-export async function lookupItemPrice(
-  itemCode: string,
-  priceList: string,
-): Promise<number | null> {
+export async function lookupItemPrice(itemCode: string, priceList: string): Promise<number | null> {
   const prices = await erpNextClient.list<ItemPriceRecord>('Item Price', {
     filters: [
       ['item_code', '=', itemCode],

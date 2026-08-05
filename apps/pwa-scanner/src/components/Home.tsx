@@ -23,20 +23,50 @@ interface MenuItem {
 const MENU_BY_ROLE: Record<AuthUser['role'], MenuItem[]> = {
   Owner: [
     { id: 'kasir', label: 'Kasir', subtitle: 'Checkout & pembayaran', icon: <IconShoppingCart /> },
-    { id: 'warehouse', label: 'Gudang', subtitle: 'Stok, transfer, scan barcode', icon: <IconBoxSeam /> },
-    { id: 'dashboard', label: 'Dashboard', subtitle: 'Laporan & analitik', icon: <IconLayoutDashboard /> },
+    {
+      id: 'warehouse',
+      label: 'Gudang',
+      subtitle: 'Stok, transfer, scan barcode',
+      icon: <IconBoxSeam />,
+    },
+    {
+      id: 'dashboard',
+      label: 'Dashboard',
+      subtitle: 'Laporan & analitik',
+      icon: <IconLayoutDashboard />,
+    },
   ],
   Manager: [
     { id: 'kasir', label: 'Kasir', subtitle: 'Checkout & pembayaran', icon: <IconShoppingCart /> },
-    { id: 'warehouse', label: 'Gudang', subtitle: 'Stok, transfer, scan barcode', icon: <IconBoxSeam /> },
-    { id: 'dashboard', label: 'Dashboard', subtitle: 'Laporan & analitik', icon: <IconLayoutDashboard /> },
+    {
+      id: 'warehouse',
+      label: 'Gudang',
+      subtitle: 'Stok, transfer, scan barcode',
+      icon: <IconBoxSeam />,
+    },
+    {
+      id: 'dashboard',
+      label: 'Dashboard',
+      subtitle: 'Laporan & analitik',
+      icon: <IconLayoutDashboard />,
+    },
   ],
   Cashier: [
     { id: 'kasir', label: 'Kasir', subtitle: 'Checkout & pembayaran', icon: <IconShoppingCart /> },
-    { id: 'dashboard', label: 'Dashboard', subtitle: 'Konfirmasi pembayaran', icon: <IconLayoutDashboard /> },
+    {
+      id: 'dashboard',
+      label: 'Dashboard',
+      subtitle: 'Konfirmasi pembayaran',
+      icon: <IconLayoutDashboard />,
+    },
   ],
   'Warehouse Staff': [
-    { id: 'warehouse', label: 'Gudang', subtitle: 'Stok, transfer, scan barcode', icon: <IconBoxSeam /> },
+    {
+      id: 'warehouse',
+      label: 'Gudang',
+      subtitle: 'Stok, transfer, scan barcode',
+      icon: <IconBoxSeam />,
+    },
   ],
 };
 
@@ -86,9 +116,17 @@ export default function Home({
         </div>
         <div className="card stat-card">
           {isOnline ? (
-            <IconWifi size={22} className="stat-card-icon" style={{ color: 'var(--color-success)' }} />
+            <IconWifi
+              size={22}
+              className="stat-card-icon"
+              style={{ color: 'var(--color-success)' }}
+            />
           ) : (
-            <IconWifiOff size={22} className="stat-card-icon" style={{ color: 'var(--color-warning)' }} />
+            <IconWifiOff
+              size={22}
+              className="stat-card-icon"
+              style={{ color: 'var(--color-warning)' }}
+            />
           )}
           <span className="stat-card-value">{isOnline ? 'Online' : 'Offline'}</span>
           <span className="stat-card-label">Status Koneksi</span>

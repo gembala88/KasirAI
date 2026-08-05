@@ -5,7 +5,10 @@ import {
   type ProviderPool,
 } from '../src/modules/ai-gateway/infrastructure/gateway.js';
 import type { KeyHealthStore } from '../src/modules/ai-gateway/infrastructure/key-rotation.js';
-import { AIProviderError, AIProviderRateLimitError } from '../src/modules/ai-gateway/providers/errors.js';
+import {
+  AIProviderError,
+  AIProviderRateLimitError,
+} from '../src/modules/ai-gateway/providers/errors.js';
 import type { AIProvider, AIResponse } from '../src/modules/ai-gateway/providers/types.js';
 
 /** In-memory KeyHealthStore fake — no Redis needed for these tests (CI has none). */

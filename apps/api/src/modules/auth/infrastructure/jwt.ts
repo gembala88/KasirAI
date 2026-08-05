@@ -20,7 +20,12 @@ interface HermesJwtPayload {
 }
 
 function sign(user: AuthUser, type: 'access' | 'refresh', expiresIn: string): string {
-  const payload: HermesJwtPayload = { sub: user.email, fullName: user.fullName, role: user.role, type };
+  const payload: HermesJwtPayload = {
+    sub: user.email,
+    fullName: user.fullName,
+    role: user.role,
+    type,
+  };
   const options: jwt.SignOptions = {
     algorithm: 'HS256',
     expiresIn: expiresIn as unknown as NonNullable<jwt.SignOptions['expiresIn']>,

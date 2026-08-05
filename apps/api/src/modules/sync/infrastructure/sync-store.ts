@@ -4,7 +4,12 @@
  * store (apps/api/src/modules/ai-gateway/application/actions.ts).
  */
 import { getDb } from '../../../shared/database/index.js';
-import type { OfflineAction, OfflineActionType, SyncQueueRow, SyncStatus } from '../domain/index.js';
+import type {
+  OfflineAction,
+  OfflineActionType,
+  SyncQueueRow,
+  SyncStatus,
+} from '../domain/index.js';
 
 interface Row {
   uuid: string;
@@ -38,8 +43,7 @@ function rowToQueueRow(row: Row): SyncQueueRow {
 
 export function findByUuid(uuid: string): SyncQueueRow | undefined {
   const row = getDb().prepare('SELECT * FROM offline_sync_queue WHERE uuid = ?').get(uuid) as
-    | Row
-    | undefined;
+    Row | undefined;
   return row ? rowToQueueRow(row) : undefined;
 }
 
@@ -56,12 +60,21 @@ export function insertProcessing(
         (uuid, action_type, content_hash, client_timestamp, status, payload, created_at)
        VALUES (?, ?, ?, ?, 'Processing', ?, ?)`,
     )
-    .run(uuid, actionType, contentHash, clientTimestamp, JSON.stringify(payload), new Date().toISOString());
+    .run(
+      uuid,
+      actionType,
+      contentHash,
+      clientTimestamp,
+      JSON.stringify(payload),
+      new Date().toISOString(),
+    );
 }
 
 export function markProcessing(uuid: string): void {
   getDb()
-    .prepare("UPDATE offline_sync_queue SET status = 'Processing', error_message = NULL WHERE uuid = ?")
+    .prepare(
+      "UPDATE offline_sync_queue SET status = 'Processing', error_message = NULL WHERE uuid = ?",
+    )
     .run(uuid);
 }
 

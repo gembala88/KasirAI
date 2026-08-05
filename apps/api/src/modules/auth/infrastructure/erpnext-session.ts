@@ -40,7 +40,9 @@ export async function verifyErpNextCredentials(
       body: new URLSearchParams({ usr: email, pwd: password }),
     });
   } catch (cause) {
-    throw new Error(`ERPNext login request failed: ${cause instanceof Error ? cause.message : String(cause)}`);
+    throw new Error(
+      `ERPNext login request failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+    );
   }
 
   if (response.status === 401 || response.status === 403) {

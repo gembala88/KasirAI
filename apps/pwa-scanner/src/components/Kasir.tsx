@@ -7,7 +7,12 @@ import {
   IconCloudCheck,
   IconQrcode,
 } from '@tabler/icons-react';
-import { openReceipt, searchProducts, type PosTransaction, type ProductSearchResult } from '../lib/api';
+import {
+  openReceipt,
+  searchProducts,
+  type PosTransaction,
+  type ProductSearchResult,
+} from '../lib/api';
 import { getLastSyncedAt } from '../lib/catalog-cache';
 import { formatRupiah, formatSyncedAt, statusBadge } from '../lib/format';
 import { listQueuedActions, type QueuedAction } from '../lib/offline-queue';
@@ -55,7 +60,8 @@ export default function Kasir() {
   const [pendingQty, setPendingQty] = useState('1');
   const [customerId, setCustomerId] = useState('');
   const [stage, setStage] = useState<'cart' | 'payment'>('cart');
-  const [paymentMethod, setPaymentMethod] = useState<(typeof PAYMENT_METHODS)[number]['id']>('Cash');
+  const [paymentMethod, setPaymentMethod] =
+    useState<(typeof PAYMENT_METHODS)[number]['id']>('Cash');
   const [amountTendered, setAmountTendered] = useState('');
   const [printReceipt, setPrintReceipt] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -70,8 +76,8 @@ export default function Kasir() {
   const refreshPendingSales = useCallback(async () => {
     const all = await listQueuedActions();
     setPendingSales(
-      all.filter((item): item is QueuedAction & { action: PosSaleAction } =>
-        item.actionType === 'pos-sale',
+      all.filter(
+        (item): item is QueuedAction & { action: PosSaleAction } => item.actionType === 'pos-sale',
       ),
     );
   }, []);
@@ -105,7 +111,13 @@ export default function Kasir() {
       }
       return [
         ...current,
-        { itemCode: item.itemCode, itemName: item.itemName, qty, rate: item.price ?? 0, stale: item.stale },
+        {
+          itemCode: item.itemCode,
+          itemName: item.itemName,
+          qty,
+          rate: item.price ?? 0,
+          stale: item.stale,
+        },
       ];
     });
   }
@@ -215,7 +227,9 @@ export default function Kasir() {
         }
       }
 
-      setMessage(`Transaksi ${transaction.name} berhasil (${formatRupiah(transaction.grandTotal)}).`);
+      setMessage(
+        `Transaksi ${transaction.name} berhasil (${formatRupiah(transaction.grandTotal)}).`,
+      );
       resetAfterSale();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -358,7 +372,8 @@ export default function Kasir() {
                   setPendingQty('1');
                 }}
               >
-                {item.itemName} — {item.price !== null ? formatRupiah(item.price) : 'Harga tidak tersedia'}
+                {item.itemName} —{' '}
+                {item.price !== null ? formatRupiah(item.price) : 'Harga tidak tersedia'}
                 {item.stale && <StalePriceWarning />}
               </button>
             </li>

@@ -141,8 +141,12 @@ export function buildTurnPrompt(
     `Pesan pelanggan sekarang: ${userMessage}`,
   ];
   if (systemData !== undefined) {
-    parts.push(`system_data (hasil aksi yang baru dijalankan, ini FAKTA — gunakan ini untuk membalas, jangan mengarang angka lain):\n${JSON.stringify(systemData)}`);
-    parts.push('Sekarang balas pelanggan dengan JSON final. Kali ini isi "action": null karena data yang dibutuhkan sudah ada di system_data.');
+    parts.push(
+      `system_data (hasil aksi yang baru dijalankan, ini FAKTA — gunakan ini untuk membalas, jangan mengarang angka lain):\n${JSON.stringify(systemData)}`,
+    );
+    parts.push(
+      'Sekarang balas pelanggan dengan JSON final. Kali ini isi "action": null karena data yang dibutuhkan sudah ada di system_data.',
+    );
   }
   return parts.join('\n\n');
 }

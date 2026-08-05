@@ -19,7 +19,8 @@ vi.mock('../src/modules/whatsapp/infrastructure/whatsapp-client.js', () => ({
   sendTextMessage: sendTextMessageMock,
 }));
 
-const { executeConversationAction } = await import('../src/modules/whatsapp/application/actions.js');
+const { executeConversationAction } =
+  await import('../src/modules/whatsapp/application/actions.js');
 const { getOrCreateSession } = await import('../src/modules/whatsapp/infrastructure/sessions.js');
 
 function mockGet(byDoctype: Record<string, unknown>): void {
@@ -168,7 +169,9 @@ describe('executeConversationAction', () => {
     it.each(['qris', 'transfer', 'cod'] as const)(
       'method=%s: creates the draft invoice and returns real facts, never sends a message itself',
       async (method) => {
-        mockList({ Customer: [{ name: 'CUST-1', customer_name: 'Budi', mobile_no: `${PHONE}-${method}` }] });
+        mockList({
+          Customer: [{ name: 'CUST-1', customer_name: 'Budi', mobile_no: `${PHONE}-${method}` }],
+        });
         mockOrderAndInvoice(`SO-${method}`, `SINV-${method}`);
 
         const phone = `${PHONE}-${method}`;
@@ -186,7 +189,9 @@ describe('executeConversationAction', () => {
     );
 
     it('reports invoice_failed without masking when the ERPNext write itself fails', async () => {
-      mockList({ Customer: [{ name: 'CUST-1', customer_name: 'Budi', mobile_no: `${PHONE}-writefail` }] });
+      mockList({
+        Customer: [{ name: 'CUST-1', customer_name: 'Budi', mobile_no: `${PHONE}-writefail` }],
+      });
       mockGet({ Customer: { name: 'CUST-1', customer_tier: 'Retail' } });
       erpNextClientMock.get.mockImplementation((doctype: string) =>
         doctype === 'Sales Order'
@@ -206,7 +211,9 @@ describe('executeConversationAction', () => {
     });
 
     it('rejects a method the model invented that is not one of qris/transfer/cod', async () => {
-      mockList({ Customer: [{ name: 'CUST-1', customer_name: 'Budi', mobile_no: `${PHONE}-badmethod` }] });
+      mockList({
+        Customer: [{ name: 'CUST-1', customer_name: 'Budi', mobile_no: `${PHONE}-badmethod` }],
+      });
       mockOrderAndInvoice('SO-0005', 'SINV-0004');
 
       const phone = `${PHONE}-badmethod`;

@@ -17,9 +17,7 @@ function insertQueueRow(overrides: {
 }
 
 function rowExists(uuid: string): boolean {
-  return (
-    getDb().prepare('SELECT 1 FROM offline_sync_queue WHERE uuid = ?').get(uuid) !== undefined
-  );
+  return getDb().prepare('SELECT 1 FROM offline_sync_queue WHERE uuid = ?').get(uuid) !== undefined;
 }
 
 describe('cleanupSyncedQueueRows — data retention (§ post-launch requirement)', () => {

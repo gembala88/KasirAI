@@ -69,8 +69,8 @@ entries get added to the bottom as work continues.
   real, rather than assuming or quietly building something different than
   expected.
 - **Real bug found and fixed:** a literal barcode scan at checkout didn't
-  find the product, because the search only matched product *names*, not
-  product *codes* (which is what a barcode actually is).
+  find the product, because the search only matched product _names_, not
+  product _codes_ (which is what a barcode actually is).
 - Built real **offline support**: if the internet drops mid-sale, the sale
   is saved on the device instantly and finishes syncing automatically once
   the connection is back — tested for real by killing the network mid-
@@ -155,9 +155,9 @@ entries get added to the bottom as work continues.
   3. Once real pages were finally loading, logging in still failed — for
      both apps — because of a duplicated address in the login request.
      Also fixed.
-  All three were re-tested for real afterward with genuinely fresh logins
-  (not just reloading a page that already worked) — both apps' logins now
-  work correctly through the real website address.
+     All three were re-tested for real afterward with genuinely fresh logins
+     (not just reloading a page that already worked) — both apps' logins now
+     work correctly through the real website address.
 - Added real camera-based barcode scanning to the warehouse app only
   (not the cashier checkout screen, which keeps using a physical barcode
   scanner device, exactly as the original plan called for). Tested as far

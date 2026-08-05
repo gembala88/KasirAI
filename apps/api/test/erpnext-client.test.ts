@@ -82,19 +82,18 @@ describe('ErpNextClient', () => {
     // the UI, even though ERPNext's own response already explains exactly
     // what's wrong.
     const realErpNextErrorBody = {
-      exception: 'frappe.exceptions.LinkValidationError: Could not find Row #1: Item Code: 8997212800288',
+      exception:
+        'frappe.exceptions.LinkValidationError: Could not find Row #1: Item Code: 8997212800288',
       exc_type: 'LinkValidationError',
       _server_messages:
         '["{\\"message\\": \\"Could not find Row #1: Item Code: 8997212800288\\", \\"indicator\\": \\"red\\"}"]',
     };
-    const fetchImpl = vi
-      .fn()
-      .mockResolvedValue(
-        new Response(JSON.stringify(realErpNextErrorBody), {
-          status: 417,
-          headers: { 'Content-Type': 'application/json' },
-        }),
-      );
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(realErpNextErrorBody), {
+        status: 417,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
     const client = buildClient(fetchImpl as unknown as typeof fetch);
 
     await expect(client.create('Stock Entry', {})).rejects.toThrow(
@@ -105,7 +104,9 @@ describe('ErpNextClient', () => {
   it('falls back to the exception field when _server_messages is absent', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
       new Response(
-        JSON.stringify({ exception: 'frappe.exceptions.ValidationError: Stock cannot go negative' }),
+        JSON.stringify({
+          exception: 'frappe.exceptions.ValidationError: Stock cannot go negative',
+        }),
         { status: 417, headers: { 'Content-Type': 'application/json' } },
       ),
     );

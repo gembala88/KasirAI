@@ -44,6 +44,7 @@ refresh (phone) or press the reload button (computer). Fixes the large
 majority of "it froze" or "it's showing something weird" problems.
 
 **2. Clear the browser's site data and reload.** If reloading doesn't help:
+
 - **Chrome (phone or computer):** open the site, tap the padlock/info icon
   next to the address bar → "Site settings" (or "Permissions") → "Clear &
   reset" / "Clear data" → reload the page and log in again.
@@ -76,7 +77,7 @@ unrelated projects that must never be affected — see the "Shared VPS"
 warning under "VPS resource ceiling reminder" below. `docker restart`/
 `docker compose restart` commands in this runbook only ever target
 Hermes' own named containers (`docker-*`), never anything else on the box,
-but a full VPS reboot (step 5) restarts *everything* on the machine,
+but a full VPS reboot (step 5) restarts _everything_ on the machine,
 including those other projects. Only reach for step 5 if steps 1-4 didn't
 work.
 
@@ -96,6 +97,7 @@ both):
 at the time of writing, see this file's Domain & HTTPS notes.)
 
 **Android (phone or tablet), Chrome:**
+
 1. Open the address above in Chrome.
 2. Log in with the store's account for that device (cashier account for
    the scan app, owner/manager account for the dashboard).
@@ -112,6 +114,7 @@ at the time of writing, see this file's Domain & HTTPS notes.)
 **iPhone/iPad, Safari** (Chrome on iOS cannot install PWAs — this must be
 Safari specifically, an Apple platform restriction, not a Hermes
 limitation):
+
 1. Open the address above in Safari.
 2. Log in.
 3. Tap the **Share** icon (square with an arrow) → **"Add to Home
@@ -124,6 +127,7 @@ limitation):
    testing already done.
 
 **Windows PC (e.g. a till with keyboard/mouse), Chrome or Edge:**
+
 1. Open the address above.
 2. Log in.
 3. Click the **install icon** in the address bar (a monitor-with-arrow
@@ -155,6 +159,7 @@ systemctl restart nginx  # full restart
 ```
 
 Rebuilding after a code change (not just a restart):
+
 ```bash
 cd /opt/hermes-platform
 git pull   # or re-transfer changed files if not using a git remote
@@ -204,6 +209,7 @@ systemctl start hermes-backup.service
 
 **Restoring** — see `infra/scripts/restore.sh`'s header comment for full
 usage. Two modes:
+
 ```bash
 # Verify a backup is usable WITHOUT touching the real site (restores onto
 # a throwaway site, checks the data, tears the throwaway site down):
@@ -234,19 +240,19 @@ docker compose -f docker-compose.yml -f docker-compose.shared-vps-test.yml \
 ```
 
 If the bad deploy included an ERPNext-side schema change (a new Custom
-Field, DocType, etc. via a seed script), rolling back the *code* doesn't
+Field, DocType, etc. via a seed script), rolling back the _code_ doesn't
 undo that — ERPNext data changes are forward-only in practice. Restore
 from a pre-deploy backup instead if that's the actual problem, not just
 a code rollback.
 
 ## Failure-mode playbook (spec §15's brief: power/internet/VPS down)
 
-These describe what *should* happen given what's actually built — see
+These describe what _should_ happen given what's actually built — see
 docs/IMPLEMENTATION_LOG.md's §15 section for what's genuinely implemented vs. simplified.
 
 - **Cashier's own internet drops mid-checkout:** handled entirely
   client-side (spec §15.2) — the sale is written to the browser's local
-  IndexedDB queue the instant "Konfirmasi Pembayaran" is pressed, *before*
+  IndexedDB queue the instant "Konfirmasi Pembayaran" is pressed, _before_
   any network call, then synced automatically once connectivity returns
   (or via the "Sinkron Sekarang" button). No action needed here; this is
   what §15.2's offline queue exists for. If a sale sits in "Failed"/
@@ -256,7 +262,7 @@ docs/IMPLEMENTATION_LOG.md's §15 section for what's genuinely implemented vs. s
   (explicitly set, not relying on the default — see
   infra/erpnext/mariadb/hermes-tuning.cnf) guarantees a committed
   transaction survives this. On power return, Docker's `restart_policy:
-  on-failure` brings every container back up automatically; verify with
+on-failure` brings every container back up automatically; verify with
   `docker compose ... ps` that everything shows `Up`, and check
   `docker compose ... logs db` for a clean recovery (InnoDB crash
   recovery logs on its own startup, this is normal and expected, not an
@@ -271,7 +277,7 @@ docs/IMPLEMENTATION_LOG.md's §15 section for what's genuinely implemented vs. s
   syncs go unnoticed for days.
 - **A sync lands in `Conflict` status (§15.2 — e.g. concurrent stock
   changes going negative):** check the dashboard's "Konflik Sinkron" tab
-  (Owner/Manager only). This is deliberately *not* auto-resolved — read
+  (Owner/Manager only). This is deliberately _not_ auto-resolved — read
   the reason shown, correct the underlying stock discrepancy in ERPNext
   directly, and note that the original queued action stays un-applied
   (by design) rather than being silently retried into a wrong state.
@@ -285,6 +291,7 @@ process — there is no code path in any of the mechanisms below that can
 reach ERPNext's database at all.**
 
 **Deleted automatically, after 30 days:**
+
 - **Sync-queue "receipts"** (`offline_sync_queue` table, Hermes' own
   SQLite): once a queued offline sale/scan is marked `Synced`, the row is
   just a receipt proving that sync happened — the real transaction already
@@ -312,6 +319,7 @@ reach ERPNext's database at all.**
   `rotate 14`; this replaces it with 30 to match the same policy.
 
 **Never auto-deleted, kept indefinitely:**
+
 - Everything in ERPNext/MariaDB — Sales Invoice, Stock Ledger Entry,
   Customer, every report. This is simply the default: nothing in this
   project runs a scheduled delete against ERPNext's database.

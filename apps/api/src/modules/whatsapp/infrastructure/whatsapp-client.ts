@@ -45,7 +45,11 @@ export async function sendTextMessage(to: string, body: string): Promise<void> {
   await postToGraphApi({ to, type: 'text', text: { body } });
 }
 
-export async function sendImageMessage(to: string, imageUrl: string, caption?: string): Promise<void> {
+export async function sendImageMessage(
+  to: string,
+  imageUrl: string,
+  caption?: string,
+): Promise<void> {
   await postToGraphApi({
     to,
     type: 'image',

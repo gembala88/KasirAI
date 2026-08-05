@@ -72,7 +72,8 @@ export default function Payments() {
   return (
     <div className="payments">
       <p className="hint">
-        Pesanan WhatsApp yang sudah dibuat invoice draft-nya, menunggu konfirmasi pembayaran manual (§7).
+        Pesanan WhatsApp yang sudah dibuat invoice draft-nya, menunggu konfirmasi pembayaran manual
+        (§7).
       </p>
       {error && <p className="error-box">{error}</p>}
 
@@ -93,7 +94,10 @@ export default function Payments() {
           </thead>
           <tbody>
             {orders.map((order) => {
-              const state = rowState[order.name] ?? { method: 'qris' as PaymentMethod, phoneNumber: '' };
+              const state = rowState[order.name] ?? {
+                method: 'qris' as PaymentMethod,
+                phoneNumber: '',
+              };
               const confirmed = confirmedNames.has(order.name);
               return (
                 <tr key={order.name}>

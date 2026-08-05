@@ -8,7 +8,7 @@ business data (stock, invoices, customers, money).
 
 ## What Hermes is
 
-A small wholesale/retail store (think: a *toko grosir* selling by piece,
+A small wholesale/retail store (think: a _toko grosir_ selling by piece,
 dozen, and carton, at different prices for walk-in/regular/member
 customers) needs real inventory and accounting, a fast checkout, a way for
 customers to order over WhatsApp, and an owner who can ask "how did we do
@@ -65,7 +65,7 @@ scratch:
 
 ERPNext (stock, invoices, customers, accounting) is the only place real
 business data lives — `apps/api` never maintains a shadow copy of it.
-Hermes' own SQLite database only holds *its* data: audit trails, offline
+Hermes' own SQLite database only holds _its_ data: audit trails, offline
 sync-queue bookkeeping, and WhatsApp conversation history.
 
 ### Repository layout
@@ -184,7 +184,7 @@ version of this walkthrough is a backlog item — see
    cp infra/docker/.env.example infra/docker/.env
    ```
    At minimum: a freshly generated `JWT_SECRET` (`openssl rand -base64
-   48`), a real `ADMIN_PASSWORD`/`DB_ROOT_PASSWORD` for ERPNext, and
+48`), a real `ADMIN_PASSWORD`/`DB_ROOT_PASSWORD` for ERPNext, and
    `CORS_ALLOWED_ORIGINS` set to the real domain (not `*`). Leave
    `ERPNEXT_API_KEY`/`ERPNEXT_API_SECRET`/`ERPNEXT_WEBHOOK_SECRET` for
    step 6. WhatsApp/AI-provider/payment values can stay empty until
@@ -276,14 +276,14 @@ and a local `.env` — same setup steps 4–6 above, just pointed at
 
 ## Where to go next
 
-| Question | Read |
-|---|---|
-| How do I set up a new client from scratch? | This file, above |
-| How do I operate/troubleshoot a running deployment? | [RUNBOOK.md](RUNBOOK.md) |
-| Is this deployment actually ready to go live? | [DEPLOY_CHECKLIST.md](DEPLOY_CHECKLIST.md) |
-| What was decided and why, in plain language? | [NOTES.md](NOTES.md) |
-| What's the full technical build history? | [docs/IMPLEMENTATION_LOG.md](docs/IMPLEMENTATION_LOG.md) |
-| What's deferred/planned for later? | [BACKLOG.md](BACKLOG.md) |
+| Question                                            | Read                                                     |
+| --------------------------------------------------- | -------------------------------------------------------- |
+| How do I set up a new client from scratch?          | This file, above                                         |
+| How do I operate/troubleshoot a running deployment? | [RUNBOOK.md](RUNBOOK.md)                                 |
+| Is this deployment actually ready to go live?       | [DEPLOY_CHECKLIST.md](DEPLOY_CHECKLIST.md)               |
+| What was decided and why, in plain language?        | [NOTES.md](NOTES.md)                                     |
+| What's the full technical build history?            | [docs/IMPLEMENTATION_LOG.md](docs/IMPLEMENTATION_LOG.md) |
+| What's deferred/planned for later?                  | [BACKLOG.md](BACKLOG.md)                                 |
 
 ## License
 

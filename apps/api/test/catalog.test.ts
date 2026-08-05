@@ -20,21 +20,23 @@ describe('listCatalogPage — bulk offline-catalog pull', () => {
   });
 
   it('joins Item and Item Price (Retail only) by item_code in a single pass', async () => {
-    erpNextClientMock.list.mockImplementation((doctype: string, params: Record<string, unknown>) => {
-      if (doctype === 'Item') {
-        return Promise.resolve([
-          { item_code: 'A', item_name: 'Item A', stock_uom: 'Pcs' },
-          { item_code: 'B', item_name: 'Item B', stock_uom: 'Pcs' },
-        ]);
-      }
-      if (doctype === 'Item Price') {
-        // Only Retail-list rows should ever be requested — assert the
-        // filter the code sent, not just what we choose to return.
-        expect(params.filters).toContainEqual(['price_list', '=', 'Retail']);
-        return Promise.resolve([{ item_code: 'A', price_list_rate: 15000 }]);
-      }
-      return Promise.resolve([]);
-    });
+    erpNextClientMock.list.mockImplementation(
+      (doctype: string, params: Record<string, unknown>) => {
+        if (doctype === 'Item') {
+          return Promise.resolve([
+            { item_code: 'A', item_name: 'Item A', stock_uom: 'Pcs' },
+            { item_code: 'B', item_name: 'Item B', stock_uom: 'Pcs' },
+          ]);
+        }
+        if (doctype === 'Item Price') {
+          // Only Retail-list rows should ever be requested — assert the
+          // filter the code sent, not just what we choose to return.
+          expect(params.filters).toContainEqual(['price_list', '=', 'Retail']);
+          return Promise.resolve([{ item_code: 'A', price_list_rate: 15000 }]);
+        }
+        return Promise.resolve([]);
+      },
+    );
 
     const page = await listCatalogPage(0, 200);
 
@@ -45,13 +47,15 @@ describe('listCatalogPage — bulk offline-catalog pull', () => {
   });
 
   it('only queries disabled=0 items, never a disabled Item', async () => {
-    erpNextClientMock.list.mockImplementation((doctype: string, params: Record<string, unknown>) => {
-      if (doctype === 'Item') {
-        expect(params.filters).toContainEqual(['disabled', '=', 0]);
+    erpNextClientMock.list.mockImplementation(
+      (doctype: string, params: Record<string, unknown>) => {
+        if (doctype === 'Item') {
+          expect(params.filters).toContainEqual(['disabled', '=', 0]);
+          return Promise.resolve([]);
+        }
         return Promise.resolve([]);
-      }
-      return Promise.resolve([]);
-    });
+      },
+    );
 
     await listCatalogPage(0, 200);
     expect(erpNextClientMock.list).toHaveBeenCalledWith('Item', expect.anything());

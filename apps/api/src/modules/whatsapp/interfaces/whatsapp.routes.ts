@@ -66,7 +66,11 @@ export function registerWhatsappRoutes(app: FastifyInstance): void {
       if (!method || !PAYMENT_METHODS.includes(method as PaymentMethod)) {
         throw new ValidationError(`"method" must be one of: ${PAYMENT_METHODS.join(', ')}`);
       }
-      const result = await confirmPayment(request.params.invoiceName, phoneNumber, method as PaymentMethod);
+      const result = await confirmPayment(
+        request.params.invoiceName,
+        phoneNumber,
+        method as PaymentMethod,
+      );
       reply.status(200);
       return { confirmed: true, ...result };
     },

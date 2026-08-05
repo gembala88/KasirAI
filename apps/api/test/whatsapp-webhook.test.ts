@@ -86,7 +86,10 @@ describe('WhatsApp webhook', () => {
       const response = await app.inject({
         method: 'POST',
         url: '/whatsapp/webhook',
-        headers: { 'content-type': 'application/json', 'x-hub-signature-256': sign(body, TEST_SECRET) },
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': sign(body, TEST_SECRET),
+        },
         payload: body,
       });
       expect(response.statusCode).toBe(200);
@@ -112,7 +115,10 @@ describe('WhatsApp webhook', () => {
       const response = await app.inject({
         method: 'POST',
         url: '/whatsapp/webhook',
-        headers: { 'content-type': 'application/json', 'x-hub-signature-256': sign(body, 'wrong-secret') },
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': sign(body, 'wrong-secret'),
+        },
         payload: body,
       });
       expect(response.statusCode).toBe(401);
@@ -127,7 +133,10 @@ describe('WhatsApp webhook', () => {
       const response = await app.inject({
         method: 'POST',
         url: '/whatsapp/webhook',
-        headers: { 'content-type': 'application/json', 'x-hub-signature-256': sign(body, TEST_SECRET) },
+        headers: {
+          'content-type': 'application/json',
+          'x-hub-signature-256': sign(body, TEST_SECRET),
+        },
         payload: body,
       });
       expect(response.statusCode).toBe(200);

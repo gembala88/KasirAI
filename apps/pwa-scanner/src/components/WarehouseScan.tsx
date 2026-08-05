@@ -114,7 +114,11 @@ export default function WarehouseScan({ isOnline }: { isOnline: boolean }) {
               placeholder="mis. BRG-001 (scan atau ketik manual)"
               inputMode="text"
             />
-            <button type="button" className="camera-scan-button" onClick={() => setCameraOpen(true)}>
+            <button
+              type="button"
+              className="camera-scan-button"
+              onClick={() => setCameraOpen(true)}
+            >
               <IconCamera size={20} /> Scan
             </button>
           </div>

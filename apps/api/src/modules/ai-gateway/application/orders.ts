@@ -52,7 +52,13 @@ export async function getOrderStatus(
   return toSummary(doc);
 }
 
-const CANCELLABLE_STATUSES = new Set(['Draft', 'On Hold', 'To Deliver and Bill', 'To Bill', 'To Deliver']);
+const CANCELLABLE_STATUSES = new Set([
+  'Draft',
+  'On Hold',
+  'To Deliver and Bill',
+  'To Bill',
+  'To Deliver',
+]);
 
 export async function cancelOrder(
   orderName: string,
@@ -60,7 +66,9 @@ export async function cancelOrder(
 ): Promise<SalesOrderSummary> {
   const order = await getOrderStatus(orderName, customerId);
   if (!CANCELLABLE_STATUSES.has(order.status)) {
-    throw new ValidationError(`Order "${orderName}" can no longer be cancelled (status: ${order.status})`);
+    throw new ValidationError(
+      `Order "${orderName}" can no longer be cancelled (status: ${order.status})`,
+    );
   }
   const updated = await erpNextClient.update<SalesOrderDoc>('Sales Order', orderName, {
     docstatus: 2,

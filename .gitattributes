@@ -1,0 +1,12 @@
+# Force LF in the repository regardless of a given contributor's local
+# core.autocrlf setting — Prettier's default endOfLine is "lf". This repo
+# has been developed on Windows with core.autocrlf=true, which converts
+# LF to CRLF on checkout; without this file, any tool or editor that
+# writes LF directly (this session's edits included) mixes CRLF and LF
+# within the same file, which trips `prettier --check` on Linux CI
+# regardless of whether the actual code content is fine. Added
+# proactively alongside the CI format-check fix (see that commit — the
+# specific failures found there were genuine pre-existing style
+# violations like an over-long line, not confirmed to be line-ending
+# issues themselves, but this closes the adjacent risk either way.
+* text=auto eol=lf

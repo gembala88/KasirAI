@@ -92,7 +92,10 @@ interface InvoicesWithCogs {
  * at this store's real transaction volume; would need a proper report
  * query (or a materialized view) at much higher volume.
  */
-async function fetchSubmittedInvoicesInRange(fromDate: string, toDate: string): Promise<InvoicesWithCogs> {
+async function fetchSubmittedInvoicesInRange(
+  fromDate: string,
+  toDate: string,
+): Promise<InvoicesWithCogs> {
   const names = await erpNextClient.list<{ name: string }>('Sales Invoice', {
     filters: [
       ['docstatus', '=', 1],
@@ -109,7 +112,10 @@ async function fetchSubmittedInvoicesInRange(fromDate: string, toDate: string): 
   return { invoices, cogsByInvoice };
 }
 
-function summarizeRevenueProfit({ invoices, cogsByInvoice }: InvoicesWithCogs): RevenueProfitSummary {
+function summarizeRevenueProfit({
+  invoices,
+  cogsByInvoice,
+}: InvoicesWithCogs): RevenueProfitSummary {
   const revenue = invoices.reduce((sum, inv) => sum + inv.grand_total, 0);
   const cogs = invoices.reduce((sum, inv) => sum + (cogsByInvoice.get(inv.name) ?? 0), 0);
   return { revenue, profit: revenue - cogs, invoiceCount: invoices.length };
@@ -203,13 +209,14 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
   const today = toDateOnly(new Date());
   const windowStart = daysAgo(RANKING_WINDOW_DAYS);
 
-  const [todaysInvoices, windowInvoices, nearOutOfStock, expiringItems, bestSupplier] = await Promise.all([
-    fetchSubmittedInvoicesInRange(today, today),
-    fetchSubmittedInvoicesInRange(windowStart, today),
-    listLowStock(LOW_STOCK_THRESHOLD),
-    listNearExpiry(NEAR_EXPIRY_DAYS),
-    getBestSupplier(RANKING_WINDOW_DAYS),
-  ]);
+  const [todaysInvoices, windowInvoices, nearOutOfStock, expiringItems, bestSupplier] =
+    await Promise.all([
+      fetchSubmittedInvoicesInRange(today, today),
+      fetchSubmittedInvoicesInRange(windowStart, today),
+      listLowStock(LOW_STOCK_THRESHOLD),
+      listNearExpiry(NEAR_EXPIRY_DAYS),
+      getBestSupplier(RANKING_WINDOW_DAYS),
+    ]);
 
   const { bestSellers, worstSellers } = rankItemPerformance(windowInvoices.invoices);
 

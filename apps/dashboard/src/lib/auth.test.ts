@@ -1,11 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  clearAuth,
-  getStoredAuth,
-  notifyAuthRequired,
-  setOnAuthRequired,
-  storeAuth,
-} from './auth';
+import { clearAuth, getStoredAuth, notifyAuthRequired, setOnAuthRequired, storeAuth } from './auth';
 
 // jsdom isn't configured for this project (no DOM-dependent components are
 // unit tested), so localStorage is stubbed minimally here — just enough

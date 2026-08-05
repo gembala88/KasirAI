@@ -13,8 +13,7 @@ import { getDashboardSummary, getSalesReport } from './queries.js';
 import { OWNER_CHAT_SYSTEM_PROMPT } from './owner-persona.js';
 
 type OwnerChatAction =
-  | { type: 'get_dashboard_summary' }
-  | { type: 'get_sales_report'; from: string; to: string };
+  { type: 'get_dashboard_summary' } | { type: 'get_sales_report'; from: string; to: string };
 
 interface ParsedOwnerTurn {
   reply: string;
@@ -59,7 +58,9 @@ function buildPrompt(question: string, systemData: unknown): string {
     parts.push(
       `system_data (hasil query nyata, gunakan ini sebagai fakta, jangan mengarang angka lain):\n${JSON.stringify(systemData)}`,
     );
-    parts.push('Sekarang jawab owner dengan JSON final. Isi "action": null karena data yang dibutuhkan sudah ada di system_data.');
+    parts.push(
+      'Sekarang jawab owner dengan JSON final. Isi "action": null karena data yang dibutuhkan sudah ada di system_data.',
+    );
   }
   return parts.join('\n\n');
 }

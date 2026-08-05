@@ -58,11 +58,15 @@ async function login(): Promise<string> {
 
 function summarize(label: string, result: Result): void {
   console.log(`\n=== ${label} ===`);
-  console.log(`requests: ${result.requests.total} total, ${result.requests.average.toFixed(1)}/sec avg`);
+  console.log(
+    `requests: ${result.requests.total} total, ${result.requests.average.toFixed(1)}/sec avg`,
+  );
   console.log(
     `latency (ms): p50=${result.latency.p50} p99=${result.latency.p99} max=${result.latency.max}`,
   );
-  console.log(`errors: ${result.errors}, timeouts: ${result.timeouts}, non-2xx: ${result.non2xx ?? 0}`);
+  console.log(
+    `errors: ${result.errors}, timeouts: ${result.timeouts}, non-2xx: ${result.non2xx ?? 0}`,
+  );
 }
 
 async function run(): Promise<void> {

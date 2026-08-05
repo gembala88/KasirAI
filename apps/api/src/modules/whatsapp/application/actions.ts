@@ -16,8 +16,16 @@
 import { env } from '../../../config/env.js';
 import { getStockQty } from '../../../shared/erpnext-queries/index.js';
 import { logger } from '../../../shared/logger/index.js';
-import { cancelOrder, confirmAction, getOrderStatus, proposeAction } from '../../ai-gateway/interfaces/index.js';
-import { findCustomerByMobile, getPurchaseHistory } from '../../customer-membership/interfaces/index.js';
+import {
+  cancelOrder,
+  confirmAction,
+  getOrderStatus,
+  proposeAction,
+} from '../../ai-gateway/interfaces/index.js';
+import {
+  findCustomerByMobile,
+  getPurchaseHistory,
+} from '../../customer-membership/interfaces/index.js';
 import {
   addPayment,
   createInvoiceFromSalesOrder,
@@ -40,7 +48,10 @@ export const MODE_OF_PAYMENT_BY_METHOD: Record<PaymentMethod, string> = {
   cod: 'Cash',
 };
 
-async function resolveCustomerId(phoneNumber: string, session: WhatsAppSession): Promise<string | null> {
+async function resolveCustomerId(
+  phoneNumber: string,
+  session: WhatsAppSession,
+): Promise<string | null> {
   if (session.customerId) {
     return session.customerId;
   }
@@ -83,16 +94,22 @@ export async function executeConversationAction(
       const tier = customerId ? undefined : 'Retail';
       const results = await searchProducts(action.itemQuery, tier);
       return {
-        matches: results
-          .slice(0, 5)
-          .map((item) => ({ itemCode: item.itemCode, itemName: item.itemName, price: item.price, priceList: item.priceList })),
+        matches: results.slice(0, 5).map((item) => ({
+          itemCode: item.itemCode,
+          itemName: item.itemName,
+          price: item.price,
+          priceList: item.priceList,
+        })),
       };
     }
 
     case 'propose_sales_order': {
       const customerId = await resolveCustomerId(phoneNumber, session);
       if (!customerId) {
-        return { error: 'customer_not_registered', message: 'No ERPNext Customer found for this phone number' };
+        return {
+          error: 'customer_not_registered',
+          message: 'No ERPNext Customer found for this phone number',
+        };
       }
       const proposed = await proposeAction('propose_sales_order', {
         customerId,
@@ -136,7 +153,10 @@ export async function executeConversationAction(
       try {
         return await cancelOrder(action.orderName, customerId);
       } catch (error) {
-        return { error: 'cancel_failed', message: error instanceof Error ? error.message : String(error) };
+        return {
+          error: 'cancel_failed',
+          message: error instanceof Error ? error.message : String(error),
+        };
       }
     }
 
@@ -161,7 +181,10 @@ export async function executeConversationAction(
         const invoice = await createInvoiceFromSalesOrder(action.orderName);
         return { invoiceName: invoice.name, grandTotal: invoice.grandTotal, method: action.method };
       } catch (error) {
-        return { error: 'invoice_failed', message: error instanceof Error ? error.message : String(error) };
+        return {
+          error: 'invoice_failed',
+          message: error instanceof Error ? error.message : String(error),
+        };
       }
     }
 
@@ -209,7 +232,10 @@ export async function confirmPayment(
     );
     customerNotified = true;
   } catch (error) {
-    logger.error({ invoiceName, phoneNumber, error }, 'whatsapp.payment_confirmation_notify_failed');
+    logger.error(
+      { invoiceName, phoneNumber, error },
+      'whatsapp.payment_confirmation_notify_failed',
+    );
   }
 
   return { invoiceName: updated.name, grandTotal: updated.grandTotal, customerNotified };

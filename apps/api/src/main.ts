@@ -70,7 +70,9 @@ export async function buildApp() {
     // framework had already decided on.
     if (typeof error.statusCode === 'number' && error.statusCode >= 400 && error.statusCode < 500) {
       logger.warn({ err: error }, 'client_error');
-      reply.status(error.statusCode).send({ error: error.code ?? 'CLIENT_ERROR', message: error.message });
+      reply
+        .status(error.statusCode)
+        .send({ error: error.code ?? 'CLIENT_ERROR', message: error.message });
       return;
     }
 

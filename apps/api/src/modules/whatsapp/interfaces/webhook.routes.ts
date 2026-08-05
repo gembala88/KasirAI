@@ -66,7 +66,10 @@ export function registerWhatsappWebhookRoute(app: FastifyInstance): void {
       const challenge = request.query['hub.challenge'];
 
       if (mode === 'subscribe' && token === env.WHATSAPP_WEBHOOK_VERIFY_TOKEN) {
-        reply.status(200).type('text/plain').send(challenge ?? '');
+        reply
+          .status(200)
+          .type('text/plain')
+          .send(challenge ?? '');
         return;
       }
       throw new UnauthorizedError('Webhook verification failed');
@@ -95,15 +98,18 @@ export function registerWhatsappWebhookRoute(app: FastifyInstance): void {
         }
 
         const messages =
-          request.body.json.entry?.flatMap((entry) =>
-            entry.changes?.flatMap((change) => change.value?.messages ?? []) ?? [],
+          request.body.json.entry?.flatMap(
+            (entry) => entry.changes?.flatMap((change) => change.value?.messages ?? []) ?? [],
           ) ?? [];
 
         for (const message of messages) {
           if (message.type === 'text' && message.text) {
             await handleInboundMessage(message.from, message.text.body);
           } else {
-            logger.info({ from: message.from, type: message.type }, 'whatsapp.message_type_unhandled');
+            logger.info(
+              { from: message.from, type: message.type },
+              'whatsapp.message_type_unhandled',
+            );
           }
         }
 

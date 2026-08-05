@@ -34,7 +34,9 @@ describe('parseModelJson', () => {
 
 describe('buildTurnPrompt', () => {
   it('includes the instruction to use system_data as fact when present', () => {
-    const prompt = buildTurnPrompt([], 'ada stok?', { matches: [{ itemCode: 'ITEM-1', stockQty: 5 }] });
+    const prompt = buildTurnPrompt([], 'ada stok?', {
+      matches: [{ itemCode: 'ITEM-1', stockQty: 5 }],
+    });
     expect(prompt).toContain('system_data');
     expect(prompt).toContain('ITEM-1');
   });

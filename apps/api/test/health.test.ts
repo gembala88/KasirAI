@@ -7,7 +7,11 @@ const app = await buildApp();
 // Phase 8 (§1.4 "JWT-based auth on every endpoint") — any authenticated
 // role is enough here, this test isn't about RBAC granularity (see
 // test/auth.test.ts for that).
-const { accessToken } = issueTokenPair({ email: 'test@hermes.local', fullName: 'Test', role: 'Owner' });
+const { accessToken } = issueTokenPair({
+  email: 'test@hermes.local',
+  fullName: 'Test',
+  role: 'Owner',
+});
 const authHeaders = { authorization: `Bearer ${accessToken}` };
 
 describe('app bootstrap', () => {
