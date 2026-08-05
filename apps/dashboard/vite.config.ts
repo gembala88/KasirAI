@@ -31,14 +31,24 @@ export default defineConfig({
         // NavigationRoute serving this app's own index.html for *every*
         // navigation within its scope — and this app's scope is "/"
         // (correct, since it's genuinely served at the domain root), which
-        // technically covers /scan/ too. Once this service worker is
-        // active and has clientsClaim()'d, it hijacks navigations to
-        // /scan/ before apps/pwa-scanner's own (more specifically scoped)
-        // service worker ever gets a chance to register — permanently, for
-        // any device that has ever loaded this dashboard even once. This
+        // technically covers every other top-level path Nginx proxies
+        // elsewhere too (/scan/, /erp/, /health), not just this app's own
+        // routes. Once this service worker is active and has
+        // clientsClaim()'d, it hijacks navigations to any of these paths —
+        // silently serving this app's own shell instead, with the browser's
+        // address bar showing the real URL but the network request never
+        // actually leaving the browser (confirmed live: Nginx's access log
+        // showed zero page requests for /erp/, only this app's own API
+        // calls with a /erp/ Referer — the service worker never even asked
+        // the network). Permanent for any device that's ever loaded this
+        // dashboard once, until the service worker itself is updated. This
         // denylist tells Workbox's auto-generated NavigationRoute to pass
-        // /scan/ requests through instead of serving this app's shell.
-        navigateFallbackDenylist: [/^\/scan\//],
+        // these paths through to the network instead of serving this app's
+        // shell — /scan/ found and fixed first, /erp/ found live later via
+        // the exact same mechanism (spec §1.4 "Owner reaches ERPNext
+        // directly"), /health added proactively since it's the same class
+        // of bug waiting to happen.
+        navigateFallbackDenylist: [/^\/scan\//, /^\/erp\//, /^\/health$/],
       },
     }),
   ],
