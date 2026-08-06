@@ -19,7 +19,7 @@ describe('listCatalogPage — bulk offline-catalog pull', () => {
     vi.clearAllMocks();
   });
 
-  it('joins Item and Item Price (Retail only) by item_code in a single pass', async () => {
+  it('joins Item, Item Price (Retail only), and Bin by item_code in a single pass', async () => {
     erpNextClientMock.list.mockImplementation(
       (doctype: string, params: Record<string, unknown>) => {
         if (doctype === 'Item') {
@@ -34,6 +34,9 @@ describe('listCatalogPage — bulk offline-catalog pull', () => {
           expect(params.filters).toContainEqual(['price_list', '=', 'Retail']);
           return Promise.resolve([{ item_code: 'A', price_list_rate: 15000 }]);
         }
+        if (doctype === 'Bin') {
+          return Promise.resolve([{ item_code: 'A', actual_qty: 8 }]);
+        }
         return Promise.resolve([]);
       },
     );
@@ -41,9 +44,27 @@ describe('listCatalogPage — bulk offline-catalog pull', () => {
     const page = await listCatalogPage(0, 200);
 
     expect(page.items).toEqual([
-      { itemCode: 'A', itemName: 'Item A', stockUom: 'Pcs', retailPrice: 15000 },
-      { itemCode: 'B', itemName: 'Item B', stockUom: 'Pcs', retailPrice: null },
+      { itemCode: 'A', itemName: 'Item A', stockUom: 'Pcs', retailPrice: 15000, stockQty: 8 },
+      { itemCode: 'B', itemName: 'Item B', stockUom: 'Pcs', retailPrice: null, stockQty: 0 },
     ]);
+  });
+
+  it('sums Bin rows across multiple warehouses for the same item', async () => {
+    erpNextClientMock.list.mockImplementation((doctype: string) => {
+      if (doctype === 'Item') {
+        return Promise.resolve([{ item_code: 'A', item_name: 'Item A', stock_uom: 'Pcs' }]);
+      }
+      if (doctype === 'Bin') {
+        return Promise.resolve([
+          { item_code: 'A', actual_qty: 5, warehouse: 'Gudang Utama - TH' },
+          { item_code: 'A', actual_qty: 3, warehouse: 'Toko - NPG' },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+
+    const page = await listCatalogPage(0, 200);
+    expect(page.items[0]?.stockQty).toBe(8);
   });
 
   it('only queries disabled=0 items, never a disabled Item', async () => {

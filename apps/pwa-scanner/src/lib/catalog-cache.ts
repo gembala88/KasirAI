@@ -30,6 +30,7 @@ export interface CatalogItem {
   itemName: string;
   stockUom: string;
   retailPrice: number | null;
+  stockQty: number;
 }
 
 interface CatalogPage {
@@ -57,6 +58,12 @@ export async function searchLocalCatalog(query: string): Promise<CatalogItem[]> 
   const db = await getDb();
   const all = (await db.getAll(STORE_NAME)) as CatalogItem[];
   return matchCatalog(all, query);
+}
+
+/** Full cached catalog, for a browse/list view rather than Kasir's search-as-you-type. */
+export async function listAllCatalogItems(): Promise<CatalogItem[]> {
+  const db = await getDb();
+  return (await db.getAll(STORE_NAME)) as CatalogItem[];
 }
 
 export interface CatalogSyncResult {

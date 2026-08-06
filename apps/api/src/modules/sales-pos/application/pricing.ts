@@ -123,6 +123,11 @@ interface ItemPriceRecord {
   uom: string | null;
 }
 
+interface BinRecord {
+  item_code: string;
+  actual_qty: number;
+}
+
 export interface CatalogPage {
   items: CatalogItem[];
   hasMore: boolean;
@@ -179,12 +184,29 @@ export async function listCatalogPage(offset: number, limit: number): Promise<Ca
     }
   }
 
+  // Bulk Bin read, same batching rationale as the Item Price fetch above —
+  // one query for the whole page instead of one per item. Summed across
+  // every warehouse: this is a browse list, not a per-warehouse view.
+  const bins = await erpNextClient.list<BinRecord>('Bin', {
+    filters: [['item_code', 'in', itemCodes]],
+    fields: ['item_code', 'actual_qty'],
+    limit_page_length: String(itemCodes.length * 10),
+  });
+  const stockQtyByItemCode = new Map<string, number>();
+  for (const bin of bins) {
+    stockQtyByItemCode.set(
+      bin.item_code,
+      (stockQtyByItemCode.get(bin.item_code) ?? 0) + bin.actual_qty,
+    );
+  }
+
   return {
     items: items.map((item) => ({
       itemCode: item.item_code,
       itemName: item.item_name,
       stockUom: item.stock_uom,
       retailPrice: priceByItemCode.get(item.item_code) ?? null,
+      stockQty: stockQtyByItemCode.get(item.item_code) ?? 0,
     })),
     hasMore: items.length === limit,
   };

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { IconCamera } from '@tabler/icons-react';
 import CameraScanner from './CameraScanner';
+import DaftarProduk from './DaftarProduk';
 import TambahProdukBaru from './TambahProdukBaru';
 import { fetchWarehouses, type WarehouseOption } from '../lib/api';
 import { buildAction, type StockActionType } from '../lib/build-action';
@@ -38,7 +39,7 @@ function queueLineDescription(item: ScanQueuedAction): string {
 }
 
 export default function WarehouseScan({ isOnline }: { isOnline: boolean }) {
-  const [mode, setMode] = useState<'input-stok' | 'tambah-produk'>('input-stok');
+  const [mode, setMode] = useState<'input-stok' | 'tambah-produk' | 'daftar-produk'>('input-stok');
   const [queue, setQueue] = useState<ScanQueuedAction[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -128,6 +129,13 @@ export default function WarehouseScan({ isOnline }: { isOnline: boolean }) {
           onClick={() => setMode('tambah-produk')}
         >
           Tambah Produk Baru
+        </button>
+        <button
+          type="button"
+          className={mode === 'daftar-produk' ? 'tab tab--active' : 'tab'}
+          onClick={() => setMode('daftar-produk')}
+        >
+          Daftar Produk
         </button>
       </nav>
 
@@ -233,30 +241,34 @@ export default function WarehouseScan({ isOnline }: { isOnline: boolean }) {
 
       {mode === 'tambah-produk' && <TambahProdukBaru onSubmitted={() => void refreshQueue()} />}
 
-      <section className="queue">
-        <h2>
-          Menunggu Sinkron ({queue.length})
-          <button
-            type="button"
-            onClick={() => void syncQueue()}
-            disabled={syncing || queue.length === 0}
-          >
-            {syncing ? 'Menyinkron…' : 'Sinkron Sekarang'}
-          </button>
-        </h2>
-        <ul>
-          {queue.map((item) => {
-            const badge = statusBadge(item.status);
-            return (
-              <li key={item.uuid}>
-                {ACTION_LABELS[item.actionType]} — {queueLineDescription(item)}{' '}
-                <span className={badge.className}>{badge.label}</span>
-                {item.lastError && <div className="hint">{item.lastError}</div>}
-              </li>
-            );
-          })}
-        </ul>
-      </section>
+      {mode === 'daftar-produk' && <DaftarProduk />}
+
+      {mode !== 'daftar-produk' && (
+        <section className="queue">
+          <h2>
+            Menunggu Sinkron ({queue.length})
+            <button
+              type="button"
+              onClick={() => void syncQueue()}
+              disabled={syncing || queue.length === 0}
+            >
+              {syncing ? 'Menyinkron…' : 'Sinkron Sekarang'}
+            </button>
+          </h2>
+          <ul>
+            {queue.map((item) => {
+              const badge = statusBadge(item.status);
+              return (
+                <li key={item.uuid}>
+                  {ACTION_LABELS[item.actionType]} — {queueLineDescription(item)}{' '}
+                  <span className={badge.className}>{badge.label}</span>
+                  {item.lastError && <div className="hint">{item.lastError}</div>}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
     </>
   );
 }
