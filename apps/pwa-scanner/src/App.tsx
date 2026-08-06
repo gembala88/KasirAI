@@ -61,7 +61,7 @@ export default function App() {
   }
 
   return (
-    <main className="app">
+    <main className={view === 'kasir' ? 'app app--kasir' : 'app'}>
       {!isOnline && (
         <div className="offline-banner" role="status">
           Mode Offline — akan sinkron otomatis

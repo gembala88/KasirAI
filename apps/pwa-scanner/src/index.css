@@ -442,6 +442,56 @@ h1 {
   gap: 0.5rem;
 }
 
+/*
+ * Mobile (default): cart/search and payment are still the same
+ * mutually-exclusive full-screen "stage" swap this screen has always had
+ * — data-stage picks which panel renders, the other is display:none.
+ * Desktop (see @media below): both panels render side by side at once,
+ * so the stage swap no longer matters there — the panels' visibility
+ * rules are unconditionally overridden.
+ */
+.kasir-cart-panel,
+.kasir-payment-panel {
+  display: none;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.kasir[data-stage='cart'] .kasir-cart-panel {
+  display: flex;
+}
+
+.kasir[data-stage='payment'] .kasir-payment-panel {
+  display: flex;
+}
+
+/* Store PC/tablet at the checkout counter (spec §13 hardware plan) —
+   product search/cart on the left, a live payment summary always visible
+   on the right, no more full-screen swap once there's room for both. */
+@media (min-width: 1024px) {
+  .app--kasir {
+    max-width: 1200px;
+  }
+
+  .kasir {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    align-items: start;
+    gap: 1.5rem;
+  }
+
+  .kasir-cart-panel,
+  .kasir-payment-panel {
+    display: flex !important;
+  }
+
+  /* The mobile stage-swap's own nav ("Bayar" to enter payment, "Kembali"
+     to leave it) has nothing to do once both panels are always visible. */
+  .kasir-mobile-only {
+    display: none !important;
+  }
+}
+
 .search-results {
   list-style: none;
   padding: 0;

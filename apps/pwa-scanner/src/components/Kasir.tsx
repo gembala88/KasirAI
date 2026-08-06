@@ -246,10 +246,160 @@ export default function Kasir() {
     setStage('cart');
   }
 
-  if (stage === 'payment') {
-    return (
-      <div className="kasir">
-        <button type="button" className="link-button home-back" onClick={() => setStage('cart')}>
+  return (
+    <div className="kasir" data-stage={stage}>
+      <div className="kasir-cart-panel">
+        <form onSubmit={(e) => void handleSearch(e)} className="scan-form">
+          <label>
+            Cari / Scan Barang
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Kode barang atau nama"
+              autoFocus
+            />
+          </label>
+          <button type="submit" disabled={searching}>
+            {searching ? 'Mencari…' : 'Tambah ke Keranjang'}
+          </button>
+        </form>
+
+        <p className="hint sync-indicator">
+          {lastSyncedAt ? (
+            <>
+              <IconCloudCheck size={14} /> Data tersinkron: {formatSyncedAt(lastSyncedAt)}
+            </>
+          ) : (
+            <>
+              <IconAlertTriangle size={14} style={{ color: 'var(--color-warning)' }} /> Katalog
+              belum tersinkron — pencarian offline belum tersedia
+            </>
+          )}
+        </p>
+
+        {searchResults.length > 1 && (
+          <ul className="search-results">
+            {searchResults.map((item) => (
+              <li key={item.itemCode}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    addToCart(item, qtyToAdd);
+                    setSearchResults([]);
+                    setQuery('');
+                    setPendingQty('1');
+                  }}
+                >
+                  {item.itemName} —{' '}
+                  {item.price !== null ? formatRupiah(item.price) : 'Harga tidak tersedia'}
+                  {item.stale && <StalePriceWarning />}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="keypad-section">
+          <span className="hint">Jumlah scan berikutnya: {pendingQty}</span>
+          <div className="keypad">
+            {KEYPAD_KEYS.map((key) => (
+              <button type="button" key={key} onClick={() => pressKey(key)}>
+                {key}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <label>
+          ID Pelanggan (kosongkan untuk Walk-in / Retail)
+          <input value={customerId} onChange={(e) => setCustomerId(e.target.value)} />
+        </label>
+
+        {error && <p className="error-box">{error}</p>}
+        {message && <p className="message">{message}</p>}
+
+        {pendingSales.length > 0 && (
+          <section className="queue">
+            <h2>
+              Transaksi Menunggu Sinkron ({pendingSales.length})
+              <button
+                type="button"
+                onClick={() => void handleSyncPendingSales()}
+                disabled={syncingQueue}
+              >
+                {syncingQueue ? 'Menyinkron…' : 'Sinkron Sekarang'}
+              </button>
+            </h2>
+            <ul>
+              {pendingSales.map((item) => {
+                const badge = statusBadge(item.status);
+                return (
+                  <li key={item.uuid}>
+                    {formatRupiah(item.action.amount)} ({item.action.lines.length} barang){' '}
+                    <span className={badge.className}>{badge.label}</span>
+                    {item.lastError && <div className="hint">{item.lastError}</div>}
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
+
+        <section className="cart">
+          <h2 className="section-label">Keranjang</h2>
+          {cart.length === 0 ? (
+            <p className="hint">Belum ada barang.</p>
+          ) : (
+            <ul>
+              {cart.map((line) => (
+                <li key={line.itemCode} className="cart-line">
+                  <div>
+                    <strong>{line.itemName}</strong>
+                    <div className="hint">
+                      {line.qty} × {formatRupiah(line.rate)} = {formatRupiah(line.qty * line.rate)}
+                    </div>
+                    {line.stale && <StalePriceWarning />}
+                  </div>
+                  <div className="cart-line-actions">
+                    <button type="button" onClick={() => adjustQty(line.itemCode, -1)}>
+                      −
+                    </button>
+                    <button type="button" onClick={() => adjustQty(line.itemCode, 1)}>
+                      +
+                    </button>
+                    <button type="button" onClick={() => removeLine(line.itemCode)}>
+                      Hapus
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <div className="cart-total card">
+          <span className="card-label">Total</span>
+          <span className="card-value">{formatRupiah(total)}</span>
+        </div>
+
+        {/* Mobile only — desktop shows the payment panel alongside the cart at all times, so this full-screen swap has nothing to do there. */}
+        <button
+          type="button"
+          className="bayar-button kasir-mobile-only"
+          disabled={cart.length === 0}
+          onClick={() => setStage('payment')}
+        >
+          Bayar
+        </button>
+      </div>
+
+      <div className="kasir-payment-panel">
+        {/* Mobile only — see kasir-mobile-only above; desktop has no "back", both panels are just always visible. */}
+        <button
+          type="button"
+          className="link-button home-back kasir-mobile-only"
+          onClick={() => setStage('cart')}
+        >
           <IconArrowLeft size={18} /> Kembali ke keranjang
         </button>
 
@@ -260,17 +410,21 @@ export default function Kasir() {
 
         <section className="cart card">
           <h2 className="section-label">Ringkasan Pesanan</h2>
-          <ul>
-            {cart.map((line) => (
-              <li key={line.itemCode} className="cart-line cart-line--review">
-                <span>
-                  {line.itemName} <span className="hint">× {line.qty}</span>
-                  {line.stale && <StalePriceWarning />}
-                </span>
-                <span>{formatRupiah(line.qty * line.rate)}</span>
-              </li>
-            ))}
-          </ul>
+          {cart.length === 0 ? (
+            <p className="hint">Belum ada barang.</p>
+          ) : (
+            <ul>
+              {cart.map((line) => (
+                <li key={line.itemCode} className="cart-line cart-line--review">
+                  <span>
+                    {line.itemName} <span className="hint">× {line.qty}</span>
+                    {line.stale && <StalePriceWarning />}
+                  </span>
+                  <span>{formatRupiah(line.qty * line.rate)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
 
         <h2 className="section-label">Metode Pembayaran</h2>
@@ -316,162 +470,17 @@ export default function Kasir() {
         </label>
 
         {error && <p className="error-box">{error}</p>}
+        {message && <p className="message">{message}</p>}
 
         <button
           type="button"
           className="bayar-button"
-          disabled={submitting}
+          disabled={submitting || cart.length === 0}
           onClick={() => void handleConfirmPayment()}
         >
           {submitting ? 'Memproses…' : 'Konfirmasi Pembayaran'}
         </button>
       </div>
-    );
-  }
-
-  return (
-    <div className="kasir">
-      <form onSubmit={(e) => void handleSearch(e)} className="scan-form">
-        <label>
-          Cari / Scan Barang
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Kode barang atau nama"
-            autoFocus
-          />
-        </label>
-        <button type="submit" disabled={searching}>
-          {searching ? 'Mencari…' : 'Tambah ke Keranjang'}
-        </button>
-      </form>
-
-      <p className="hint sync-indicator">
-        {lastSyncedAt ? (
-          <>
-            <IconCloudCheck size={14} /> Data tersinkron: {formatSyncedAt(lastSyncedAt)}
-          </>
-        ) : (
-          <>
-            <IconAlertTriangle size={14} style={{ color: 'var(--color-warning)' }} /> Katalog belum
-            tersinkron — pencarian offline belum tersedia
-          </>
-        )}
-      </p>
-
-      {searchResults.length > 1 && (
-        <ul className="search-results">
-          {searchResults.map((item) => (
-            <li key={item.itemCode}>
-              <button
-                type="button"
-                onClick={() => {
-                  addToCart(item, qtyToAdd);
-                  setSearchResults([]);
-                  setQuery('');
-                  setPendingQty('1');
-                }}
-              >
-                {item.itemName} —{' '}
-                {item.price !== null ? formatRupiah(item.price) : 'Harga tidak tersedia'}
-                {item.stale && <StalePriceWarning />}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <div className="keypad-section">
-        <span className="hint">Jumlah scan berikutnya: {pendingQty}</span>
-        <div className="keypad">
-          {KEYPAD_KEYS.map((key) => (
-            <button type="button" key={key} onClick={() => pressKey(key)}>
-              {key}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <label>
-        ID Pelanggan (kosongkan untuk Walk-in / Retail)
-        <input value={customerId} onChange={(e) => setCustomerId(e.target.value)} />
-      </label>
-
-      {error && <p className="error-box">{error}</p>}
-      {message && <p className="message">{message}</p>}
-
-      {pendingSales.length > 0 && (
-        <section className="queue">
-          <h2>
-            Transaksi Menunggu Sinkron ({pendingSales.length})
-            <button
-              type="button"
-              onClick={() => void handleSyncPendingSales()}
-              disabled={syncingQueue}
-            >
-              {syncingQueue ? 'Menyinkron…' : 'Sinkron Sekarang'}
-            </button>
-          </h2>
-          <ul>
-            {pendingSales.map((item) => {
-              const badge = statusBadge(item.status);
-              return (
-                <li key={item.uuid}>
-                  {formatRupiah(item.action.amount)} ({item.action.lines.length} barang){' '}
-                  <span className={badge.className}>{badge.label}</span>
-                  {item.lastError && <div className="hint">{item.lastError}</div>}
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      )}
-
-      <section className="cart">
-        <h2 className="section-label">Keranjang</h2>
-        {cart.length === 0 ? (
-          <p className="hint">Belum ada barang.</p>
-        ) : (
-          <ul>
-            {cart.map((line) => (
-              <li key={line.itemCode} className="cart-line">
-                <div>
-                  <strong>{line.itemName}</strong>
-                  <div className="hint">
-                    {line.qty} × {formatRupiah(line.rate)} = {formatRupiah(line.qty * line.rate)}
-                  </div>
-                  {line.stale && <StalePriceWarning />}
-                </div>
-                <div className="cart-line-actions">
-                  <button type="button" onClick={() => adjustQty(line.itemCode, -1)}>
-                    −
-                  </button>
-                  <button type="button" onClick={() => adjustQty(line.itemCode, 1)}>
-                    +
-                  </button>
-                  <button type="button" onClick={() => removeLine(line.itemCode)}>
-                    Hapus
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <div className="cart-total card">
-        <span className="card-label">Total</span>
-        <span className="card-value">{formatRupiah(total)}</span>
-      </div>
-
-      <button
-        type="button"
-        className="bayar-button"
-        disabled={cart.length === 0}
-        onClick={() => setStage('payment')}
-      >
-        Bayar
-      </button>
     </div>
   );
 }
