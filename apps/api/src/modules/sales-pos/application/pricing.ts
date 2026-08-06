@@ -3,7 +3,12 @@
  */
 import { erpNextClient, ErpNextApiError } from '../../../shared/erpnext-client/index.js';
 import { lookupItemPrice, resolvePriceListForTier } from '../../../shared/erpnext-queries/index.js';
-import type { CatalogItem, ItemUomPrices, ProductPrice, ProductSearchResult } from '../domain/index.js';
+import type {
+  CatalogItem,
+  ItemUomPrices,
+  ProductPrice,
+  ProductSearchResult,
+} from '../domain/index.js';
 
 export const resolvePriceList = resolvePriceListForTier;
 
@@ -58,9 +63,10 @@ export async function getItemUomPrices(itemCode: string): Promise<ItemUomPrices 
     byUom.set(uom, entry);
   }
 
-  const orderedUoms = [item.stock_uom, ...[...byUom.keys()].filter((u) => u !== item.stock_uom)].filter(
-    (u) => byUom.has(u),
-  );
+  const orderedUoms = [
+    item.stock_uom,
+    ...[...byUom.keys()].filter((u) => u !== item.stock_uom),
+  ].filter((u) => byUom.has(u));
 
   return {
     itemCode: item.item_code,

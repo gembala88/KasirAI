@@ -132,9 +132,13 @@ export function registerSalesPosRoutes(app: FastifyInstance): void {
   // Every UOM master ERPNext knows about — the autocomplete source for
   // "Tambah Produk Baru"'s Satuan Dasar / Satuan Kemasan fields. A typed
   // name not in this list still works (item-creation.ts auto-creates it).
-  app.get('/api/v1/products/uoms', { preHandler: requireRole(...PRODUCT_READ_ROLES) }, async () => ({
-    uoms: await listUoms(),
-  }));
+  app.get(
+    '/api/v1/products/uoms',
+    { preHandler: requireRole(...PRODUCT_READ_ROLES) },
+    async () => ({
+      uoms: await listUoms(),
+    }),
+  );
 
   app.get(
     '/api/v1/pos/transactions/parked',

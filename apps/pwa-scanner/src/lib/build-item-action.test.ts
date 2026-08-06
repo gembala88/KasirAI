@@ -189,7 +189,9 @@ describe('buildCreateItemAction', () => {
     expect(
       buildCreateItemAction({
         ...baseFields,
-        packageUomRows: [{ uom: 'Dus', conversionQty: '-8', retailPrice: '60000', grosirPrice: '' }],
+        packageUomRows: [
+          { uom: 'Dus', conversionQty: '-8', retailPrice: '60000', grosirPrice: '' },
+        ],
       }),
     ).toBe('Isi konversi Dus harus lebih dari 0');
   });

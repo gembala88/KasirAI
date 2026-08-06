@@ -273,7 +273,8 @@ describe('syncAction — §15.2 duplicate prevention', () => {
     erpNextClientMock.list.mockImplementation(
       (_doctype: string, opts: { filters: [string, string, unknown][] }) => {
         const uomFilter = opts.filters.find((f) => f[0] === 'uom');
-        if (uomFilter?.[2] === 'Renteng') return Promise.resolve([{ name: 'item-price-retail-renteng' }]);
+        if (uomFilter?.[2] === 'Renteng')
+          return Promise.resolve([{ name: 'item-price-retail-renteng' }]);
         return Promise.resolve([]);
       },
     );

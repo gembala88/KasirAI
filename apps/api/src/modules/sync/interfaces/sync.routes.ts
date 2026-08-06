@@ -103,7 +103,12 @@ export function registerSyncRoutes(app: FastifyInstance): void {
     // 100% margin. Enforced here (not just in the PWA form) since this is
     // the actual write boundary.
     const { action } = parsed.data;
-    if (action.type === 'create-item' && action.openingQty !== undefined && action.openingQty > 0 && action.costPrice === undefined) {
+    if (
+      action.type === 'create-item' &&
+      action.openingQty !== undefined &&
+      action.openingQty > 0 &&
+      action.costPrice === undefined
+    ) {
       throw new ValidationError('Harga Modal/Beli wajib diisi saat Stok Awal lebih dari 0');
     }
 

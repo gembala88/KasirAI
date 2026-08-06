@@ -166,7 +166,8 @@ describe('createItemPrices — idempotent per-row (spec: safe to call again on r
     await createItemPrices(PRICED_ITEM);
 
     const retailCreateCalls = erpNextClientMock.create.mock.calls.filter(
-      (c) => c[0] === 'Item Price' && c[1].price_list === 'Retail' && c[1].uom === PRICED_ITEM.stockUom,
+      (c) =>
+        c[0] === 'Item Price' && c[1].price_list === 'Retail' && c[1].uom === PRICED_ITEM.stockUom,
     );
     expect(retailCreateCalls).toHaveLength(0);
   });
@@ -239,7 +240,10 @@ describe('listUoms', () => {
 
     const uoms = await listUoms();
 
-    expect(erpNextClientMock.list).toHaveBeenCalledWith('UOM', expect.objectContaining({ fields: ['name'] }));
+    expect(erpNextClientMock.list).toHaveBeenCalledWith(
+      'UOM',
+      expect.objectContaining({ fields: ['name'] }),
+    );
     expect(uoms).toEqual([{ name: 'Pcs' }, { name: 'Renteng' }]);
   });
 });

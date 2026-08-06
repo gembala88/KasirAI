@@ -272,7 +272,9 @@ export async function findExistingItem(itemCode: string): Promise<ExistingItemMa
     return {
       itemCode: cachedMatch.itemCode,
       itemName: cachedMatch.itemName,
-      uoms: [{ uom: cachedMatch.stockUom, retailPrice: cachedMatch.retailPrice, grosirPrice: null }],
+      uoms: [
+        { uom: cachedMatch.stockUom, retailPrice: cachedMatch.retailPrice, grosirPrice: null },
+      ],
     };
   }
 
@@ -291,9 +293,7 @@ export async function findExistingItem(itemCode: string): Promise<ExistingItemMa
   const { item } = await get<{ item: ExistingItemMatch | null }>(
     `/api/v1/products/${encodeURIComponent(liveMatch.itemCode)}/uom-prices`,
   );
-  return (
-    item ?? { itemCode: liveMatch.itemCode, itemName: liveMatch.itemName, uoms: [] }
-  );
+  return item ?? { itemCode: liveMatch.itemCode, itemName: liveMatch.itemName, uoms: [] };
 }
 
 export interface ItemSearchCandidate {

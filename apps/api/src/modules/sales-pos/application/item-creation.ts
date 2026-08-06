@@ -6,12 +6,7 @@
  * path instead of a read one.
  */
 import { erpNextClient, ErpNextApiError } from '../../../shared/erpnext-client/index.js';
-import type {
-  ItemGroupOption,
-  NewItemInput,
-  NewItemResult,
-  UomOption,
-} from '../domain/index.js';
+import type { ItemGroupOption, NewItemInput, NewItemResult, UomOption } from '../domain/index.js';
 
 /**
  * Distinguishable from a plain Error so the sync module's conflict
@@ -182,7 +177,11 @@ export async function createItemPrices(
     if (p.grosirPrice !== undefined) {
       await createItemPriceRow(input.itemCode, 'Grosir', p.uom, p.grosirPrice);
     }
-    packageResults.push({ uom: p.uom, retailPrice: p.retailPrice, grosirPrice: p.grosirPrice ?? null });
+    packageResults.push({
+      uom: p.uom,
+      retailPrice: p.retailPrice,
+      grosirPrice: p.grosirPrice ?? null,
+    });
   }
 
   return {

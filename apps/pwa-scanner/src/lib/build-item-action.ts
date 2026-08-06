@@ -21,7 +21,10 @@ export interface NewItemFormFields {
 }
 
 const isBlankRow = (row: PackageUomFormRow): boolean =>
-  !row.uom.trim() && !row.conversionQty.trim() && !row.retailPrice.trim() && !row.grosirPrice.trim();
+  !row.uom.trim() &&
+  !row.conversionQty.trim() &&
+  !row.retailPrice.trim() &&
+  !row.grosirPrice.trim();
 
 /** Parses+validates the repeating "Satuan Kemasan" rows, or returns a Bahasa Indonesia error message. Rows left entirely blank (added then never filled in) are silently skipped, same as removing them. */
 function buildPackageUoms(rows: PackageUomFormRow[], stockUom: string): PackageUom[] | string {

@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react';
-import { IconAlertTriangle, IconCamera, IconCircleCheck, IconPlus, IconX } from '@tabler/icons-react';
+import {
+  IconAlertTriangle,
+  IconCamera,
+  IconCircleCheck,
+  IconPlus,
+  IconX,
+} from '@tabler/icons-react';
 import CameraScanner from './CameraScanner';
 import {
   fetchItemGroups,
@@ -89,9 +95,10 @@ export default function TambahProdukBaru({ onSubmitted }: { onSubmitted: () => v
   const [packageUomRows, setPackageUomRows] = useState<PackageUomFormRow[]>([]);
 
   useEffect(() => {
-    void loadWithCacheFallback(ITEM_GROUPS_CACHE_KEY, async () => (await fetchItemGroups()).itemGroups).then(
-      setItemGroups,
-    );
+    void loadWithCacheFallback(
+      ITEM_GROUPS_CACHE_KEY,
+      async () => (await fetchItemGroups()).itemGroups,
+    ).then(setItemGroups);
     void loadWithCacheFallback(UOMS_CACHE_KEY, async () => (await fetchUoms()).uoms).then(setUoms);
   }, []);
 
@@ -206,7 +213,9 @@ export default function TambahProdukBaru({ onSubmitted }: { onSubmitted: () => v
       try {
         const match = await findExistingItem(itemCode);
         if (match) {
-          setError(`Kode ${itemCode} sudah terdaftar sebagai "${match.itemName}" — gunakan kode lain.`);
+          setError(
+            `Kode ${itemCode} sudah terdaftar sebagai "${match.itemName}" — gunakan kode lain.`,
+          );
           return;
         }
       } catch (err) {
@@ -359,7 +368,11 @@ export default function TambahProdukBaru({ onSubmitted }: { onSubmitted: () => v
               <ul className="candidate-list">
                 {stage.candidates.map((c) => (
                   <li key={c.itemCode}>
-                    <button type="button" className="link-button" onClick={() => void handlePickCandidate(c)}>
+                    <button
+                      type="button"
+                      className="link-button"
+                      onClick={() => void handlePickCandidate(c)}
+                    >
                       {c.itemName} ({c.itemCode}
                       {c.retailPrice !== null ? ` — ${formatRupiah(c.retailPrice)}` : ''})
                     </button>
@@ -389,8 +402,8 @@ export default function TambahProdukBaru({ onSubmitted }: { onSubmitted: () => v
           ) : (
             stage.match.uoms.map((u) => (
               <span className="card-sub" key={u.uom}>
-                {u.uom} — Retail: {u.retailPrice !== null ? formatRupiah(u.retailPrice) : '—'}, Grosir:{' '}
-                {u.grosirPrice !== null ? formatRupiah(u.grosirPrice) : 'Tidak diatur'}
+                {u.uom} — Retail: {u.retailPrice !== null ? formatRupiah(u.retailPrice) : '—'},
+                Grosir: {u.grosirPrice !== null ? formatRupiah(u.grosirPrice) : 'Tidak diatur'}
               </span>
             ))
           )}
@@ -415,7 +428,9 @@ export default function TambahProdukBaru({ onSubmitted }: { onSubmitted: () => v
               <input
                 value={stage.itemCode}
                 onChange={(e) =>
-                  setStage((prev) => (prev.kind === 'new' ? { ...prev, itemCode: e.target.value } : prev))
+                  setStage((prev) =>
+                    prev.kind === 'new' ? { ...prev, itemCode: e.target.value } : prev,
+                  )
                 }
                 placeholder="Buat kode sendiri, mis. BAWANG-MERAH-01"
                 autoFocus
@@ -534,9 +549,9 @@ export default function TambahProdukBaru({ onSubmitted }: { onSubmitted: () => v
             />
           </label>
           <p className="hint">
-            Jika Stok Awal diisi, produk langsung tercatat punya stok — Harga Modal/Beli wajib
-            diisi agar laporan untung-rugi benar sejak unit pertama terjual. Jika dikosongkan,
-            produk hanya terdaftar (stok 0), untuk ditambahkan nanti lewat Input Stok.
+            Jika Stok Awal diisi, produk langsung tercatat punya stok — Harga Modal/Beli wajib diisi
+            agar laporan untung-rugi benar sejak unit pertama terjual. Jika dikosongkan, produk
+            hanya terdaftar (stok 0), untuk ditambahkan nanti lewat Input Stok.
           </p>
 
           <label>
