@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { IconCamera } from '@tabler/icons-react';
 import CameraScanner from './CameraScanner';
-import { buildAction } from '../lib/build-action';
+import TambahProdukBaru from './TambahProdukBaru';
+import { buildAction, type StockActionType } from '../lib/build-action';
 import { statusBadge } from '../lib/format';
 import { listQueuedActions, type QueuedAction } from '../lib/offline-queue';
 import { submitOrQueue, syncPendingQueue } from '../lib/sync';
@@ -11,6 +12,7 @@ const ACTION_LABELS: Record<ScanActionType, string> = {
   'add-stock': 'Tambah Stok',
   'reduce-stock': 'Kurangi Stok',
   transfer: 'Transfer',
+  'create-item': 'Produk Baru',
 };
 
 interface ScanQueuedAction extends QueuedAction {
@@ -23,12 +25,21 @@ function isScanAction(item: QueuedAction): item is ScanQueuedAction {
   return item.actionType !== 'pos-sale';
 }
 
+/** create-item has no qty/rate — everything else on this screen does. */
+function queueLineDescription(item: ScanQueuedAction): string {
+  if (item.action.type === 'create-item') {
+    return item.action.itemName;
+  }
+  return `${item.action.itemCode} (${item.action.qty})`;
+}
+
 export default function WarehouseScan({ isOnline }: { isOnline: boolean }) {
+  const [mode, setMode] = useState<'input-stok' | 'tambah-produk'>('input-stok');
   const [queue, setQueue] = useState<ScanQueuedAction[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  const [actionType, setActionType] = useState<ScanActionType>('add-stock');
+  const [actionType, setActionType] = useState<StockActionType>('add-stock');
   const [itemCode, setItemCode] = useState('');
   const [qty, setQty] = useState('');
   const [rate, setRate] = useState('');
@@ -91,81 +102,114 @@ export default function WarehouseScan({ isOnline }: { isOnline: boolean }) {
 
   return (
     <>
-      <h2 className="section-label">Input Stok</h2>
-      <form onSubmit={(e) => void handleSubmit(e)} className="scan-form">
-        <label>
-          Aksi
-          <select
-            value={actionType}
-            onChange={(e) => setActionType(e.target.value as ScanActionType)}
-          >
-            <option value="add-stock">Tambah Stok</option>
-            <option value="reduce-stock">Kurangi Stok</option>
-            <option value="transfer">Transfer</option>
-          </select>
-        </label>
+      <nav className="tabs">
+        <button
+          type="button"
+          className={mode === 'input-stok' ? 'tab tab--active' : 'tab'}
+          onClick={() => setMode('input-stok')}
+        >
+          Input Stok
+        </button>
+        <button
+          type="button"
+          className={mode === 'tambah-produk' ? 'tab tab--active' : 'tab'}
+          onClick={() => setMode('tambah-produk')}
+        >
+          Tambah Produk Baru
+        </button>
+      </nav>
 
-        <label>
-          Kode Barang
-          <div className="scan-input-row">
-            <input
-              value={itemCode}
-              onChange={(e) => setItemCode(e.target.value)}
-              placeholder="mis. BRG-001 (scan atau ketik manual)"
-              inputMode="text"
+      {mode === 'input-stok' && (
+        <>
+          <h2 className="section-label">Input Stok</h2>
+          <form onSubmit={(e) => void handleSubmit(e)} className="scan-form">
+            <label>
+              Aksi
+              <select
+                value={actionType}
+                onChange={(e) => setActionType(e.target.value as StockActionType)}
+              >
+                <option value="add-stock">Tambah Stok</option>
+                <option value="reduce-stock">Kurangi Stok</option>
+                <option value="transfer">Transfer</option>
+              </select>
+            </label>
+
+            <label>
+              Kode Barang
+              <div className="scan-input-row">
+                <input
+                  value={itemCode}
+                  onChange={(e) => setItemCode(e.target.value)}
+                  placeholder="mis. BRG-001 (scan atau ketik manual)"
+                  inputMode="text"
+                />
+                <button
+                  type="button"
+                  className="camera-scan-button"
+                  onClick={() => setCameraOpen(true)}
+                >
+                  <IconCamera size={20} /> Scan
+                </button>
+              </div>
+            </label>
+
+            <label>
+              Jumlah
+              <input
+                value={qty}
+                onChange={(e) => setQty(e.target.value)}
+                inputMode="decimal"
+                placeholder="0"
+              />
+            </label>
+
+            {actionType === 'add-stock' && (
+              <label>
+                Harga Satuan
+                <input
+                  value={rate}
+                  onChange={(e) => setRate(e.target.value)}
+                  inputMode="decimal"
+                  placeholder="0"
+                />
+              </label>
+            )}
+
+            <label>
+              Gudang {actionType === 'transfer' ? '(Asal)' : ''}
+              <input
+                value={warehouse}
+                onChange={(e) => setWarehouse(e.target.value)}
+                placeholder="Kosongkan untuk gudang default"
+              />
+            </label>
+
+            {actionType === 'transfer' && (
+              <label>
+                Gudang Tujuan
+                <input value={toWarehouse} onChange={(e) => setToWarehouse(e.target.value)} />
+              </label>
+            )}
+
+            <button type="submit">Kirim</button>
+          </form>
+
+          {message && <p className="message">{message}</p>}
+
+          {cameraOpen && (
+            <CameraScanner
+              onDetect={(value) => {
+                setItemCode(value);
+                setCameraOpen(false);
+              }}
+              onClose={() => setCameraOpen(false)}
             />
-            <button
-              type="button"
-              className="camera-scan-button"
-              onClick={() => setCameraOpen(true)}
-            >
-              <IconCamera size={20} /> Scan
-            </button>
-          </div>
-        </label>
+          )}
+        </>
+      )}
 
-        <label>
-          Jumlah
-          <input
-            value={qty}
-            onChange={(e) => setQty(e.target.value)}
-            inputMode="decimal"
-            placeholder="0"
-          />
-        </label>
-
-        {actionType === 'add-stock' && (
-          <label>
-            Harga Satuan
-            <input
-              value={rate}
-              onChange={(e) => setRate(e.target.value)}
-              inputMode="decimal"
-              placeholder="0"
-            />
-          </label>
-        )}
-
-        <label>
-          Gudang {actionType === 'transfer' ? '(Asal)' : ''}
-          <input
-            value={warehouse}
-            onChange={(e) => setWarehouse(e.target.value)}
-            placeholder="Kosongkan untuk gudang default"
-          />
-        </label>
-
-        {actionType === 'transfer' && (
-          <label>
-            Gudang Tujuan
-            <input value={toWarehouse} onChange={(e) => setToWarehouse(e.target.value)} />
-          </label>
-        )}
-
-        <button type="submit">Kirim</button>
-      </form>
-
-      {message && <p className="message">{message}</p>}
+      {mode === 'tambah-produk' && <TambahProdukBaru onSubmitted={() => void refreshQueue()} />}
 
       <section className="queue">
         <h2>
@@ -183,7 +227,7 @@ export default function WarehouseScan({ isOnline }: { isOnline: boolean }) {
             const badge = statusBadge(item.status);
             return (
               <li key={item.uuid}>
-                {ACTION_LABELS[item.actionType]} — {item.action.itemCode} ({item.action.qty}){' '}
+                {ACTION_LABELS[item.actionType]} — {queueLineDescription(item)}{' '}
                 <span className={badge.className}>{badge.label}</span>
                 {item.lastError && <div className="hint">{item.lastError}</div>}
               </li>
@@ -191,16 +235,6 @@ export default function WarehouseScan({ isOnline }: { isOnline: boolean }) {
           })}
         </ul>
       </section>
-
-      {cameraOpen && (
-        <CameraScanner
-          onDetect={(value) => {
-            setItemCode(value);
-            setCameraOpen(false);
-          }}
-          onClose={() => setCameraOpen(false)}
-        />
-      )}
     </>
   );
 }

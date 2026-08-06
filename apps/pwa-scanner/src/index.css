@@ -662,6 +662,89 @@ h1 {
   flex: 1;
 }
 
+.candidate-list {
+  list-style: none;
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.candidate-list li {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+}
+
+.candidate-list .link-button {
+  margin-bottom: 0;
+  text-align: left;
+  width: 100%;
+}
+
+.package-uoms {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.package-uom-row {
+  display: grid;
+  /* Two per row, not one wide row — this app is used one-handed on a
+     phone (spec §9), and four price/qty fields plus a remove button
+     never fit a narrow screen on one line. */
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.package-uom-row:last-of-type {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.package-uom-row .icon-button {
+  grid-column: 1 / -1;
+  justify-self: end;
+  width: auto;
+  padding: 0 var(--space-3);
+  gap: var(--space-1);
+}
+
+.package-uom-row .icon-button::after {
+  content: 'Hapus';
+  font-size: 0.9rem;
+}
+
+.package-uom-row input {
+  min-height: 2.75rem;
+  font-size: 1rem;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
 .camera-scan-button {
   display: inline-flex;
   align-items: center;

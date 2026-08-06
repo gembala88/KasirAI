@@ -1,4 +1,17 @@
-export { searchProducts, getProductPrice, resolvePriceList, listCatalogPage } from './pricing.js';
+export {
+  searchProducts,
+  getProductPrice,
+  getItemUomPrices,
+  resolvePriceList,
+  listCatalogPage,
+} from './pricing.js';
+export {
+  createItem,
+  createItemPrices,
+  listItemGroups,
+  listUoms,
+  DuplicateItemError,
+} from './item-creation.js';
 export {
   createTransaction,
   listParkedTransactions,

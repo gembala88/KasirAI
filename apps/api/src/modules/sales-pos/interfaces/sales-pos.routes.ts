@@ -5,10 +5,13 @@ import { ValidationError } from '../../../shared/errors/index.js';
 import {
   addPayment,
   createTransaction,
+  getItemUomPrices,
   getProductPrice,
   getReceiptHtml,
   listCatalogPage,
+  listItemGroups,
   listParkedTransactions,
+  listUoms,
   parkTransaction,
   searchProducts,
 } from '../application/index.js';
@@ -47,10 +50,27 @@ const catalogQuerySchema = z.object({
 });
 
 const POS_ROLES = ['Owner', 'Manager', 'Cashier'] as const;
+// Read-only product/catalog endpoints also need to be reachable from the
+// Gudang scan screen (Warehouse Staff) — "Tambah Produk Baru" checks
+// whether a scanned barcode matches an existing Item via the same
+// search/catalog endpoints Kasir uses, and the catalog-cache background
+// sync (api.ts's triggerCatalogSync, fired on every login) runs
+// unconditionally regardless of role. Found live: Warehouse Staff was
+// never in POS_ROLES, so a warehouse-only account's catalog sync has been
+// silently 403ing in the background since that feature shipped — no
+// visible symptom because triggerCatalogSync swallows its own errors by
+// design, but it meant Warehouse Staff never actually got an offline
+// catalog cached. Deliberately a separate, wider list rather than adding
+// Warehouse Staff to POS_ROLES itself — the actual POS transaction routes
+// (pos/transactions, park, payment, receipt) below still correctly stay
+// Owner/Manager/Cashier only.
+const PRODUCT_READ_ROLES = ['Owner', 'Manager', 'Cashier', 'Warehouse Staff'] as const;
 
 /**
  * Sales/POS module — public HTTP boundary (spec §1.3 FR-1, §6).
- * Owner/Manager/Cashier per §1.3 FR-8 ("Cashier (POS-focused)").
+ * Owner/Manager/Cashier per §1.3 FR-8 ("Cashier (POS-focused)") for
+ * transaction routes; product/catalog reads also open to Warehouse Staff
+ * (see PRODUCT_READ_ROLES above).
  */
 export function registerSalesPosRoutes(app: FastifyInstance): void {
   app.get('/api/v1/pos/_status', async () => ({
@@ -60,7 +80,7 @@ export function registerSalesPosRoutes(app: FastifyInstance): void {
 
   app.get<{ Querystring: { q?: string; customer_tier?: string } }>(
     '/api/v1/products/search',
-    { preHandler: requireRole(...POS_ROLES) },
+    { preHandler: requireRole(...PRODUCT_READ_ROLES) },
     async (request) => {
       const parsed = productSearchQuerySchema.safeParse(request.query);
       if (!parsed.success) {
@@ -72,8 +92,16 @@ export function registerSalesPosRoutes(app: FastifyInstance): void {
 
   app.get<{ Params: { id: string }; Querystring: { tier?: string } }>(
     '/api/v1/products/:id/price',
-    { preHandler: requireRole(...POS_ROLES) },
+    { preHandler: requireRole(...PRODUCT_READ_ROLES) },
     async (request) => getProductPrice(request.params.id, request.query.tier),
+  );
+
+  // Full per-UOM price breakdown for "Tambah Produk Baru"'s existing-item
+  // card — distinct from the single tier-resolved price above.
+  app.get<{ Params: { id: string } }>(
+    '/api/v1/products/:id/uom-prices',
+    { preHandler: requireRole(...PRODUCT_READ_ROLES) },
+    async (request) => ({ item: await getItemUomPrices(request.params.id) }),
   );
 
   // Bulk catalog pull for pwa-scanner's offline product cache (spec §15.3
@@ -82,7 +110,7 @@ export function registerSalesPosRoutes(app: FastifyInstance): void {
   // why it's a separate code path.
   app.get<{ Querystring: { offset?: string; limit?: string } }>(
     '/api/v1/products/catalog',
-    { preHandler: requireRole(...POS_ROLES) },
+    { preHandler: requireRole(...PRODUCT_READ_ROLES) },
     async (request) => {
       const parsed = catalogQuerySchema.safeParse(request.query);
       if (!parsed.success) {
@@ -91,6 +119,22 @@ export function registerSalesPosRoutes(app: FastifyInstance): void {
       return listCatalogPage(parsed.data.offset, parsed.data.limit);
     },
   );
+
+  // Leaf Item Groups for "Tambah Produk Baru" (Gudang scan screen, spec:
+  // bulk product onboarding) — the dropdown a warehouse worker picks a
+  // category from when a scanned barcode doesn't match any existing Item.
+  app.get(
+    '/api/v1/products/item-groups',
+    { preHandler: requireRole(...PRODUCT_READ_ROLES) },
+    async () => ({ itemGroups: await listItemGroups() }),
+  );
+
+  // Every UOM master ERPNext knows about — the autocomplete source for
+  // "Tambah Produk Baru"'s Satuan Dasar / Satuan Kemasan fields. A typed
+  // name not in this list still works (item-creation.ts auto-creates it).
+  app.get('/api/v1/products/uoms', { preHandler: requireRole(...PRODUCT_READ_ROLES) }, async () => ({
+    uoms: await listUoms(),
+  }));
 
   app.get(
     '/api/v1/pos/transactions/parked',

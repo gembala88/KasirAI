@@ -1,5 +1,3 @@
-export type ScanActionType = 'add-stock' | 'reduce-stock' | 'transfer';
-
 export interface AddStockAction {
   type: 'add-stock';
   itemCode: string;
@@ -23,7 +21,40 @@ export interface TransferAction {
   qty: number;
 }
 
-export type ScanAction = AddStockAction | ReduceStockAction | TransferAction;
+/**
+ * Bulk product onboarding from the Gudang scan screen ("Tambah Produk
+ * Baru") — a scanned barcode that doesn't match any existing Item.
+ * Deliberately minimal fields (spec: "don't require every ERPNext Item
+ * field") — everything else gets a sensible server-side default, same as
+ * every throwaway test Item this project has ever created.
+ */
+/** A package/selling unit above the item's base unit — e.g. a "Dus" of 8 "Renteng". Each carries its own Retail/Grosir price(s), since a Dus obviously doesn't sell for the same price as one Renteng. */
+export interface PackageUom {
+  uom: string;
+  conversionQty: number;
+  retailPrice: number;
+  grosirPrice?: number;
+}
+
+export interface CreateItemAction {
+  type: 'create-item';
+  itemCode: string;
+  itemName: string;
+  itemGroup: string;
+  stockUom: string;
+  retailPrice: number;
+  /** Omitted entirely (not 0) when there's no separate Grosir price — 0 would be a real, wrong price. */
+  grosirPrice?: number;
+  /** Required whenever openingQty > 0 — otherwise the opening stock would land at zero valuation (100% margin bug). Optional when registering a catalog-only entry with no stock yet. */
+  costPrice?: number;
+  /** Physical count on hand right now, if any. Omitted/0 means "register only, stock separately via Tambah Stok". */
+  openingQty?: number;
+  warehouse?: string;
+  packageUoms?: PackageUom[];
+}
+
+export type ScanAction = AddStockAction | ReduceStockAction | TransferAction | CreateItemAction;
+export type ScanActionType = ScanAction['type'];
 
 export interface PosSaleLine {
   itemCode: string;

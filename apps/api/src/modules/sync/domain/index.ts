@@ -30,6 +30,38 @@ export interface TransferAction {
   qty: number;
 }
 
+/**
+ * Bulk product onboarding from the Gudang scan screen — see sales-pos/domain's NewItemInput, which this mirrors exactly (same shape, different module boundary: sync only knows the wire format, sales-pos owns the business meaning).
+ *
+ * openingQty/costPrice/warehouse are optional: registering a catalog
+ * entry with zero stock (to be stocked later via a separate add-stock
+ * action) is still supported. But when openingQty > 0, costPrice is
+ * required — without it the opening stock would land in ERPNext with a
+ * zero valuation rate, showing 100% margin on every unit sold until a
+ * later restock happens to supply a real cost.
+ */
+/** A package/selling UOM above the item's base unit — see sales-pos/domain's PackageUomInput, which this mirrors exactly. */
+export interface PackageUomAction {
+  uom: string;
+  conversionQty: number;
+  retailPrice: number;
+  grosirPrice?: number | undefined;
+}
+
+export interface CreateItemAction {
+  type: 'create-item';
+  itemCode: string;
+  itemName: string;
+  itemGroup: string;
+  stockUom: string;
+  retailPrice: number;
+  grosirPrice?: number | undefined;
+  costPrice?: number | undefined;
+  openingQty?: number | undefined;
+  warehouse?: string | undefined;
+  packageUoms?: PackageUomAction[] | undefined;
+}
+
 export interface PosSaleLine {
   itemCode: string;
   qty: number;
@@ -50,7 +82,8 @@ export interface PosSaleAction {
   amount: number;
 }
 
-export type OfflineAction = AddStockAction | ReduceStockAction | TransferAction | PosSaleAction;
+export type OfflineAction =
+  AddStockAction | ReduceStockAction | TransferAction | PosSaleAction | CreateItemAction;
 export type OfflineActionType = OfflineAction['type'];
 
 export interface SyncRequest {

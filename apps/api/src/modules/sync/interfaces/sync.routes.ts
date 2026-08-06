@@ -12,6 +12,13 @@ const posSaleLineSchema = z.object({
   rate: z.number().nonnegative().optional(),
 });
 
+const packageUomSchema = z.object({
+  uom: z.string().min(1),
+  conversionQty: z.number().positive(),
+  retailPrice: z.number().nonnegative(),
+  grosirPrice: z.number().nonnegative().optional(),
+});
+
 const offlineActionSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('add-stock'),
@@ -40,6 +47,19 @@ const offlineActionSchema = z.discriminatedUnion('type', [
     modeOfPayment: z.string().min(1),
     amount: z.number().positive(),
   }),
+  z.object({
+    type: z.literal('create-item'),
+    itemCode: z.string().min(1),
+    itemName: z.string().min(1),
+    itemGroup: z.string().min(1),
+    stockUom: z.string().min(1),
+    retailPrice: z.number().nonnegative(),
+    grosirPrice: z.number().nonnegative().optional(),
+    costPrice: z.number().nonnegative().optional(),
+    openingQty: z.number().nonnegative().optional(),
+    warehouse: z.string().optional(),
+    packageUoms: z.array(packageUomSchema).optional(),
+  }),
 ]);
 
 const syncRequestSchema = z.object({
@@ -61,6 +81,7 @@ const ALLOWED_ROLES_BY_ACTION: Record<OfflineActionType, Role[]> = {
   'reduce-stock': ['Owner', 'Manager', 'Warehouse Staff'],
   transfer: ['Owner', 'Manager', 'Warehouse Staff'],
   'pos-sale': ['Owner', 'Manager', 'Cashier'],
+  'create-item': ['Owner', 'Manager', 'Warehouse Staff'],
 };
 
 export function registerSyncRoutes(app: FastifyInstance): void {
@@ -75,6 +96,29 @@ export function registerSyncRoutes(app: FastifyInstance): void {
     const allowedRoles = ALLOWED_ROLES_BY_ACTION[parsed.data.action.type];
     if (!request.user || !allowedRoles.includes(request.user.role)) {
       throw new ForbiddenError(`Requires one of: ${allowedRoles.join(', ')}`);
+    }
+
+    // Opening stock with no cost price would land in ERPNext at a zero
+    // valuation rate — every unit sold before a later restock would show
+    // 100% margin. Enforced here (not just in the PWA form) since this is
+    // the actual write boundary.
+    const { action } = parsed.data;
+    if (action.type === 'create-item' && action.openingQty !== undefined && action.openingQty > 0 && action.costPrice === undefined) {
+      throw new ValidationError('Harga Modal/Beli wajib diisi saat Stok Awal lebih dari 0');
+    }
+
+    // A package UOM can't collide with the base unit or with another
+    // package row — each needs its own distinct conversion factor and
+    // price, so a duplicate name is always a mistake, not a valid state.
+    if (action.type === 'create-item' && action.packageUoms && action.packageUoms.length > 0) {
+      const names = [action.stockUom, ...action.packageUoms.map((p) => p.uom)].map((n) =>
+        n.toLowerCase(),
+      );
+      if (new Set(names).size !== names.length) {
+        throw new ValidationError(
+          'Setiap Satuan Kemasan harus berbeda dari Satuan Dasar dan dari satuan kemasan lainnya',
+        );
+      }
     }
 
     return syncAction(parsed.data);

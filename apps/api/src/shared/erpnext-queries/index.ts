@@ -22,17 +22,33 @@ export function resolvePriceListForTier(tier: string | undefined): string {
 
 interface ItemPriceRecord {
   price_list_rate: number;
+  uom: string | null;
 }
 
+/**
+ * Every caller here (Kasir, WhatsApp ordering, the AI gateway) has always
+ * meant "the item's one selling price" — i.e. its base/stock unit. That
+ * held automatically while every item had exactly one Item Price row per
+ * price list. Multi-UOM items (spec: "Tambah Produk Baru" package UOMs)
+ * can now have several rows per price list, one per UOM — so on the rare
+ * item that actually has more than one, resolve to the row matching the
+ * item's own stock_uom rather than an arbitrary one. The extra Item fetch
+ * only happens in that ambiguous case, never for an ordinary single-UOM item.
+ */
 export async function lookupItemPrice(itemCode: string, priceList: string): Promise<number | null> {
   const prices = await erpNextClient.list<ItemPriceRecord>('Item Price', {
     filters: [
       ['item_code', '=', itemCode],
       ['price_list', '=', priceList],
     ],
-    fields: ['price_list_rate'],
+    fields: ['price_list_rate', 'uom'],
   });
-  return prices[0]?.price_list_rate ?? null;
+  if (prices.length <= 1) {
+    return prices[0]?.price_list_rate ?? null;
+  }
+  const item = await erpNextClient.get<{ stock_uom: string }>('Item', itemCode);
+  const base = prices.find((p) => p.uom === item.stock_uom);
+  return (base ?? prices[0])!.price_list_rate;
 }
 
 interface BinRecord {

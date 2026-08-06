@@ -222,6 +222,110 @@ export async function searchProducts(
   );
 }
 
+// --- Gudang / "Tambah Produk Baru" (bulk product onboarding) ---
+
+export interface ItemGroupOption {
+  name: string;
+}
+
+export function fetchItemGroups(): Promise<{ itemGroups: ItemGroupOption[] }> {
+  return get('/api/v1/products/item-groups');
+}
+
+export interface UomOption {
+  name: string;
+}
+
+export function fetchUoms(): Promise<{ uoms: UomOption[] }> {
+  return get('/api/v1/products/uoms');
+}
+
+export interface ExistingItemUomPrice {
+  uom: string;
+  retailPrice: number | null;
+  grosirPrice: number | null;
+}
+
+export interface ExistingItemMatch {
+  itemCode: string;
+  itemName: string;
+  /** One entry per UOM the item actually sells under — base unit first. Grosir is null when offline (only the Retail-only local cache was checked, not "confirmed no Grosir price exists"). */
+  uoms: ExistingItemUomPrice[];
+}
+
+/**
+ * Purpose-built for the onboarding scan flow, not a reuse of
+ * searchProducts() above — that function *throws* on a cache-miss while
+ * offline (correct for Kasir: can't sell what it can't verify), but here
+ * a cache-miss is the normal, expected "this barcode is genuinely new"
+ * case, online or off. Returning null (not throwing) is what tells the
+ * caller to show the create-item form. If the client-side check is wrong
+ * (e.g. someone else registered this exact barcode moments ago on another
+ * device, before this one's cache refreshed), the server-side duplicate
+ * check in createItem — the actual source of truth — catches it at sync
+ * time as a Conflict; this is just a fast, offline-friendly first look.
+ */
+export async function findExistingItem(itemCode: string): Promise<ExistingItemMatch | null> {
+  const cached = await searchLocalCatalog(itemCode);
+  const cachedMatch = cached.find((item) => item.itemCode.toLowerCase() === itemCode.toLowerCase());
+  if (cachedMatch) {
+    return {
+      itemCode: cachedMatch.itemCode,
+      itemName: cachedMatch.itemName,
+      uoms: [{ uom: cachedMatch.stockUom, retailPrice: cachedMatch.retailPrice, grosirPrice: null }],
+    };
+  }
+
+  if (!navigator.onLine) {
+    return null;
+  }
+
+  const { results } = await get<{ results: ProductSearchResult[] }>(
+    `/api/v1/products/search?q=${encodeURIComponent(itemCode)}`,
+  );
+  const liveMatch = results.find((item) => item.itemCode.toLowerCase() === itemCode.toLowerCase());
+  if (!liveMatch) {
+    return null;
+  }
+
+  const { item } = await get<{ item: ExistingItemMatch | null }>(
+    `/api/v1/products/${encodeURIComponent(liveMatch.itemCode)}/uom-prices`,
+  );
+  return (
+    item ?? { itemCode: liveMatch.itemCode, itemName: liveMatch.itemName, uoms: [] }
+  );
+}
+
+export interface ItemSearchCandidate {
+  itemCode: string;
+  itemName: string;
+  retailPrice: number | null;
+}
+
+/**
+ * Name-based search for "Cari/Input Manual" (no-barcode products) — a
+ * lightweight disambiguation list, not the full per-UOM breakdown
+ * findExistingItem returns. Reuses the same fuzzy name+code search Kasir
+ * already relies on (searchProducts's or_filters), rather than an
+ * exact-code check, since a barcode-less product has no natural code to
+ * check against — the whole point here is catching "this might already be
+ * registered under a different self-assigned code."
+ */
+export async function searchItemsByName(query: string): Promise<ItemSearchCandidate[]> {
+  if (!navigator.onLine) {
+    const cached = await searchLocalCatalog(query);
+    return cached.map((item) => ({
+      itemCode: item.itemCode,
+      itemName: item.itemName,
+      retailPrice: item.retailPrice,
+    }));
+  }
+  const { results } = await get<{ results: ProductSearchResult[] }>(
+    `/api/v1/products/search?q=${encodeURIComponent(query)}`,
+  );
+  return results.map((r) => ({ itemCode: r.itemCode, itemName: r.itemName, retailPrice: r.price }));
+}
+
 /**
  * Opens the ERPNext-rendered receipt (real HTML from its Print Format —
  * see the receipt endpoint for why this isn't built client-side) in a new

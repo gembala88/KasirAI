@@ -7,11 +7,15 @@
 import { env } from '../../../config/env.js';
 import { ErpNextApiError } from '../../../shared/erpnext-client/index.js';
 import { scanAddStock, scanReduceStock, scanTransfer } from '../../inventory/application/index.js';
-import { addPayment, createTransaction } from '../../sales-pos/application/index.js';
+import {
+  addPayment,
+  createItem,
+  createItemPrices,
+  createTransaction,
+  DuplicateItemError,
+} from '../../sales-pos/application/index.js';
 import type { OfflineAction } from '../domain/index.js';
 import * as syncStore from '../infrastructure/sync-store.js';
-
-export class ConflictError extends Error {}
 
 /**
  * ERPNext's own negative-stock guard (confirmed live: submitting a Stock
@@ -34,6 +38,16 @@ function isNegativeStockConflict(error: unknown): boolean {
   }
 }
 
+/**
+ * Every "two people didn't know about each other's offline work" clash
+ * this codebase currently knows how to detect — deliberately a single
+ * predicate (not one call site checking N separate ones) so a third
+ * conflict type is one more `||` here, not a change at every call site.
+ */
+function isConflict(error: unknown): boolean {
+  return isNegativeStockConflict(error) || error instanceof DuplicateItemError;
+}
+
 async function processPosSale(
   uuid: string,
   action: Extract<OfflineAction, { type: 'pos-sale' }>,
@@ -51,6 +65,67 @@ async function processPosSale(
   }
 
   return addPayment(invoiceName, [{ modeOfPayment: action.modeOfPayment, amount: action.amount }]);
+}
+
+/**
+ * Three write stages for one offline action: register the Item (incl. its
+ * base + package UOM conversions), write every Retail/Grosir price row
+ * (base unit plus one pair per package UOM), then an optional
+ * opening-stock Material Receipt (valued at costPrice, so COGS is correct
+ * from the very first sale rather than defaulting to zero).
+ *
+ * Registration is checkpointed the same way processPosSale checkpoints
+ * its invoice: if a prior attempt already created the Item, this UUID's
+ * erpnextReference is set, and a retry skips straight past it instead of
+ * calling createItem() again (which would now see the Item as a genuine
+ * duplicate and misreport this retry as a Conflict). The price-row step
+ * needs no such checkpoint — createItemPrices is check-before-create per
+ * row, so calling it again on retry (whether zero, some, or all of its
+ * rows already exist) is always a safe, cheap no-op-or-fill-in-the-rest.
+ */
+async function processCreateItem(
+  uuid: string,
+  action: Extract<OfflineAction, { type: 'create-item' }>,
+): Promise<unknown> {
+  const existing = syncStore.findByUuid(uuid);
+
+  if (!existing?.erpnextReference) {
+    await createItem({
+      itemCode: action.itemCode,
+      itemName: action.itemName,
+      itemGroup: action.itemGroup,
+      stockUom: action.stockUom,
+      packageUoms: action.packageUoms,
+    });
+    syncStore.savePartialReference(uuid, action.itemCode);
+  }
+
+  const priced = await createItemPrices({
+    itemCode: action.itemCode,
+    itemName: action.itemName,
+    stockUom: action.stockUom,
+    retailPrice: action.retailPrice,
+    grosirPrice: action.grosirPrice,
+    packageUoms: action.packageUoms,
+  });
+
+  let stockEntry: { name: string } | null = null;
+  if (action.openingQty !== undefined && action.openingQty > 0) {
+    stockEntry = await scanAddStock(
+      action.itemCode,
+      action.warehouse ?? env.ERPNEXT_DEFAULT_WAREHOUSE,
+      action.openingQty,
+      // Zod's schema guarantees costPrice is present whenever openingQty > 0.
+      action.costPrice as number,
+    );
+  }
+
+  return {
+    ...priced,
+    openingQty: action.openingQty ?? null,
+    costPrice: action.costPrice ?? null,
+    stockEntry: stockEntry?.name ?? null,
+  };
 }
 
 export async function processAction(uuid: string, action: OfflineAction): Promise<unknown> {
@@ -77,6 +152,8 @@ export async function processAction(uuid: string, action: OfflineAction): Promis
       );
     case 'pos-sale':
       return processPosSale(uuid, action);
+    case 'create-item':
+      return processCreateItem(uuid, action);
     default: {
       const exhaustive: never = action;
       throw new Error(`Unsupported offline action type: ${JSON.stringify(exhaustive)}`);
@@ -84,4 +161,4 @@ export async function processAction(uuid: string, action: OfflineAction): Promis
   }
 }
 
-export { isNegativeStockConflict };
+export { isConflict };

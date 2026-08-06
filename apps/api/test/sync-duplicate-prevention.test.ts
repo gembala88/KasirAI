@@ -136,4 +136,159 @@ describe('syncAction — §15.2 duplicate prevention', () => {
     expect(erpNextClientMock.create).not.toHaveBeenCalled();
     expect(erpNextClientMock.update).not.toHaveBeenCalled();
   });
+
+  it('classifies "create-item" finding an already-registered item_code as Conflict, same as a stock clash', async () => {
+    // A warehouse worker's device queued this offline; by the time it
+    // synced, someone else (another device, or this same one earlier)
+    // had already registered this exact barcode — the spec's explicit
+    // "confirm item_code doesn't already exist... to avoid duplicates".
+    const createItemAction = {
+      type: 'create-item' as const,
+      itemCode: '8997212800288',
+      itemName: 'Teh Botol 350ml',
+      itemGroup: 'Produk Umum',
+      stockUom: 'Pcs',
+      retailPrice: 5000,
+    };
+    const request = {
+      uuid: '77777777-7777-7777-7777-777777777777',
+      contentHash: computeContentHash(createItemAction),
+      clientTimestamp: '2026-08-03T10:00:00.000Z',
+      action: createItemAction,
+    };
+
+    erpNextClientMock.get.mockResolvedValueOnce({ name: createItemAction.itemCode });
+
+    const result = await syncAction(request);
+    expect(result.status).toBe('Conflict');
+    expect(erpNextClientMock.create).not.toHaveBeenCalled();
+
+    // Same not-re-applied guarantee as every other Conflict.
+    erpNextClientMock.get.mockClear();
+    const replay = await syncAction(request);
+    expect(replay.status).toBe('Conflict');
+    expect(replay.skipped).toBe(true);
+    expect(erpNextClientMock.get).not.toHaveBeenCalled();
+  });
+
+  it('"create-item" with opening stock resumes from the stock entry on retry, without re-registering the Item', async () => {
+    // Registering the item (step 1) succeeds, but the opening-stock
+    // Material Receipt (step 2) hits a network blip — the same
+    // partial-failure shape processPosSale already handles for
+    // invoice-then-payment. A naive retry would call createItem() again,
+    // see the Item now exists, and wrongly report this as a Conflict
+    // instead of finishing step 2.
+    const createItemAction = {
+      type: 'create-item' as const,
+      itemCode: 'DEMO-KOPI-SACHET',
+      itemName: 'Kopi Sachet',
+      itemGroup: 'Produk Umum',
+      stockUom: 'Pcs',
+      retailPrice: 2000,
+      costPrice: 1200,
+      openingQty: 50,
+      warehouse: 'Gudang Utama - TH',
+    };
+    const request = {
+      uuid: '88888888-8888-8888-8888-888888888888',
+      contentHash: computeContentHash(createItemAction),
+      clientTimestamp: '2026-08-03T10:00:00.000Z',
+      action: createItemAction,
+    };
+
+    const { ErpNextApiError } = await import('../src/shared/erpnext-client/index.js');
+    // itemExists -> not found; ensureUom(stockUom) -> already exists (no UOM create needed).
+    erpNextClientMock.get.mockImplementation((doctype: string) => {
+      if (doctype === 'Item') return Promise.reject(new ErpNextApiError('not found', 404));
+      if (doctype === 'UOM') return Promise.resolve({ name: 'Pcs' });
+      return Promise.reject(new Error(`unexpected get(${doctype})`));
+    });
+    erpNextClientMock.list.mockResolvedValue([]); // no existing Item Price rows yet
+    erpNextClientMock.create
+      .mockResolvedValueOnce({ name: createItemAction.itemCode }) // Item
+      .mockResolvedValueOnce({ name: 'item-price-retail' }) // Item Price (Retail)
+      .mockRejectedValueOnce(new Error('network blip creating stock entry')); // Stock Entry
+
+    await expect(syncAction(request)).rejects.toThrow('network blip');
+    expect(erpNextClientMock.create).toHaveBeenCalledTimes(3);
+
+    erpNextClientMock.get.mockClear();
+    erpNextClientMock.create.mockClear();
+    // The base Retail row now exists (created in the failed attempt) —
+    // createItemPrices must find it and skip, not recreate it.
+    erpNextClientMock.list.mockResolvedValueOnce([{ name: 'item-price-retail' }]);
+    erpNextClientMock.create.mockResolvedValueOnce({ name: 'MAT-STE-RETRY-001' }); // Stock Entry, retried
+    erpNextClientMock.update.mockResolvedValueOnce({ name: 'MAT-STE-RETRY-001' }); // submit
+
+    const retried = await syncAction(request);
+    expect(retried.status).toBe('Synced');
+    // The real assertion: no re-check of item existence/UOMs, no second Item or Item Price write.
+    expect(erpNextClientMock.get).not.toHaveBeenCalled();
+    expect(erpNextClientMock.create).toHaveBeenCalledTimes(1);
+    expect(erpNextClientMock.create).toHaveBeenCalledWith(
+      'Stock Entry',
+      expect.objectContaining({ stock_entry_type: 'Material Receipt' }),
+    );
+  });
+
+  it('"create-item" with package UOMs resumes price-row creation on retry without duplicating rows already written', async () => {
+    // A partial failure this time lands *inside* the multi-row price step
+    // itself (base Retail written, Dus Retail fails) — createItemPrices
+    // must be safe to call again and only fill in what's missing.
+    const createItemAction = {
+      type: 'create-item' as const,
+      itemCode: 'DEMO-RINSO-CAIR',
+      itemName: 'Rinso Cair',
+      itemGroup: 'Produk Umum',
+      stockUom: 'Renteng',
+      retailPrice: 2000,
+      packageUoms: [{ uom: 'Dus', conversionQty: 8, retailPrice: 15000 }],
+    };
+    const request = {
+      uuid: '99999999-9999-9999-9999-999999999999',
+      contentHash: computeContentHash(createItemAction),
+      clientTimestamp: '2026-08-03T10:00:00.000Z',
+      action: createItemAction,
+    };
+
+    const { ErpNextApiError } = await import('../src/shared/erpnext-client/index.js');
+    erpNextClientMock.get.mockImplementation((doctype: string) => {
+      if (doctype === 'Item') return Promise.reject(new ErpNextApiError('not found', 404));
+      if (doctype === 'UOM') return Promise.reject(new ErpNextApiError('not found', 404)); // Renteng + Dus both new
+      return Promise.reject(new Error(`unexpected get(${doctype})`));
+    });
+    erpNextClientMock.list.mockResolvedValue([]); // no Item Price rows exist yet
+    erpNextClientMock.create
+      .mockResolvedValueOnce({ name: 'Renteng' }) // ensureUom(stockUom)
+      .mockResolvedValueOnce({ name: 'Dus' }) // ensureUom(package uom)
+      .mockResolvedValueOnce({ name: createItemAction.itemCode }) // Item
+      .mockResolvedValueOnce({ name: 'item-price-retail-renteng' }) // base Retail
+      .mockRejectedValueOnce(new Error('network blip creating Dus price')); // Dus Retail fails
+
+    await expect(syncAction(request)).rejects.toThrow('network blip');
+
+    erpNextClientMock.get.mockClear();
+    erpNextClientMock.create.mockClear();
+    // Base Retail row already exists; Dus Retail row still doesn't.
+    erpNextClientMock.list.mockImplementation(
+      (_doctype: string, opts: { filters: [string, string, unknown][] }) => {
+        const uomFilter = opts.filters.find((f) => f[0] === 'uom');
+        if (uomFilter?.[2] === 'Renteng') return Promise.resolve([{ name: 'item-price-retail-renteng' }]);
+        return Promise.resolve([]);
+      },
+    );
+    erpNextClientMock.create.mockResolvedValueOnce({ name: 'item-price-retail-dus' });
+
+    const retried = await syncAction(request);
+    expect(retried.status).toBe('Synced');
+    // No re-registration of the Item or its UOMs, no duplicate base-Retail row.
+    expect(erpNextClientMock.get).not.toHaveBeenCalled();
+    expect(erpNextClientMock.create).toHaveBeenCalledTimes(1);
+    expect(erpNextClientMock.create).toHaveBeenCalledWith('Item Price', {
+      item_code: createItemAction.itemCode,
+      price_list: 'Retail',
+      price_list_rate: 15000,
+      uom: 'Dus',
+    });
+  });
 });

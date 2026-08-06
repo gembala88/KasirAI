@@ -9,7 +9,7 @@ import { computeContentHash } from '../../../shared/content-hash/index.js';
 import { ValidationError } from '../../../shared/errors/index.js';
 import type { SyncRequest, SyncResponse } from '../domain/index.js';
 import * as syncStore from '../infrastructure/sync-store.js';
-import { isNegativeStockConflict, processAction } from './process-action.js';
+import { isConflict, processAction } from './process-action.js';
 
 export async function syncAction(request: SyncRequest): Promise<SyncResponse> {
   const expectedHash = computeContentHash(request.action);
@@ -53,7 +53,7 @@ export async function syncAction(request: SyncRequest): Promise<SyncResponse> {
     return { status: 'Synced', result, skipped: false };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (isNegativeStockConflict(error)) {
+    if (isConflict(error)) {
       syncStore.markConflict(request.uuid, message);
       return { status: 'Conflict', message, skipped: false };
     }

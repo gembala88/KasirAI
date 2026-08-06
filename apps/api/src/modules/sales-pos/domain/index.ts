@@ -34,6 +34,74 @@ export interface CatalogItem {
   retailPrice: number | null;
 }
 
+/**
+ * Bulk product onboarding from the Gudang scan screen — a warehouse
+ * worker scans a barcode with no matching Item and fills this in on the
+ * spot, standing in front of the shelf. Deliberately minimal (spec:
+ * "don't require every ERPNext Item field, just the ones listed") —
+ * everything else on the Item gets a sensible default (is_stock_item=1,
+ * disabled=0, etc.), the same defaults every throwaway test Item this
+ * project has created used.
+ */
+/**
+ * A package/selling UOM above the item's base unit — e.g. a "Dus" of 8
+ * "Renteng". conversionQty is how many base units make up one of this
+ * UOM (ERPNext's own UOM Conversion Factor), and it carries its own
+ * Retail/Grosir price(s) since a Dus obviously doesn't sell for the same
+ * price as one Renteng.
+ */
+export interface PackageUomInput {
+  uom: string;
+  conversionQty: number;
+  retailPrice: number;
+  grosirPrice?: number | undefined;
+}
+
+export interface NewItemInput {
+  itemCode: string;
+  itemName: string;
+  itemGroup: string;
+  stockUom: string;
+  retailPrice: number;
+  /** Omitted entirely (not just 0) when the item has no separate Grosir price — 0 would be a real, wrong price, not "not applicable". */
+  grosirPrice?: number | undefined;
+  packageUoms?: PackageUomInput[] | undefined;
+}
+
+export interface UomPriceResult {
+  uom: string;
+  retailPrice: number;
+  grosirPrice: number | null;
+}
+
+export interface NewItemResult {
+  itemCode: string;
+  itemName: string;
+  retailPrice: number;
+  grosirPrice: number | null;
+  packageUoms: UomPriceResult[];
+}
+
+export interface ItemGroupOption {
+  name: string;
+}
+
+export interface UomOption {
+  name: string;
+}
+
+/** Full per-UOM price breakdown for an already-registered item — what "Tambah Produk Baru"'s existing-item card shows (spec: don't hide a Dus price behind a single Retail number once items can be multi-UOM). */
+export interface ItemUomPrices {
+  itemCode: string;
+  itemName: string;
+  stockUom: string;
+  uoms: {
+    uom: string;
+    retailPrice: number | null;
+    grosirPrice: number | null;
+  }[];
+}
+
 export interface CartLineInput {
   itemCode: string;
   qty: number;
