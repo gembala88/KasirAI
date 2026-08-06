@@ -511,6 +511,17 @@ h1 {
   padding: 0.6rem 0.8rem;
   border-radius: var(--radius-sm);
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+/* Full name up top, code/UOM/price beneath — spec: near-duplicate
+   products (variants by size/flavor/UOM) need enough on-screen detail to
+   tell apart before adding, not just a name that might be truncated or
+   shared across variants. */
+.search-result-name {
+  font-weight: 600;
 }
 
 .keypad-section {

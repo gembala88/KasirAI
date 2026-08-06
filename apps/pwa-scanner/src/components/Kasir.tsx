@@ -134,6 +134,49 @@ export default function Kasir() {
     setCart((current) => current.filter((line) => line.itemCode !== itemCode));
   }
 
+  // Live dropdown as the cashier types (debounced) — never adds anything
+  // to the cart by itself, purely populates the picker below. Real bug
+  // found live: with growing near-duplicate products (same item in
+  // multiple sizes/flavors/UOMs — several Cimory variants, Rinso in more
+  // than one size), a partial name that happened to match only one
+  // product today was silently added straight to the cart with no
+  // picker and no chance to double-check what was about to be sold. Only
+  // an exact item_code match (handleSearch below, on Enter/submit — what
+  // a barcode scanner's keystrokes-then-Enter behaves like) is allowed
+  // to add directly; every name-based match, however few, requires an
+  // explicit tap.
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (trimmed.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      setSearching(true);
+      searchProducts(trimmed, !!customerId.trim())
+        .then(({ results }) => {
+          // Guards against an older, slower request resolving after a
+          // newer one — showing the cashier a stale match list is exactly
+          // the kind of mistake this whole change exists to prevent.
+          if (cancelled) return;
+          setError(null);
+          setSearchResults(results);
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
+          setError(err instanceof Error ? err.message : String(err));
+        })
+        .finally(() => {
+          if (!cancelled) setSearching(false);
+        });
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [query, customerId]);
+
   async function handleSearch(event: React.FormEvent): Promise<void> {
     event.preventDefault();
     const trimmed = query.trim();
@@ -144,11 +187,14 @@ export default function Kasir() {
     try {
       const { results } = await searchProducts(trimmed, !!customerId.trim());
       // A barcode scanner behaves like fast keyboard entry ending in
-      // Enter — an exact single itemCode match means "scan", not "typed
-      // a partial name to browse": add straight to cart, no picker.
+      // Enter — only an *exact* itemCode match means "scan", not "typed
+      // a partial name to browse": that's the one case allowed to add
+      // straight to cart with no picker. Anything else — including a
+      // name search that happens to match exactly one product — always
+      // shows the picker below for an explicit tap, never auto-adds.
       const exactMatch = results.find((r) => r.itemCode.toLowerCase() === trimmed.toLowerCase());
-      if (results.length === 1 || exactMatch) {
-        addToCart(exactMatch ?? results[0]!, qtyToAdd);
+      if (exactMatch) {
+        addToCart(exactMatch, qtyToAdd);
         setSearchResults([]);
         setQuery('');
         setPendingQty('1');
@@ -277,7 +323,11 @@ export default function Kasir() {
           )}
         </p>
 
-        {searchResults.length > 1 && (
+        {query.trim().length >= 2 && searchResults.length === 0 && !searching && (
+          <p className="hint">Tidak ada barang yang cocok dengan "{query.trim()}".</p>
+        )}
+
+        {searchResults.length > 0 && (
           <ul className="search-results">
             {searchResults.map((item) => (
               <li key={item.itemCode}>
@@ -290,8 +340,11 @@ export default function Kasir() {
                     setPendingQty('1');
                   }}
                 >
-                  {item.itemName} —{' '}
-                  {item.price !== null ? formatRupiah(item.price) : 'Harga tidak tersedia'}
+                  <span className="search-result-name">{item.itemName}</span>
+                  <span className="hint">
+                    {item.itemCode} · {item.stockUom} ·{' '}
+                    {item.price !== null ? formatRupiah(item.price) : 'Harga tidak tersedia'}
+                  </span>
                   {item.stale && <StalePriceWarning />}
                 </button>
               </li>
