@@ -3,13 +3,42 @@
  */
 import { env } from '../../../config/env.js';
 import { erpNextClient } from '../../../shared/erpnext-client/index.js';
-import type { LowStockAlert, NearExpiryAlert, StockLevel } from '../domain/index.js';
+import type {
+  LowStockAlert,
+  NearExpiryAlert,
+  StockLevel,
+  WarehouseOption,
+} from '../domain/index.js';
 import { stockCache, stockCacheKey } from '../infrastructure/stock-cache.js';
 
 interface BinRecord {
   item_code: string;
   warehouse: string;
   actual_qty: number;
+}
+
+interface WarehouseRecord {
+  name: string;
+}
+
+/**
+ * Leaf warehouses only (is_group=0) — same "exclude category/parent tree
+ * nodes" rule as Item Group. Real bug this closes: every Gudang field in
+ * the app (Input Stok, Transfer, and "Tambah Produk Baru"'s Stok Awal) was
+ * plain free text with nothing to validate against, so a warehouse worker
+ * typing a plausible-looking but wrong value (confirmed live: "4", "60")
+ * only found out at ERPNext's own raw, untranslated error — after the
+ * item and its prices had already been created, with just the opening
+ * stock left dangling as a Failed sync row.
+ */
+export async function listWarehouses(): Promise<WarehouseOption[]> {
+  const warehouses = await erpNextClient.list<WarehouseRecord>('Warehouse', {
+    filters: [['is_group', '=', 0]],
+    fields: ['name'],
+    order_by: 'name asc',
+    limit_page_length: '200',
+  });
+  return warehouses.map((w) => ({ name: w.name }));
 }
 
 /**

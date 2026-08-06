@@ -55,4 +55,19 @@ export default defineConfig({
   server: {
     port: 5174,
   },
+  build: {
+    // Real bug found live: this app is served at the domain root, but so
+    // is ERPNext's own asset path once /erp/ needs its root-relative
+    // /assets/ requests proxied through (see infra/nginx/hermes.conf.template's
+    // `location /assets/` — added for /erp/, but Nginx can't tell "this
+    // /assets/ request came from the dashboard" from "this one came from
+    // /erp/" by path alone, since both apps use the exact same
+    // root-relative convention). Confirmed live: newpelangi.duckdns.org/
+    // rendered a blank page because its own JS bundle 404'd, silently
+    // routed to ERPNext's backend instead of this app's. Moving this
+    // app's own build output off the shared /assets/ namespace — the same
+    // strategy that already keeps pwa-scanner's /scan/assets/ safe from
+    // this exact collision — needs no Nginx change at all.
+    assetsDir: 'dashboard-assets',
+  },
 });

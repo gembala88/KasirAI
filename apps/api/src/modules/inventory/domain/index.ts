@@ -41,3 +41,7 @@ export interface NearExpiryAlert {
   daysUntilExpiry: number;
   batchQty: number;
 }
+
+export interface WarehouseOption {
+  name: string;
+}

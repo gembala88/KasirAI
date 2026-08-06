@@ -10,14 +10,17 @@ import CameraScanner from './CameraScanner';
 import {
   fetchItemGroups,
   fetchUoms,
+  fetchWarehouses,
   findExistingItem,
   searchItemsByName,
   type ExistingItemMatch,
   type ItemGroupOption,
   type ItemSearchCandidate,
   type UomOption,
+  type WarehouseOption,
 } from '../lib/api';
 import { buildCreateItemAction, type PackageUomFormRow } from '../lib/build-item-action';
+import { loadWithCacheFallback } from '../lib/cached-lookup';
 import { formatRupiah } from '../lib/format';
 import { listQueuedActions } from '../lib/offline-queue';
 import { submitOrQueue } from '../lib/sync';
@@ -25,30 +28,8 @@ import type { CreateItemAction } from '../lib/types';
 
 const ITEM_GROUPS_CACHE_KEY = 'hermes-pwa-scanner-item-groups';
 const UOMS_CACHE_KEY = 'hermes-pwa-scanner-uoms';
+const WAREHOUSES_CACHE_KEY = 'hermes-pwa-scanner-warehouses';
 const UOM_DATALIST_ID = 'tambah-produk-uom-options';
-
-/**
- * Fetches fresh when online, falls back to whatever was cached last when
- * not — a plain localStorage entry, not IndexedDB: this is a small,
- * rarely-changing list, unlike the product catalog's own dedicated store
- * (spec §15.3), so the heavier machinery isn't warranted here.
- */
-async function loadWithCacheFallback<T>(
-  cacheKey: string,
-  fetcher: () => Promise<T[]>,
-): Promise<T[]> {
-  if (navigator.onLine) {
-    try {
-      const fresh = await fetcher();
-      localStorage.setItem(cacheKey, JSON.stringify(fresh));
-      return fresh;
-    } catch {
-      // Fall through to whatever's cached — a stale list beats none.
-    }
-  }
-  const cached = localStorage.getItem(cacheKey);
-  return cached ? (JSON.parse(cached) as T[]) : [];
-}
 
 function emptyPackageUomRow(): PackageUomFormRow {
   return { uom: '', conversionQty: '', retailPrice: '', grosirPrice: '' };
@@ -80,6 +61,7 @@ export default function TambahProdukBaru({ onSubmitted }: { onSubmitted: () => v
   const [cameraOpen, setCameraOpen] = useState(false);
   const [itemGroups, setItemGroups] = useState<ItemGroupOption[]>([]);
   const [uoms, setUoms] = useState<UomOption[]>([]);
+  const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -100,6 +82,10 @@ export default function TambahProdukBaru({ onSubmitted }: { onSubmitted: () => v
       async () => (await fetchItemGroups()).itemGroups,
     ).then(setItemGroups);
     void loadWithCacheFallback(UOMS_CACHE_KEY, async () => (await fetchUoms()).uoms).then(setUoms);
+    void loadWithCacheFallback(
+      WAREHOUSES_CACHE_KEY,
+      async () => (await fetchWarehouses()).warehouses,
+    ).then(setWarehouses);
   }, []);
 
   function resetNewItemForm(prefillName = ''): void {
@@ -567,11 +553,14 @@ export default function TambahProdukBaru({ onSubmitted }: { onSubmitted: () => v
           {Number(openingQty) > 0 && (
             <label>
               Gudang
-              <input
-                value={warehouse}
-                onChange={(e) => setWarehouse(e.target.value)}
-                placeholder="Kosongkan untuk gudang default"
-              />
+              <select value={warehouse} onChange={(e) => setWarehouse(e.target.value)}>
+                <option value="">Gudang default</option>
+                {warehouses.map((w) => (
+                  <option key={w.name} value={w.name}>
+                    {w.name}
+                  </option>
+                ))}
+              </select>
             </label>
           )}
 

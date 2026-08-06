@@ -7,6 +7,7 @@ import {
   getStock,
   listLowStock,
   listNearExpiry,
+  listWarehouses,
   scanAddStock,
   scanReduceStock,
   scanTransfer,
@@ -62,6 +63,17 @@ export function registerInventoryRoutes(app: FastifyInstance): void {
       const levels = await getStock(request.params.id, request.query.warehouse);
       return { itemCode: request.params.id, levels };
     },
+  );
+
+  // Every warehouse worth writing stock into (leaf nodes only) — the
+  // autocomplete source for every Gudang field: Input Stok, Transfer, and
+  // "Tambah Produk Baru"'s Stok Awal.
+  app.get(
+    '/api/v1/inventory/warehouses',
+    { preHandler: requireRole(...STOCK_READ_ROLES) },
+    async () => ({
+      warehouses: await listWarehouses(),
+    }),
   );
 
   app.get<{ Querystring: { threshold?: string } }>(

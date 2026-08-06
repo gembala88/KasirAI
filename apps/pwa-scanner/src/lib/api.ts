@@ -224,6 +224,22 @@ export async function searchProducts(
 
 // --- Gudang / "Tambah Produk Baru" (bulk product onboarding) ---
 
+export interface WarehouseOption {
+  name: string;
+}
+
+/**
+ * Real ERPNext Warehouse records — every Gudang field (Input Stok,
+ * Transfer, and "Tambah Produk Baru"'s Stok Awal) is a dropdown built
+ * from this list, not free text. Real bug this closes: a free-text
+ * Gudang field let a warehouse worker type a plausible-looking but wrong
+ * value (confirmed live: "4", "60"), which only failed at ERPNext's own
+ * raw error, after the item and its prices were already created.
+ */
+export function fetchWarehouses(): Promise<{ warehouses: WarehouseOption[] }> {
+  return get('/api/v1/inventory/warehouses');
+}
+
 export interface ItemGroupOption {
   name: string;
 }

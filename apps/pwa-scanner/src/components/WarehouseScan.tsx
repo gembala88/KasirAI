@@ -2,11 +2,15 @@ import { useCallback, useEffect, useState } from 'react';
 import { IconCamera } from '@tabler/icons-react';
 import CameraScanner from './CameraScanner';
 import TambahProdukBaru from './TambahProdukBaru';
+import { fetchWarehouses, type WarehouseOption } from '../lib/api';
 import { buildAction, type StockActionType } from '../lib/build-action';
+import { loadWithCacheFallback } from '../lib/cached-lookup';
 import { statusBadge } from '../lib/format';
 import { listQueuedActions, type QueuedAction } from '../lib/offline-queue';
 import { submitOrQueue, syncPendingQueue } from '../lib/sync';
 import type { ScanAction, ScanActionType } from '../lib/types';
+
+const WAREHOUSES_CACHE_KEY = 'hermes-pwa-scanner-warehouses';
 
 const ACTION_LABELS: Record<ScanActionType, string> = {
   'add-stock': 'Tambah Stok',
@@ -46,6 +50,7 @@ export default function WarehouseScan({ isOnline }: { isOnline: boolean }) {
   const [warehouse, setWarehouse] = useState('');
   const [toWarehouse, setToWarehouse] = useState('');
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
 
   const refreshQueue = useCallback(async () => {
     setQueue((await listQueuedActions()).filter(isScanAction));
@@ -54,6 +59,13 @@ export default function WarehouseScan({ isOnline }: { isOnline: boolean }) {
   useEffect(() => {
     void refreshQueue();
   }, [refreshQueue]);
+
+  useEffect(() => {
+    void loadWithCacheFallback(
+      WAREHOUSES_CACHE_KEY,
+      async () => (await fetchWarehouses()).warehouses,
+    ).then(setWarehouses);
+  }, []);
 
   const syncQueue = useCallback(async () => {
     setSyncing(true);
@@ -178,17 +190,27 @@ export default function WarehouseScan({ isOnline }: { isOnline: boolean }) {
 
             <label>
               Gudang {actionType === 'transfer' ? '(Asal)' : ''}
-              <input
-                value={warehouse}
-                onChange={(e) => setWarehouse(e.target.value)}
-                placeholder="Kosongkan untuk gudang default"
-              />
+              <select value={warehouse} onChange={(e) => setWarehouse(e.target.value)}>
+                <option value="">Gudang default</option>
+                {warehouses.map((w) => (
+                  <option key={w.name} value={w.name}>
+                    {w.name}
+                  </option>
+                ))}
+              </select>
             </label>
 
             {actionType === 'transfer' && (
               <label>
                 Gudang Tujuan
-                <input value={toWarehouse} onChange={(e) => setToWarehouse(e.target.value)} />
+                <select value={toWarehouse} onChange={(e) => setToWarehouse(e.target.value)}>
+                  <option value="">Pilih gudang tujuan</option>
+                  {warehouses.map((w) => (
+                    <option key={w.name} value={w.name}>
+                      {w.name}
+                    </option>
+                  ))}
+                </select>
               </label>
             )}
 
