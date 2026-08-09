@@ -53,6 +53,21 @@ export interface CreateItemAction {
   packageUoms?: PackageUom[];
 }
 
+/**
+ * Edit from Daftar Produk — price-only (see apps/api's updateItemPrice doc
+ * comment: ERPNext blocks direct UOM changes on any item with stock
+ * history, so a UOM correction still needs the manual disable+recreate
+ * flow, not a field on this form). At least one of retailPrice/grosirPrice
+ * is required — enforced in build-price-action.ts.
+ */
+export interface UpdateItemPriceAction {
+  type: 'update-item-price';
+  itemCode: string;
+  uom: string;
+  retailPrice?: number;
+  grosirPrice?: number;
+}
+
 export type ScanAction = AddStockAction | ReduceStockAction | TransferAction | CreateItemAction;
 export type ScanActionType = ScanAction['type'];
 
@@ -71,5 +86,5 @@ export interface PosSaleAction {
   amount: number;
 }
 
-export type OfflineAction = ScanAction | PosSaleAction;
+export type OfflineAction = ScanAction | PosSaleAction | UpdateItemPriceAction;
 export type OfflineActionType = OfflineAction['type'];

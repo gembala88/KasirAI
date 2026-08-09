@@ -60,6 +60,13 @@ const offlineActionSchema = z.discriminatedUnion('type', [
     warehouse: z.string().optional(),
     packageUoms: z.array(packageUomSchema).optional(),
   }),
+  z.object({
+    type: z.literal('update-item-price'),
+    itemCode: z.string().min(1),
+    uom: z.string().min(1),
+    retailPrice: z.number().nonnegative().optional(),
+    grosirPrice: z.number().nonnegative().optional(),
+  }),
 ]);
 
 const syncRequestSchema = z.object({
@@ -82,6 +89,9 @@ const ALLOWED_ROLES_BY_ACTION: Record<OfflineActionType, Role[]> = {
   transfer: ['Owner', 'Manager', 'Warehouse Staff'],
   'pos-sale': ['Owner', 'Manager', 'Cashier'],
   'create-item': ['Owner', 'Manager', 'Warehouse Staff'],
+  // Price-setting is an Owner/Manager decision, not a Cashier/Warehouse
+  // Staff one — narrower than create-item on purpose.
+  'update-item-price': ['Owner', 'Manager'],
 };
 
 export function registerSyncRoutes(app: FastifyInstance): void {
@@ -124,6 +134,15 @@ export function registerSyncRoutes(app: FastifyInstance): void {
           'Setiap Satuan Kemasan harus berbeda dari Satuan Dasar dan dari satuan kemasan lainnya',
         );
       }
+    }
+
+    // A price edit that touches neither field is a no-op, not a valid request.
+    if (
+      action.type === 'update-item-price' &&
+      action.retailPrice === undefined &&
+      action.grosirPrice === undefined
+    ) {
+      throw new ValidationError('Harga Retail atau Harga Grosir wajib diisi salah satu');
     }
 
     return syncAction(parsed.data);

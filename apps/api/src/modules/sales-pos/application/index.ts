@@ -4,6 +4,7 @@ export {
   getItemUomPrices,
   resolvePriceList,
   listCatalogPage,
+  updateItemPrice,
 } from './pricing.js';
 export {
   createItem,

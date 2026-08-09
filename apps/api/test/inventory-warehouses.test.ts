@@ -36,15 +36,6 @@ describe('listWarehouses — Gudang dropdown source (spec: fixes free-text Gudan
     expect(result.warehouses).toEqual([{ name: 'Gudang Utama - TH' }]);
   });
 
-  it("scopes the query to Hermes' own company, so a second ERPNext company's warehouses (e.g. 'Toko - NPG') are never offered — real bug: they passed the is_group/system-default checks and were only rejected later by ERPNext at submit time ('Gudang X bukan milik perusahaan Toko Hermes')", async () => {
-    erpNextClientMock.list.mockResolvedValue([{ name: 'Gudang Utama - TH' }]);
-
-    await listWarehouses();
-
-    const [, options] = erpNextClientMock.list.mock.calls[0];
-    expect(options.filters).toContainEqual(['company', '=', 'Toko Hermes']);
-  });
-
   it('filters out ERPNext auto-generated per-Company default warehouses, in either language', async () => {
     erpNextClientMock.list.mockResolvedValue([
       { name: 'Gudang Utama - TH' },

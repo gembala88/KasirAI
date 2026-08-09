@@ -76,6 +76,63 @@ export async function getItemUomPrices(itemCode: string): Promise<ItemUomPrices 
   };
 }
 
+/**
+ * Upsert (not check-before-create-and-skip like createItemPriceRow) — this
+ * is the write path for *editing* an existing item's price from Daftar
+ * Produk, where the whole point is changing an already-correct row's rate,
+ * not leaving it alone. Idempotent by construction (same final rate on
+ * retry), so no extra sync-module checkpoint is needed the way
+ * processCreateItem needs one.
+ */
+async function upsertItemPriceRow(
+  itemCode: string,
+  priceList: string,
+  uom: string,
+  rate: number,
+): Promise<void> {
+  const existing = await erpNextClient.list<{ name: string }>('Item Price', {
+    filters: [
+      ['item_code', '=', itemCode],
+      ['price_list', '=', priceList],
+      ['uom', '=', uom],
+    ],
+    fields: ['name'],
+    limit_page_length: '1',
+  });
+  const existingRow = existing[0];
+  if (existingRow) {
+    await erpNextClient.update('Item Price', existingRow.name, { price_list_rate: rate });
+  } else {
+    await erpNextClient.create('Item Price', {
+      item_code: itemCode,
+      price_list: priceList,
+      price_list_rate: rate,
+      uom,
+    });
+  }
+}
+
+/**
+ * "Edit from Daftar Produk" (price-only — a UOM change needs the
+ * disable-old-item + create-new-item flow ERPNext itself forces once an
+ * Item has any Stock Ledger Entry history, not a field edit; see the
+ * Bawang Merah UOM correction). Each of retailPrice/grosirPrice is written
+ * only when provided, so an edit that only touches one of the two never
+ * invents a value (e.g. 0) for the other.
+ */
+export async function updateItemPrice(
+  itemCode: string,
+  uom: string,
+  updates: { retailPrice?: number; grosirPrice?: number },
+): Promise<void> {
+  if (updates.retailPrice !== undefined) {
+    await upsertItemPriceRow(itemCode, 'Retail', uom, updates.retailPrice);
+  }
+  if (updates.grosirPrice !== undefined) {
+    await upsertItemPriceRow(itemCode, 'Grosir', uom, updates.grosirPrice);
+  }
+}
+
 export async function getProductPrice(
   itemCode: string,
   tier: string | undefined,

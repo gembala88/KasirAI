@@ -292,4 +292,33 @@ describe('syncAction — §15.2 duplicate prevention', () => {
       uom: 'Dus',
     });
   });
+
+  it('"update-item-price" (Edit from Daftar Produk) writes through to the real Item Price row, and a retry of the same UUID does not write a second time', async () => {
+    const updateAction = {
+      type: 'update-item-price' as const,
+      itemCode: 'BAWANG-MERAH-KG',
+      uom: 'Kg',
+      retailPrice: 22000,
+    };
+    const request = {
+      uuid: '44444444-4444-4444-4444-444444444444',
+      contentHash: computeContentHash(updateAction),
+      clientTimestamp: '2026-08-10T10:00:00.000Z',
+      action: updateAction,
+    };
+    erpNextClientMock.list.mockResolvedValue([{ name: 'existing-retail-row' }]);
+
+    const first = await syncAction(request);
+    expect(first.status).toBe('Synced');
+    expect(erpNextClientMock.update).toHaveBeenCalledWith('Item Price', 'existing-retail-row', {
+      price_list_rate: 22000,
+    });
+    expect(erpNextClientMock.update).toHaveBeenCalledTimes(1);
+
+    const retried = await syncAction(request);
+    expect(retried.status).toBe('Synced');
+    expect(retried.skipped).toBe(true);
+    // The real assertion: retrying the identical UUID never re-writes the price.
+    expect(erpNextClientMock.update).toHaveBeenCalledTimes(1);
+  });
 });

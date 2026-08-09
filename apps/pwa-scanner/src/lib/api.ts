@@ -285,6 +285,11 @@ export interface ExistingItemMatch {
  * check in createItem — the actual source of truth — catches it at sync
  * time as a Conflict; this is just a fast, offline-friendly first look.
  */
+/** Live per-UOM Retail/Grosir breakdown for one item — used by Daftar Produk's Edit form to prefill current prices (unlike the offline catalog cache, which only ever has Retail). Always online; the edit form itself is Owner/Manager-only, not offered while offline. */
+export function fetchItemUomPrices(itemCode: string): Promise<{ item: ExistingItemMatch | null }> {
+  return get(`/api/v1/products/${encodeURIComponent(itemCode)}/uom-prices`);
+}
+
 export async function findExistingItem(itemCode: string): Promise<ExistingItemMatch | null> {
   const cached = await searchLocalCatalog(itemCode);
   const cachedMatch = cached.find((item) => item.itemCode.toLowerCase() === itemCode.toLowerCase());

@@ -82,8 +82,27 @@ export interface PosSaleAction {
   amount: number;
 }
 
+/**
+ * "Edit from Daftar Produk" (price-only — see sales-pos/application's
+ * updateItemPrice doc comment for why a UOM change isn't offered here).
+ * At least one of retailPrice/grosirPrice is required — enforced in
+ * sync.routes.ts, since a request with neither would be a no-op write.
+ */
+export interface UpdateItemPriceAction {
+  type: 'update-item-price';
+  itemCode: string;
+  uom: string;
+  retailPrice?: number | undefined;
+  grosirPrice?: number | undefined;
+}
+
 export type OfflineAction =
-  AddStockAction | ReduceStockAction | TransferAction | PosSaleAction | CreateItemAction;
+  | AddStockAction
+  | ReduceStockAction
+  | TransferAction
+  | PosSaleAction
+  | CreateItemAction
+  | UpdateItemPriceAction;
 export type OfflineActionType = OfflineAction['type'];
 
 export interface SyncRequest {

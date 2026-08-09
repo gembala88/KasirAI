@@ -13,6 +13,7 @@ import {
   createItemPrices,
   createTransaction,
   DuplicateItemError,
+  updateItemPrice,
 } from '../../sales-pos/application/index.js';
 import type { OfflineAction } from '../domain/index.js';
 import * as syncStore from '../infrastructure/sync-store.js';
@@ -154,6 +155,12 @@ export async function processAction(uuid: string, action: OfflineAction): Promis
       return processPosSale(uuid, action);
     case 'create-item':
       return processCreateItem(uuid, action);
+    case 'update-item-price':
+      await updateItemPrice(action.itemCode, action.uom, {
+        ...(action.retailPrice !== undefined ? { retailPrice: action.retailPrice } : {}),
+        ...(action.grosirPrice !== undefined ? { grosirPrice: action.grosirPrice } : {}),
+      });
+      return { itemCode: action.itemCode, uom: action.uom };
     default: {
       const exhaustive: never = action;
       throw new Error(`Unsupported offline action type: ${JSON.stringify(exhaustive)}`);
