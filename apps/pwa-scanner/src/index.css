@@ -495,18 +495,22 @@ h1 {
      phone use, spec §9) ate enough vertical space on a wide desktop
      screen that the cart below it needed scrolling to reach — defeating
      the whole point of the side-by-side desktop layout. Smaller buttons
-     only here; mobile keeps the touch-friendly 3rem targets. */
+     only here; mobile keeps the touch-friendly 3rem targets. !important
+     needed for the same reason the panel-visibility rules above do —
+     this block sits before the base .keypad/.keypad button rules in
+     source order, so equal specificity would otherwise let the later
+     base rule win regardless of the media query. */
   .keypad-section {
-    margin: 0.25rem 0 0.75rem;
+    margin: 0.25rem 0 0.75rem !important;
   }
 
   .keypad {
-    gap: 0.35rem;
+    gap: 0.35rem !important;
   }
 
   .keypad button {
-    min-height: 2.25rem;
-    font-size: 1rem;
+    min-height: 2.25rem !important;
+    font-size: 1rem !important;
   }
 }
 
