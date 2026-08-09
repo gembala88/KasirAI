@@ -235,8 +235,12 @@ export interface WarehouseOption {
  * Gudang field let a warehouse worker type a plausible-looking but wrong
  * value (confirmed live: "4", "60"), which only failed at ERPNext's own
  * raw error, after the item and its prices were already created.
+ * ERPNext's own auto-generated per-Company warehouses (Stores, Work In
+ * Progress, etc.) are excluded server-side — this list is only ever the
+ * store's actual receiving/selling warehouses. `default` is the one to
+ * pre-select rather than leaving the field on an ambiguous placeholder.
  */
-export function fetchWarehouses(): Promise<{ warehouses: WarehouseOption[] }> {
+export function fetchWarehouses(): Promise<{ warehouses: WarehouseOption[]; default: string }> {
   return get('/api/v1/inventory/warehouses');
 }
 

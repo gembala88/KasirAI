@@ -3,12 +3,7 @@
  */
 import { env } from '../../../config/env.js';
 import { erpNextClient } from '../../../shared/erpnext-client/index.js';
-import type {
-  LowStockAlert,
-  NearExpiryAlert,
-  StockLevel,
-  WarehouseOption,
-} from '../domain/index.js';
+import type { LowStockAlert, NearExpiryAlert, StockLevel, WarehouseList } from '../domain/index.js';
 import { stockCache, stockCacheKey } from '../infrastructure/stock-cache.js';
 
 interface BinRecord {
@@ -22,23 +17,65 @@ interface WarehouseRecord {
 }
 
 /**
- * Leaf warehouses only (is_group=0) — same "exclude category/parent tree
- * nodes" rule as Item Group. Real bug this closes: every Gudang field in
- * the app (Input Stok, Transfer, and "Tambah Produk Baru"'s Stok Awal) was
- * plain free text with nothing to validate against, so a warehouse worker
- * typing a plausible-looking but wrong value (confirmed live: "4", "60")
- * only found out at ERPNext's own raw, untranslated error — after the
- * item and its prices had already been created, with just the opening
- * stock left dangling as a Failed sync row.
+ * ERPNext auto-creates this fixed set of warehouses for every Company
+ * ("Stores", "Work In Progress", "Finished Goods", "Goods In Transit" —
+ * see erpnext/setup/setup_wizard/operations/company_setup.py), translated
+ * per the company's language. Real UX gap found live: with two Companies
+ * seeded (TH, NPG) that's 8 auto-generated warehouses cluttering every
+ * Gudang picker alongside the 2 actual store warehouses — a cashier or
+ * warehouse worker has no way to tell "Finished Goods - TH" apart from
+ * the one they should actually pick. ERPNext has no field marking these
+ * as system-generated (warehouse_type is null on most of them), so this
+ * is a name-based match against the known default set, both languages
+ * observed in this deployment.
  */
-export async function listWarehouses(): Promise<WarehouseOption[]> {
+const SYSTEM_DEFAULT_WAREHOUSE_BASE_NAMES = new Set([
+  'stores',
+  'work in progress',
+  'finished goods',
+  'goods in transit',
+  'pekerjaan dalam proses',
+  'stok barang jadi',
+  'barang dalam transit',
+]);
+
+/** Strips ERPNext's " - {company abbr}" suffix, e.g. "Stores - TH" -> "stores". */
+function warehouseBaseName(name: string): string {
+  return name
+    .replace(/\s*-\s*[^-]+$/, '')
+    .trim()
+    .toLowerCase();
+}
+
+function isSystemDefaultWarehouse(name: string): boolean {
+  return SYSTEM_DEFAULT_WAREHOUSE_BASE_NAMES.has(warehouseBaseName(name));
+}
+
+/**
+ * Leaf warehouses only (is_group=0) — same "exclude category/parent tree
+ * nodes" rule as Item Group — with ERPNext's auto-generated per-Company
+ * defaults filtered out (see isSystemDefaultWarehouse). Real bug this
+ * closes: every Gudang field in the app (Input Stok, Transfer, and
+ * "Tambah Produk Baru"'s Stok Awal) was plain free text with nothing to
+ * validate against, so a warehouse worker typing a plausible-looking but
+ * wrong value (confirmed live: "4", "60") only found out at ERPNext's own
+ * raw, untranslated error — after the item and its prices had already
+ * been created, with just the opening stock left dangling as a Failed
+ * sync row.
+ */
+export async function listWarehouses(): Promise<WarehouseList> {
   const warehouses = await erpNextClient.list<WarehouseRecord>('Warehouse', {
     filters: [['is_group', '=', 0]],
     fields: ['name'],
     order_by: 'name asc',
     limit_page_length: '200',
   });
-  return warehouses.map((w) => ({ name: w.name }));
+  return {
+    warehouses: warehouses
+      .filter((w) => !isSystemDefaultWarehouse(w.name))
+      .map((w) => ({ name: w.name })),
+    default: env.ERPNEXT_DEFAULT_WAREHOUSE,
+  };
 }
 
 /**

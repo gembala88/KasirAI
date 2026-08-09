@@ -65,15 +65,14 @@ export function registerInventoryRoutes(app: FastifyInstance): void {
     },
   );
 
-  // Every warehouse worth writing stock into (leaf nodes only) — the
-  // autocomplete source for every Gudang field: Input Stok, Transfer, and
-  // "Tambah Produk Baru"'s Stok Awal.
+  // Every warehouse worth writing stock into (leaf nodes only, system
+  // defaults excluded) — the autocomplete source for every Gudang field:
+  // Input Stok, Transfer, and "Tambah Produk Baru"'s Stok Awal. Also
+  // returns the store's actual default so those fields can pre-select it.
   app.get(
     '/api/v1/inventory/warehouses',
     { preHandler: requireRole(...STOCK_READ_ROLES) },
-    async () => ({
-      warehouses: await listWarehouses(),
-    }),
+    async () => listWarehouses(),
   );
 
   app.get<{ Querystring: { threshold?: string } }>(

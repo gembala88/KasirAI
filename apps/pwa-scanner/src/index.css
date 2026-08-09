@@ -564,6 +564,42 @@ h1 {
   font-size: var(--font-size-muted);
 }
 
+.uom-picker-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.25rem 0 1rem;
+}
+
+.uom-chip {
+  min-height: 2.5rem;
+  padding: 0 1rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.uom-chip:active {
+  transform: scale(0.96);
+}
+
+.uom-chip--active {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.uom-picker {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin: 0.25rem 0 1rem;
+}
+
 .keypad-section {
   margin: 0.5rem 0 1rem;
 }
@@ -815,6 +851,12 @@ h1 {
   width: auto;
   padding: 0 var(--space-3);
   gap: var(--space-1);
+}
+
+/* Full row width, not squeezed into one half of the 2-column grid — the
+   chip grid needs the room the plain text input didn't. */
+.package-uom-row-uom {
+  grid-column: 1 / -1;
 }
 
 .package-uom-row .icon-button::after {

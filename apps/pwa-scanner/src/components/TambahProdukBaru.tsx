@@ -7,12 +7,14 @@ import {
   IconX,
 } from '@tabler/icons-react';
 import CameraScanner from './CameraScanner';
+import UomPicker from './UomPicker';
 import {
   fetchItemGroups,
   fetchUoms,
   fetchWarehouses,
   findExistingItem,
   searchItemsByName,
+  triggerCatalogSync,
   type ExistingItemMatch,
   type ItemGroupOption,
   type ItemSearchCandidate,
@@ -62,6 +64,7 @@ export default function TambahProdukBaru({ onSubmitted }: { onSubmitted: () => v
   const [itemGroups, setItemGroups] = useState<ItemGroupOption[]>([]);
   const [uoms, setUoms] = useState<UomOption[]>([]);
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
+  const [defaultWarehouse, setDefaultWarehouse] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -75,17 +78,30 @@ export default function TambahProdukBaru({ onSubmitted }: { onSubmitted: () => v
   const [openingQty, setOpeningQty] = useState('');
   const [warehouse, setWarehouse] = useState('');
   const [packageUomRows, setPackageUomRows] = useState<PackageUomFormRow[]>([]);
+  // Bumped on every resetNewItemForm() — remounts UomPicker so a prior
+  // "+ Lainnya" custom-text session doesn't linger into the next product.
+  const [formResetKey, setFormResetKey] = useState(0);
 
   useEffect(() => {
     void loadWithCacheFallback(
       ITEM_GROUPS_CACHE_KEY,
       async () => (await fetchItemGroups()).itemGroups,
+      [],
     ).then(setItemGroups);
-    void loadWithCacheFallback(UOMS_CACHE_KEY, async () => (await fetchUoms()).uoms).then(setUoms);
-    void loadWithCacheFallback(
-      WAREHOUSES_CACHE_KEY,
-      async () => (await fetchWarehouses()).warehouses,
-    ).then(setWarehouses);
+    void loadWithCacheFallback(UOMS_CACHE_KEY, async () => (await fetchUoms()).uoms, []).then(
+      setUoms,
+    );
+    void loadWithCacheFallback(WAREHOUSES_CACHE_KEY, fetchWarehouses, {
+      warehouses: [],
+      default: '',
+    }).then(({ warehouses: list, default: def }) => {
+      setWarehouses(list);
+      setDefaultWarehouse(def);
+      // Only backfills if the Gudang field hasn't already been set (by
+      // resetNewItemForm running first, or the user picking one) — never
+      // stomps a real choice.
+      setWarehouse((current) => current || def);
+    });
   }, []);
 
   function resetNewItemForm(prefillName = ''): void {
@@ -96,8 +112,9 @@ export default function TambahProdukBaru({ onSubmitted }: { onSubmitted: () => v
     setGrosirPrice('');
     setCostPrice('');
     setOpeningQty('');
-    setWarehouse('');
+    setWarehouse(defaultWarehouse);
     setPackageUomRows([]);
+    setFormResetKey((k) => k + 1);
   }
 
   /** True if this exact code is already sitting in the local offline queue, not yet synced — the same barcode shouldn't be offered the create form twice. */
@@ -233,6 +250,10 @@ export default function TambahProdukBaru({ onSubmitted }: { onSubmitted: () => v
       const result = await submitOrQueue('create-item', built);
       if (result.outcome === 'synced') {
         setMessage(`Produk "${itemName}" berhasil ditambahkan.`);
+        // The new item only exists on the server at this point — refresh
+        // the offline catalog cache so Daftar Produk shows it right away
+        // instead of the cashier needing to know to re-sync manually.
+        void triggerCatalogSync();
       } else if (result.outcome === 'conflict') {
         setMessage(
           `Ditandai konflik (${result.message ?? 'kode barang mungkin sudah terdaftar'}) — perlu ditinjau di dashboard.`,
@@ -447,11 +468,11 @@ export default function TambahProdukBaru({ onSubmitted }: { onSubmitted: () => v
 
           <label>
             Satuan Dasar
-            <input
+            <UomPicker
+              key={formResetKey}
               value={stockUom}
-              onChange={(e) => setStockUom(e.target.value)}
-              list={UOM_DATALIST_ID}
-              placeholder="mis. Pcs, Renteng, Kg"
+              onChange={setStockUom}
+              datalistId={UOM_DATALIST_ID}
             />
           </label>
 
@@ -476,18 +497,15 @@ export default function TambahProdukBaru({ onSubmitted }: { onSubmitted: () => v
           </label>
 
           <div className="package-uoms">
-            <p className="hint">
-              Satuan Kemasan (opsional) — untuk produk yang juga dijual per kemasan, mis. Dus berisi
-              beberapa {stockUom || 'Satuan Dasar'}.
-            </p>
             {packageUomRows.map((row, index) => (
               <div className="package-uom-row" key={index}>
-                <input
-                  value={row.uom}
-                  onChange={(e) => updatePackageUomRow(index, { uom: e.target.value })}
-                  list={UOM_DATALIST_ID}
-                  placeholder="Satuan, mis. Dus"
-                />
+                <div className="package-uom-row-uom">
+                  <UomPicker
+                    value={row.uom}
+                    onChange={(uom) => updatePackageUomRow(index, { uom })}
+                    datalistId={UOM_DATALIST_ID}
+                  />
+                </div>
                 <input
                   value={row.conversionQty}
                   onChange={(e) => updatePackageUomRow(index, { conversionQty: e.target.value })}
@@ -520,6 +538,7 @@ export default function TambahProdukBaru({ onSubmitted }: { onSubmitted: () => v
               type="button"
               className="link-button"
               onClick={() => setPackageUomRows((rows) => [...rows, emptyPackageUomRow()])}
+              title={`Untuk produk yang juga dijual per kemasan, mis. Dus berisi beberapa ${stockUom || 'Satuan Dasar'}`}
             >
               <IconPlus size={14} /> Tambah Satuan Kemasan
             </button>
@@ -534,11 +553,7 @@ export default function TambahProdukBaru({ onSubmitted }: { onSubmitted: () => v
               placeholder="Kosongkan jika belum ada stok fisik"
             />
           </label>
-          <p className="hint">
-            Jika Stok Awal diisi, produk langsung tercatat punya stok — Harga Modal/Beli wajib diisi
-            agar laporan untung-rugi benar sejak unit pertama terjual. Jika dikosongkan, produk
-            hanya terdaftar (stok 0), untuk ditambahkan nanti lewat Input Stok.
-          </p>
+          <p className="hint">Kosongkan untuk tambah stok nanti lewat Input Stok.</p>
 
           <label>
             Harga Modal/Beli {Number(openingQty) > 0 ? '(wajib)' : '(opsional)'}
@@ -554,7 +569,7 @@ export default function TambahProdukBaru({ onSubmitted }: { onSubmitted: () => v
             <label>
               Gudang
               <select value={warehouse} onChange={(e) => setWarehouse(e.target.value)}>
-                <option value="">Gudang default</option>
+                {warehouses.length === 0 && <option value="">Tidak ada data (cek koneksi)</option>}
                 {warehouses.map((w) => (
                   <option key={w.name} value={w.name}>
                     {w.name}

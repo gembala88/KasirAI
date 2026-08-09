@@ -45,3 +45,9 @@ export interface NearExpiryAlert {
 export interface WarehouseOption {
   name: string;
 }
+
+export interface WarehouseList {
+  warehouses: WarehouseOption[];
+  /** The store's actual receiving warehouse (env.ERPNEXT_DEFAULT_WAREHOUSE) — for pre-selecting a Gudang field instead of leaving it on an ambiguous placeholder. */
+  default: string;
+}

@@ -62,10 +62,13 @@ export default function WarehouseScan({ isOnline }: { isOnline: boolean }) {
   }, [refreshQueue]);
 
   useEffect(() => {
-    void loadWithCacheFallback(
-      WAREHOUSES_CACHE_KEY,
-      async () => (await fetchWarehouses()).warehouses,
-    ).then(setWarehouses);
+    void loadWithCacheFallback(WAREHOUSES_CACHE_KEY, fetchWarehouses, {
+      warehouses: [],
+      default: '',
+    }).then(({ warehouses: list, default: def }) => {
+      setWarehouses(list);
+      setWarehouse((current) => current || def);
+    });
   }, []);
 
   const syncQueue = useCallback(async () => {
@@ -199,7 +202,7 @@ export default function WarehouseScan({ isOnline }: { isOnline: boolean }) {
             <label>
               Gudang {actionType === 'transfer' ? '(Asal)' : ''}
               <select value={warehouse} onChange={(e) => setWarehouse(e.target.value)}>
-                <option value="">Gudang default</option>
+                {warehouses.length === 0 && <option value="">Tidak ada data (cek koneksi)</option>}
                 {warehouses.map((w) => (
                   <option key={w.name} value={w.name}>
                     {w.name}
