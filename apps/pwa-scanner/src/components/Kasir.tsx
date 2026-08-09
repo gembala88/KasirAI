@@ -66,6 +66,9 @@ export default function Kasir() {
   const [submitSearching, setSubmitSearching] = useState(false);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [pendingQty, setPendingQty] = useState('1');
+  // Distinguishes "still showing the untouched default" from "user typed the digit 1" —
+  // without it, typing 1 then . then 5 misfired as 0.5 (see pressKey).
+  const [qtyTouched, setQtyTouched] = useState(false);
   const [customerId, setCustomerId] = useState('');
   const [stage, setStage] = useState<'cart' | 'payment'>('cart');
   const [paymentMethod, setPaymentMethod] =
@@ -228,15 +231,27 @@ export default function Kasir() {
   function pressKey(key: string): void {
     if (key === 'C') {
       setPendingQty('1');
+      setQtyTouched(false);
     } else if (key === '⌫') {
-      setPendingQty((current) => (current.length > 1 ? current.slice(0, -1) : '1'));
+      if (!qtyTouched || pendingQty.length <= 1) {
+        setPendingQty('1');
+        setQtyTouched(false);
+      } else {
+        const next = pendingQty.slice(0, -1);
+        setPendingQty(next);
+        setQtyTouched(next.length > 0);
+      }
     } else if (key === '.') {
-      setPendingQty((current) => {
-        if (current === '1') return '0.';
-        return current.includes('.') ? current : `${current}.`;
-      });
+      if (!qtyTouched) {
+        setPendingQty('0.');
+      } else if (!pendingQty.includes('.')) {
+        setPendingQty(pendingQty + '.');
+      }
+      setQtyTouched(true);
     } else {
-      setPendingQty((current) => (current === '1' ? key : current + key).replace(/^0+(?=\d)/, ''));
+      const base = qtyTouched ? pendingQty : '';
+      setPendingQty((base + key).replace(/^0+(?=\d)/, '') || '1');
+      setQtyTouched(true);
     }
   }
 
@@ -386,6 +401,7 @@ export default function Kasir() {
                     clearResults();
                     setQuery('');
                     setPendingQty('1');
+                    setQtyTouched(false);
                   }}
                 >
                   <span className="search-result-name">{item.itemName}</span>

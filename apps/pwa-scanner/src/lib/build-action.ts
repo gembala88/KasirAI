@@ -26,8 +26,8 @@ export function buildAction(type: StockActionType, fields: ScanFormFields): Stoc
 
   if (type === 'add-stock') {
     const rate = Number(fields.rate);
-    if (!Number.isFinite(rate) || rate < 0) {
-      return 'Harga satuan tidak valid';
+    if (!Number.isFinite(rate) || rate <= 0) {
+      return 'Harga satuan wajib diisi dan lebih dari 0';
     }
     return {
       type,

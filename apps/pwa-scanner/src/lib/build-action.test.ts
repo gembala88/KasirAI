@@ -60,7 +60,18 @@ describe('buildAction', () => {
 
   it('rejects an invalid rate for add-stock', () => {
     expect(buildAction('add-stock', { ...baseFields, itemCode: 'X', qty: '1', rate: '-5' })).toBe(
-      'Harga satuan tidak valid',
+      'Harga satuan wajib diisi dan lebih dari 0',
+    );
+  });
+
+  it('rejects a blank or zero rate for add-stock, instead of silently submitting 0', () => {
+    // Real bug: a blank Harga Satuan field defaulted to rate 0, which used to pass
+    // validation here and only fail later at ERPNext's own valuation check.
+    expect(buildAction('add-stock', { ...baseFields, itemCode: 'X', qty: '1', rate: '' })).toBe(
+      'Harga satuan wajib diisi dan lebih dari 0',
+    );
+    expect(buildAction('add-stock', { ...baseFields, itemCode: 'X', qty: '1', rate: '0' })).toBe(
+      'Harga satuan wajib diisi dan lebih dari 0',
     );
   });
 
