@@ -7,7 +7,7 @@ import { fetchWarehouses, type WarehouseOption } from '../lib/api';
 import { buildAction, type StockActionType } from '../lib/build-action';
 import { loadWithCacheFallback } from '../lib/cached-lookup';
 import { statusBadge } from '../lib/format';
-import { listQueuedActions, type QueuedAction } from '../lib/offline-queue';
+import { listQueuedActions, QUEUE_CHANGED_EVENT, type QueuedAction } from '../lib/offline-queue';
 import { submitOrQueue, syncPendingQueue } from '../lib/sync';
 import type { ScanAction, ScanActionType } from '../lib/types';
 import { useProductSearch } from '../lib/use-product-search';
@@ -39,7 +39,7 @@ function queueLineDescription(item: ScanQueuedAction): string {
   return `${item.action.itemCode} (${item.action.qty})`;
 }
 
-export default function WarehouseScan({ isOnline }: { isOnline: boolean }) {
+export default function WarehouseScan() {
   const [mode, setMode] = useState<'input-stok' | 'tambah-produk' | 'daftar-produk'>('input-stok');
   const [queue, setQueue] = useState<ScanQueuedAction[]>([]);
   const [syncing, setSyncing] = useState(false);
@@ -68,6 +68,16 @@ export default function WarehouseScan({ isOnline }: { isOnline: boolean }) {
     void refreshQueue();
   }, [refreshQueue]);
 
+  // Real bug found live: a sync sweep can now run from App.tsx's
+  // online-reconnect/login handler while this screen is or isn't mounted —
+  // this keeps the displayed list current either way, instead of only
+  // updating after this screen's own submit/manual-sync calls.
+  useEffect(() => {
+    const handler = () => void refreshQueue();
+    window.addEventListener(QUEUE_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(QUEUE_CHANGED_EVENT, handler);
+  }, [refreshQueue]);
+
   useEffect(() => {
     void loadWithCacheFallback(WAREHOUSES_CACHE_KEY, fetchWarehouses, {
       warehouses: [],
@@ -87,12 +97,6 @@ export default function WarehouseScan({ isOnline }: { isOnline: boolean }) {
       setSyncing(false);
     }
   }, [refreshQueue]);
-
-  useEffect(() => {
-    if (isOnline) {
-      void syncQueue();
-    }
-  }, [isOnline, syncQueue]);
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();

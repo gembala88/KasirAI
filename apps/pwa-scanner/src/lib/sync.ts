@@ -12,7 +12,7 @@
  * carries the same UUID, and the server skips it if that UUID already
  * synced — see apps/api/src/modules/sync.
  */
-import { syncAction, type SyncResponse } from './api';
+import { ApiError, syncAction, type SyncResponse } from './api';
 import {
   enqueueAction,
   listQueuedActions,
@@ -24,7 +24,11 @@ import type { OfflineAction, OfflineActionType } from './types';
 
 export type SubmitResult =
   | { outcome: 'synced'; result: unknown }
-  | { outcome: 'queued' }
+  // 'rejected' means the server was reached and said no (bad data, a
+  // permanent validation error) — other queued items are unaffected and
+  // still worth trying. 'network' means the request never reached the
+  // server at all — every other item is equally unreachable right now.
+  | { outcome: 'queued'; reason: 'network' | 'rejected' }
   | { outcome: 'conflict'; message: string | undefined };
 
 async function trySyncOne(queued: QueuedAction): Promise<SubmitResult> {
@@ -42,7 +46,7 @@ async function trySyncOne(queued: QueuedAction): Promise<SubmitResult> {
     // nowhere except server logs.
     const message = err instanceof Error ? err.message : String(err);
     await updateActionStatus(queued.uuid, 'Failed', message);
-    return { outcome: 'queued' };
+    return { outcome: 'queued', reason: err instanceof ApiError ? 'rejected' : 'network' };
   }
 
   if (response.status === 'Conflict') {
@@ -85,9 +89,16 @@ export async function syncPendingQueue(): Promise<SyncSweepSummary> {
       summary.conflicts += 1;
     } else {
       summary.stillQueued += 1;
-      // Still offline (or the API is down) — stop rather than burn
-      // through the rest of the queue one failed request at a time.
-      break;
+      // Real bug found live: this used to break on ANY failure, including
+      // a per-item server rejection (bad data, a permanent validation
+      // error) — meaning one broken item anywhere in the queue silently
+      // blocked every item behind it from ever being retried, even while
+      // genuinely online. Only a network-unreachable failure means the
+      // rest of the sweep would fail identically; stop burning requests
+      // only in that case.
+      if (result.reason === 'network') {
+        break;
+      }
     }
   }
 

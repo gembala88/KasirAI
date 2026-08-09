@@ -11,6 +11,25 @@ import type { QueuedAction, SyncStatus } from './offline-queue';
 
 const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
 
+/**
+ * Thrown by get()/post() when the server actually responded but rejected
+ * the request (bad data, a permanent validation error, etc.) — distinct
+ * from fetch() itself throwing, which means the request never reached the
+ * server at all (offline, DNS failure, server unreachable). Real bug this
+ * fixes: syncPendingQueue() used to treat both cases identically and abort
+ * the whole sweep on the first failure of either kind, so one permanently-
+ * broken item anywhere in the queue silently blocked every item behind it
+ * from ever being retried, even when the network was fine.
+ */
+export class ApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
 interface TokenPair {
   accessToken: string;
   refreshToken: string;
@@ -117,7 +136,10 @@ async function get<T>(path: string): Promise<T> {
   const response = await authorizedFetch(path);
   if (!response.ok) {
     const detail = (await response.json().catch(() => null)) as { message?: string } | null;
-    throw new Error(detail?.message ?? `GET ${path} failed with status ${response.status}`);
+    throw new ApiError(
+      detail?.message ?? `GET ${path} failed with status ${response.status}`,
+      response.status,
+    );
   }
   return response.json() as Promise<T>;
 }
@@ -130,7 +152,10 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   });
   if (!response.ok) {
     const detail = (await response.json().catch(() => null)) as { message?: string } | null;
-    throw new Error(detail?.message ?? `POST ${path} failed with status ${response.status}`);
+    throw new ApiError(
+      detail?.message ?? `POST ${path} failed with status ${response.status}`,
+      response.status,
+    );
   }
   return response.json() as Promise<T>;
 }

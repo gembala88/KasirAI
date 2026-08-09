@@ -7,6 +7,7 @@ import WarehouseScan from './components/WarehouseScan';
 import { STORE_NAME } from './branding';
 import { logout, triggerCatalogSync } from './lib/api';
 import { getStoredAuth, setOnAuthRequired, type AuthUser } from './lib/auth';
+import { syncPendingQueue } from './lib/sync';
 
 type Tab = HomeDestination;
 type View = 'home' | Tab;
@@ -38,6 +39,14 @@ export default function App() {
       // the current catalog the moment connectivity comes back, not wait
       // for the next login. No-ops harmlessly if not logged in yet.
       void triggerCatalogSync();
+      // Real bug found live: this used to only exist inside WarehouseScan's
+      // own effect, so reconnecting while on Kasir (or the Home screen)
+      // never retried the pending queue at all — it just sat there until
+      // someone happened to open Gudang or tap "Sinkron Sekarang" by hand.
+      // App-level means every screen gets the same instant-on-reconnect
+      // behavior; each screen listens for offline-queue's
+      // QUEUE_CHANGED_EVENT to keep its own displayed list in sync.
+      void syncPendingQueue();
     };
     const handleOffline = () => setIsOnline(false);
     window.addEventListener('online', handleOnline);
@@ -47,6 +56,19 @@ export default function App() {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+  useEffect(() => {
+    // The 'online' event only fires on an actual offline→online transition
+    // — it never fires for a session that's simply been open and connected
+    // the whole time, which is the common real case for a stuck queue (no
+    // reconnect ever happens, so nothing ever re-triggers a sweep). This
+    // covers "app opened fresh (or already open) with items left over from
+    // earlier" without waiting for a network state change that may never
+    // come.
+    if (user && navigator.onLine) {
+      void syncPendingQueue();
+    }
+  }, [user]);
 
   const visibleTabs = user ? TABS.filter((t) => t.roles.includes(user.role)) : [];
 
@@ -115,7 +137,7 @@ export default function App() {
             </nav>
           )}
 
-          {view === 'warehouse' && <WarehouseScan isOnline={isOnline} />}
+          {view === 'warehouse' && <WarehouseScan />}
           {view === 'kasir' && <Kasir />}
         </>
       )}

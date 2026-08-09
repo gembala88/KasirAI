@@ -18,7 +18,7 @@ import {
 import CameraScanner from './CameraScanner';
 import { getLastSyncedAt } from '../lib/catalog-cache';
 import { formatQty, formatRupiah, formatSyncedAt, statusBadge } from '../lib/format';
-import { listQueuedActions, type QueuedAction } from '../lib/offline-queue';
+import { listQueuedActions, QUEUE_CHANGED_EVENT, type QueuedAction } from '../lib/offline-queue';
 import { submitOrQueue, syncPendingQueue } from '../lib/sync';
 import type { PosSaleAction } from '../lib/types';
 import { useProductSearch } from '../lib/use-product-search';
@@ -128,6 +128,16 @@ export default function Kasir() {
 
   useEffect(() => {
     void refreshPendingSales();
+  }, [refreshPendingSales]);
+
+  // Real bug found live: Kasir had no way to learn that a sync sweep
+  // triggered elsewhere (App.tsx's online-reconnect/login handler, or the
+  // Gudang screen's own manual sync) had changed the queue — its "Menunggu
+  // Sinkron" list only ever updated after its own submit/manual-sync calls.
+  useEffect(() => {
+    const handler = () => void refreshPendingSales();
+    window.addEventListener(QUEUE_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(QUEUE_CHANGED_EVENT, handler);
   }, [refreshPendingSales]);
 
   async function handleSyncPendingSales(): Promise<void> {

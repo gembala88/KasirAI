@@ -39,7 +39,16 @@ export default function DaftarProduk() {
     );
   }
 
-  useEffect(reload, []);
+  useEffect(() => {
+    // Read whatever's cached immediately (works offline, shows something
+    // right away), then refresh from the server in the background. Real
+    // bug found live: a disabled item (old "bawang merah", Pcs) kept
+    // showing here long after being disabled — the cache only refreshes on
+    // login or an actual offline→online transition, neither of which
+    // happens just from opening this screen while already online.
+    reload();
+    void triggerCatalogSync().then(reload);
+  }, []);
 
   const visible = useMemo(() => {
     const trimmed = query.trim();
@@ -195,7 +204,7 @@ function EditPriceDialog({
         {loading ? (
           <p className="hint">Memuat harga saat ini…</p>
         ) : (
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} className="scan-form">
             <label>
               Harga Retail
               <input

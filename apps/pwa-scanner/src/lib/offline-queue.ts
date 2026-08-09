@@ -12,6 +12,19 @@ import type { OfflineAction, OfflineActionType } from './types';
 
 export type SyncStatus = 'Pending' | 'Processing' | 'Synced' | 'Failed' | 'Retry' | 'Conflict';
 
+/**
+ * Fired whenever the queue's contents change — the one signal both Kasir
+ * and WarehouseScan listen for to refresh their own displayed queue list.
+ * Needed because a sync sweep can now be triggered from outside either
+ * screen (App.tsx's online-reconnect handler), so a screen mounted at the
+ * time has no other way to know its list just went stale.
+ */
+export const QUEUE_CHANGED_EVENT = 'hermes:queue-changed';
+
+function notifyQueueChanged(): void {
+  window.dispatchEvent(new Event(QUEUE_CHANGED_EVENT));
+}
+
 export interface QueuedAction {
   uuid: string;
   actionType: OfflineActionType;
@@ -36,6 +49,7 @@ export async function enqueueAction(
   };
   const db = await getDb();
   await db.add(STORE_NAME, queued);
+  notifyQueueChanged();
   return queued;
 }
 
@@ -53,9 +67,11 @@ export async function updateActionStatus(
   const existing = (await db.get(STORE_NAME, uuid)) as QueuedAction | undefined;
   if (!existing) return;
   await db.put(STORE_NAME, { ...existing, status, ...(lastError ? { lastError } : {}) });
+  notifyQueueChanged();
 }
 
 export async function removeQueuedAction(uuid: string): Promise<void> {
   const db = await getDb();
   await db.delete(STORE_NAME, uuid);
+  notifyQueueChanged();
 }
