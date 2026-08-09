@@ -347,25 +347,22 @@ export async function searchItemsByName(query: string): Promise<ItemSearchCandid
 }
 
 /**
- * Opens the ERPNext-rendered receipt (real HTML from its Print Format —
- * see the receipt endpoint for why this isn't built client-side) in a new
- * tab and triggers the browser's native print dialog once it's loaded —
- * works with any printer the OS has a driver for, thermal receipt
- * printers included, no extra software.
+ * Fetches the ERPNext-rendered receipt (real HTML from its Print Format —
+ * see the receipt endpoint for why this isn't built client-side) for
+ * inline preview. Real bug found live: the previous window.open()-based
+ * flow got silently blocked by the browser's popup blocker ("Popup
+ * diblokir browser"), and even when allowed, printing was auto-triggered
+ * without a user gesture — a pattern browsers increasingly distrust. This
+ * just returns the HTML; the caller renders it inline (an iframe) and
+ * calls print() from that iframe on an explicit button tap, which is
+ * neither a popup nor an auto-triggered print.
  */
-export async function openReceipt(transactionName: string): Promise<void> {
+export async function fetchReceiptHtml(transactionName: string): Promise<string> {
   const response = await authorizedFetch(
     `/api/v1/pos/transactions/${encodeURIComponent(transactionName)}/receipt`,
   );
   if (!response.ok) {
     throw new Error(`Gagal memuat struk (status ${response.status})`);
   }
-  const html = await response.text();
-  const receiptWindow = window.open('', '_blank');
-  if (!receiptWindow) {
-    throw new Error('Popup diblokir browser — izinkan popup untuk mencetak struk.');
-  }
-  receiptWindow.document.write(html);
-  receiptWindow.document.close();
-  receiptWindow.addEventListener('load', () => receiptWindow.print());
+  return response.text();
 }

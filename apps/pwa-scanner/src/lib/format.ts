@@ -6,6 +6,14 @@ export function formatRupiah(amount: number): string {
   }).format(amount);
 }
 
+/** Whole numbers print plain ("2"); weight-sold quantities keep up to 2 decimals, trailing zeros trimmed ("0.25", not "0.250" or "0.25000000000000004"). */
+export function formatQty(qty: number): string {
+  if (Number.isInteger(qty)) {
+    return String(qty);
+  }
+  return qty.toFixed(2).replace(/\.?0+$/, '');
+}
+
 const STATUS_LABELS: Record<string, string> = {
   Pending: 'Menunggu',
   Processing: 'Memproses',

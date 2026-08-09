@@ -1,20 +1,23 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   IconAlertTriangle,
   IconArrowLeft,
   IconBuildingBank,
+  IconCamera,
   IconCash,
   IconCloudCheck,
+  IconPrinter,
   IconQrcode,
 } from '@tabler/icons-react';
 import {
-  openReceipt,
+  fetchReceiptHtml,
   searchProducts,
   type PosTransaction,
   type ProductSearchResult,
 } from '../lib/api';
+import CameraScanner from './CameraScanner';
 import { getLastSyncedAt } from '../lib/catalog-cache';
-import { formatRupiah, formatSyncedAt, statusBadge } from '../lib/format';
+import { formatQty, formatRupiah, formatSyncedAt, statusBadge } from '../lib/format';
 import { listQueuedActions, type QueuedAction } from '../lib/offline-queue';
 import { submitOrQueue, syncPendingQueue } from '../lib/sync';
 import type { PosSaleAction } from '../lib/types';
@@ -23,6 +26,7 @@ import { useProductSearch } from '../lib/use-product-search';
 interface CartLine {
   itemCode: string;
   itemName: string;
+  stockUom: string;
   qty: number;
   rate: number;
   /** Carried from ProductSearchResult.stale — the price may not reflect this customer's real (Grosir/Member) tier. See searchProducts's doc comment. */
@@ -43,7 +47,11 @@ const PAYMENT_METHODS = [
   { id: 'QRIS', label: 'QRIS', icon: <IconQrcode size={24} /> },
   { id: 'Transfer', label: 'Transfer', icon: <IconBuildingBank size={24} /> },
 ] as const;
-const KEYPAD_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', '⌫'] as const;
+// 'C' (clear) lives next to the "Jumlah scan berikutnya" label instead of
+// in the grid — keeps this a clean 4-row-of-3 layout once '.' joined the
+// digits for weight-sold items (Bawang Merah, Gula, Beras — Kg qty like
+// 0.25 needs a decimal point, not just whole scans).
+const KEYPAD_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '⌫'] as const;
 
 /**
  * Cashier checkout screen (spec §1.3 "POS screen (cashier): optimized for
@@ -71,6 +79,18 @@ export default function Kasir() {
     [],
   );
   const [syncingQueue, setSyncingQueue] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
+  // Set once a sale is confirmed and synced — while non-null, the payment
+  // panel shows Kembalian + (optional) receipt instead of the payment
+  // form, until the cashier taps "Transaksi Baru".
+  const [saleResult, setSaleResult] = useState<{
+    transaction: PosTransaction;
+    changeDue: number;
+  } | null>(null);
+  const [receiptHtml, setReceiptHtml] = useState<string | null>(null);
+  const [receiptLoading, setReceiptLoading] = useState(false);
+  const [receiptError, setReceiptError] = useState<string | null>(null);
+  const receiptFrameRef = useRef<HTMLIFrameElement>(null);
   const lastSyncedAt = getLastSyncedAt();
 
   const {
@@ -106,7 +126,13 @@ export default function Kasir() {
   }
 
   const total = cart.reduce((sum, line) => sum + line.qty * line.rate, 0);
-  const qtyToAdd = Math.max(1, Math.trunc(Number(pendingQty)) || 1);
+  // Weight-sold items (Bawang Merah, Gula, Beras...) need decimal qty —
+  // parseInt-style truncation used to silently round 0.25 down to 0, then
+  // Math.max(1, ...) would round it back UP to a full unit. Any positive
+  // number is valid now; only a genuinely empty/non-numeric pad falls
+  // back to 1.
+  const parsedPendingQty = Number(pendingQty);
+  const qtyToAdd = Number.isFinite(parsedPendingQty) && parsedPendingQty > 0 ? parsedPendingQty : 1;
 
   function addToCart(item: ProductSearchResult, qty: number): void {
     setCart((current) => {
@@ -123,6 +149,7 @@ export default function Kasir() {
         {
           itemCode: item.itemCode,
           itemName: item.itemName,
+          stockUom: item.stockUom,
           qty,
           rate: item.price ?? 0,
           stale: item.stale,
@@ -155,21 +182,27 @@ export default function Kasir() {
   // behaves like) is allowed to add directly; every name-based match,
   // however few, requires an explicit tap.
 
-  async function handleSearch(event: React.FormEvent): Promise<void> {
-    event.preventDefault();
-    const trimmed = query.trim();
+  /**
+   * Shared by the search form's submit (Enter, or a real barcode
+   * scanner's keystrokes-then-Enter) and the camera scanner's onDetect —
+   * both are "a code arrived", just from different input hardware, so
+   * both get the exact same exact-match-only-auto-add safety rule.
+   */
+  async function submitSearchQuery(rawQuery: string): Promise<void> {
+    const trimmed = rawQuery.trim();
     if (!trimmed) return;
 
     setSubmitSearching(true);
     setError(null);
     try {
       const { results } = await searchProducts(trimmed, !!customerId.trim());
-      // A barcode scanner behaves like fast keyboard entry ending in
-      // Enter — only an *exact* itemCode match means "scan", not "typed
-      // a partial name to browse": that's the one case allowed to add
-      // straight to cart with no picker. Anything else — including a
-      // name search that happens to match exactly one product — always
-      // shows the picker below for an explicit tap, never auto-adds.
+      // A barcode scanner (hardware or camera) behaves like fast keyboard
+      // entry ending in Enter — only an *exact* itemCode match means
+      // "scan", not "typed a partial name to browse": that's the one case
+      // allowed to add straight to cart with no picker. Anything else —
+      // including a name search that happens to match exactly one
+      // product — always shows the picker below for an explicit tap,
+      // never auto-adds.
       const exactMatch = results.find((r) => r.itemCode.toLowerCase() === trimmed.toLowerCase());
       if (exactMatch) {
         addToCart(exactMatch, qtyToAdd);
@@ -178,6 +211,7 @@ export default function Kasir() {
         setPendingQty('1');
       } else {
         setSearchResults(results);
+        setQuery(trimmed);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -186,11 +220,21 @@ export default function Kasir() {
     }
   }
 
+  async function handleSearch(event: React.FormEvent): Promise<void> {
+    event.preventDefault();
+    await submitSearchQuery(query);
+  }
+
   function pressKey(key: string): void {
     if (key === 'C') {
       setPendingQty('1');
     } else if (key === '⌫') {
       setPendingQty((current) => (current.length > 1 ? current.slice(0, -1) : '1'));
+    } else if (key === '.') {
+      setPendingQty((current) => {
+        if (current === '1') return '0.';
+        return current.includes('.') ? current : `${current}.`;
+      });
     } else {
       setPendingQty((current) => (current === '1' ? key : current + key).replace(/^0+(?=\d)/, ''));
     }
@@ -234,27 +278,31 @@ export default function Kasir() {
       }
 
       const transaction = result.result as PosTransaction;
-
+      // Real UX gap found live: resetting straight back to an empty cart
+      // left the cashier to calculate change by hand, and receipt
+      // printing auto-opened a popup (browser-blocked half the time) with
+      // no user gesture backing the print() call. Now: show Kembalian
+      // immediately, and if the cashier wanted a receipt, fetch it for
+      // inline preview — printing itself only happens on an explicit tap
+      // of "Cetak Struk" below, which is neither a popup nor an
+      // auto-triggered print.
+      setSaleResult({
+        transaction,
+        changeDue: Math.max(0, (Number(amountTendered) || total) - total),
+      });
+      setCart([]);
+      setCustomerId('');
+      setAmountTendered('');
       if (printReceipt) {
-        try {
-          await openReceipt(transaction.name);
-        } catch (printErr) {
-          // The sale is already recorded — a failed print shouldn't look
-          // like a failed transaction. Say so, don't throw.
-          setMessage(
-            `Transaksi ${transaction.name} berhasil, tapi struk gagal dibuka: ${
-              printErr instanceof Error ? printErr.message : String(printErr)
-            }`,
-          );
-          resetAfterSale();
-          return;
-        }
+        setReceiptLoading(true);
+        setReceiptError(null);
+        fetchReceiptHtml(transaction.name)
+          .then(setReceiptHtml)
+          .catch((err: unknown) => {
+            setReceiptError(err instanceof Error ? err.message : String(err));
+          })
+          .finally(() => setReceiptLoading(false));
       }
-
-      setMessage(
-        `Transaksi ${transaction.name} berhasil (${formatRupiah(transaction.grandTotal)}).`,
-      );
-      resetAfterSale();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -268,6 +316,9 @@ export default function Kasir() {
     setAmountTendered('');
     setPrintReceipt(true);
     setStage('cart');
+    setSaleResult(null);
+    setReceiptHtml(null);
+    setReceiptError(null);
   }
 
   return (
@@ -276,17 +327,36 @@ export default function Kasir() {
         <form onSubmit={(e) => void handleSearch(e)} className="scan-form">
           <label>
             Cari / Scan Barang
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Kode barang atau nama"
-              autoFocus
-            />
+            <div className="scan-input-row">
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Kode barang atau nama"
+                autoFocus
+              />
+              <button
+                type="button"
+                className="camera-scan-button"
+                onClick={() => setCameraOpen(true)}
+              >
+                <IconCamera size={20} /> Scan
+              </button>
+            </div>
           </label>
           <button type="submit" disabled={searching}>
             {searching ? 'Mencari…' : 'Tambah ke Keranjang'}
           </button>
         </form>
+
+        {cameraOpen && (
+          <CameraScanner
+            onDetect={(value) => {
+              setCameraOpen(false);
+              void submitSearchQuery(value);
+            }}
+            onClose={() => setCameraOpen(false)}
+          />
+        )}
 
         <p className="hint sync-indicator">
           {lastSyncedAt ? (
@@ -331,7 +401,12 @@ export default function Kasir() {
         )}
 
         <div className="keypad-section">
-          <span className="hint">Jumlah scan berikutnya: {pendingQty}</span>
+          <span className="hint keypad-label">
+            Jumlah scan berikutnya: {pendingQty}
+            <button type="button" className="link-button" onClick={() => pressKey('C')}>
+              Hapus
+            </button>
+          </span>
           <div className="keypad">
             {KEYPAD_KEYS.map((key) => (
               <button type="button" key={key} onClick={() => pressKey(key)}>
@@ -387,7 +462,8 @@ export default function Kasir() {
                   <div>
                     <strong>{line.itemName}</strong>
                     <div className="hint">
-                      {line.qty} × {formatRupiah(line.rate)} = {formatRupiah(line.qty * line.rate)}
+                      {formatQty(line.qty)} {line.stockUom} × {formatRupiah(line.rate)} ={' '}
+                      {formatRupiah(line.qty * line.rate)}
                     </div>
                     {line.stale && <StalePriceWarning />}
                   </div>
@@ -425,92 +501,143 @@ export default function Kasir() {
       </div>
 
       <div className="kasir-payment-panel">
-        {/* Mobile only — see kasir-mobile-only above; desktop has no "back", both panels are just always visible. */}
-        <button
-          type="button"
-          className="link-button home-back kasir-mobile-only"
-          onClick={() => setStage('cart')}
-        >
-          <IconArrowLeft size={18} /> Kembali ke keranjang
-        </button>
+        {/* Mobile only — see kasir-mobile-only above; desktop has no "back", both panels are just always visible. Hidden once a sale is done — there's nothing to "reconsider" post-payment, only "Transaksi Baru" makes sense. */}
+        {!saleResult && (
+          <button
+            type="button"
+            className="link-button home-back kasir-mobile-only"
+            onClick={() => setStage('cart')}
+          >
+            <IconArrowLeft size={18} /> Kembali ke keranjang
+          </button>
+        )}
 
-        <div className="payment-summary card">
-          <span className="card-label">Total Bayar</span>
-          <span className="card-value">{formatRupiah(total)}</span>
-        </div>
+        {saleResult ? (
+          <>
+            <div className="payment-summary card">
+              <span className="card-label">Kembalian</span>
+              <span className="card-value">{formatRupiah(saleResult.changeDue)}</span>
+            </div>
+            <p className="hint">
+              Transaksi {saleResult.transaction.name} berhasil (
+              {formatRupiah(saleResult.transaction.grandTotal)}).
+            </p>
 
-        <section className="cart card">
-          <h2 className="section-label">Ringkasan Pesanan</h2>
-          {cart.length === 0 ? (
-            <p className="hint">Belum ada barang.</p>
-          ) : (
-            <ul>
-              {cart.map((line) => (
-                <li key={line.itemCode} className="cart-line cart-line--review">
-                  <span>
-                    {line.itemName} <span className="hint">× {line.qty}</span>
-                    {line.stale && <StalePriceWarning />}
-                  </span>
-                  <span>{formatRupiah(line.qty * line.rate)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+            {printReceipt && (
+              <section className="receipt-preview card">
+                <h2 className="section-label">Struk</h2>
+                {receiptLoading && <p className="hint">Memuat struk…</p>}
+                {receiptError && <p className="error-box">Struk gagal dimuat: {receiptError}</p>}
+                {receiptHtml && (
+                  <>
+                    <iframe
+                      ref={receiptFrameRef}
+                      srcDoc={receiptHtml}
+                      className="receipt-frame"
+                      title="Struk"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => receiptFrameRef.current?.contentWindow?.print()}
+                    >
+                      <IconPrinter size={18} /> Cetak Struk
+                    </button>
+                  </>
+                )}
+              </section>
+            )}
 
-        <h2 className="section-label">Metode Pembayaran</h2>
-        <div className="payment-method-list" role="radiogroup" aria-label="Metode Pembayaran">
-          {PAYMENT_METHODS.map((method) => (
-            <button
-              key={method.id}
-              type="button"
-              role="radio"
-              aria-checked={paymentMethod === method.id}
-              className={
-                paymentMethod === method.id
-                  ? 'card payment-method-option payment-method-option--selected'
-                  : 'card payment-method-option'
-              }
-              onClick={() => setPaymentMethod(method.id)}
-            >
-              <span className="stat-card-icon">{method.icon}</span>
-              {method.label}
+            {error && <p className="error-box">{error}</p>}
+            {message && <p className="message">{message}</p>}
+
+            <button type="button" className="bayar-button" onClick={resetAfterSale}>
+              Transaksi Baru
             </button>
-          ))}
-        </div>
+          </>
+        ) : (
+          <>
+            <div className="payment-summary card">
+              <span className="card-label">Total Bayar</span>
+              <span className="card-value">{formatRupiah(total)}</span>
+            </div>
 
-        <form className="scan-form payment-form" onSubmit={(e) => e.preventDefault()}>
-          <label>
-            Jumlah Diterima
-            <input
-              value={amountTendered}
-              onChange={(e) => setAmountTendered(e.target.value)}
-              inputMode="decimal"
-              placeholder={String(total)}
-            />
-          </label>
-        </form>
+            <section className="cart card">
+              <h2 className="section-label">Ringkasan Pesanan</h2>
+              {cart.length === 0 ? (
+                <p className="hint">Belum ada barang.</p>
+              ) : (
+                <ul>
+                  {cart.map((line) => (
+                    <li key={line.itemCode} className="cart-line cart-line--review">
+                      <span>
+                        {line.itemName}{' '}
+                        <span className="hint">
+                          × {formatQty(line.qty)} {line.stockUom}
+                        </span>
+                        {line.stale && <StalePriceWarning />}
+                      </span>
+                      <span>{formatRupiah(line.qty * line.rate)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
 
-        <label className="print-toggle">
-          <input
-            type="checkbox"
-            checked={printReceipt}
-            onChange={(e) => setPrintReceipt(e.target.checked)}
-          />
-          Cetak struk
-        </label>
+            <h2 className="section-label">Metode Pembayaran</h2>
+            <div className="payment-method-list" role="radiogroup" aria-label="Metode Pembayaran">
+              {PAYMENT_METHODS.map((method) => (
+                <button
+                  key={method.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={paymentMethod === method.id}
+                  className={
+                    paymentMethod === method.id
+                      ? 'card payment-method-option payment-method-option--selected'
+                      : 'card payment-method-option'
+                  }
+                  onClick={() => setPaymentMethod(method.id)}
+                >
+                  <span className="stat-card-icon">{method.icon}</span>
+                  {method.label}
+                </button>
+              ))}
+            </div>
 
-        {error && <p className="error-box">{error}</p>}
-        {message && <p className="message">{message}</p>}
+            <form className="scan-form payment-form" onSubmit={(e) => e.preventDefault()}>
+              <label>
+                Jumlah Diterima
+                <input
+                  value={amountTendered}
+                  onChange={(e) => setAmountTendered(e.target.value)}
+                  inputMode="decimal"
+                  placeholder={String(total)}
+                />
+              </label>
+            </form>
 
-        <button
-          type="button"
-          className="bayar-button"
-          disabled={submitting || cart.length === 0}
-          onClick={() => void handleConfirmPayment()}
-        >
-          {submitting ? 'Memproses…' : 'Konfirmasi Pembayaran'}
-        </button>
+            <label className="print-toggle">
+              <input
+                type="checkbox"
+                checked={printReceipt}
+                onChange={(e) => setPrintReceipt(e.target.checked)}
+              />
+              Cetak struk
+            </label>
+
+            {error && <p className="error-box">{error}</p>}
+            {message && <p className="message">{message}</p>}
+
+            <button
+              type="button"
+              className="bayar-button"
+              disabled={submitting || cart.length === 0}
+              onClick={() => void handleConfirmPayment()}
+            >
+              {submitting ? 'Memproses…' : 'Konfirmasi Pembayaran'}
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

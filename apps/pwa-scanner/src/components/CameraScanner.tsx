@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { startBarcodeScan, type ScannerControls } from '../lib/barcode-scanner';
 
 /**
- * Full-screen camera overlay for the warehouse screens (spec §14 — camera
- * scanning is reserved for warehouse/stock-opname, not the Kasir checkout
- * counter). Requests camera permission on mount, stops the stream on
- * unmount/close/successful detection — never leaves the camera running in
- * the background.
+ * Full-screen camera overlay, shared by the warehouse screens and Kasir —
+ * spec §14 originally reserved camera scanning for warehouse/stock-opname
+ * only, but real live testing on a desktop PC (spec §13's actual checkout
+ * hardware) showed Kasir had no way to use a webcam at all, only a
+ * hardware barcode scanner or manual typing. Requests camera permission
+ * on mount, stops the stream on unmount/close/successful detection —
+ * never leaves the camera running in the background.
  */
 export default function CameraScanner({
   onDetect,
