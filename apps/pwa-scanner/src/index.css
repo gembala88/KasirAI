@@ -331,6 +331,12 @@ h1 {
   font-weight: 700;
 }
 
+.pending-kg-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
 .scan-form {
   display: flex;
   flex-direction: column;

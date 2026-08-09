@@ -305,7 +305,16 @@ export default function TambahProdukBaru({ onSubmitted }: { onSubmitted: () => v
           </nav>
 
           {entryMode === 'scan' && (
-            <>
+            // Real bug found live: this wasn't a <form> at all, so pressing
+            // Enter after typing/scanning a code did nothing — there was no
+            // submit handler for the keypress to reach.
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void handleScanResult(manualCode);
+              }}
+              className="scan-form"
+            >
               <label>
                 Kode Barang
                 <div className="scan-input-row">
@@ -324,14 +333,18 @@ export default function TambahProdukBaru({ onSubmitted }: { onSubmitted: () => v
                   </button>
                 </div>
               </label>
-              <button type="button" onClick={() => void handleScanResult(manualCode)}>
-                Cek Barang
-              </button>
-            </>
+              <button type="submit">Cek Barang</button>
+            </form>
           )}
 
           {entryMode === 'search' && (
-            <>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                void handleNameSearch();
+              }}
+              className="scan-form"
+            >
               <p className="hint">Untuk produk tanpa barcode — cari dulu berdasarkan nama.</p>
               <label>
                 Nama Barang
@@ -342,10 +355,8 @@ export default function TambahProdukBaru({ onSubmitted }: { onSubmitted: () => v
                   inputMode="text"
                 />
               </label>
-              <button type="button" onClick={() => void handleNameSearch()}>
-                Cari
-              </button>
-            </>
+              <button type="submit">Cari</button>
+            </form>
           )}
         </>
       )}

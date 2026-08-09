@@ -19,6 +19,14 @@ export default defineConfig(({ command }) => ({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // The default auto-injected registerSW.js has no hook for us to force
+      // an already-open tab onto a newly-activated service worker — a real
+      // bug found live: a fix shipped, the container restarted, and 8+
+      // minutes later the device was still running the old bundle (a hard
+      // refresh doesn't bust a Workbox SW cache the way it busts the HTTP
+      // cache). Registering manually in main.tsx lets us reload on
+      // controllerchange instead.
+      injectRegister: false,
       manifest: {
         // Same STORE_NAME as the app header (src/branding.ts) — this is
         // also what shows under the icon once installed on a home screen.

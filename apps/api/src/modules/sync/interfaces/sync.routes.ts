@@ -25,7 +25,13 @@ const offlineActionSchema = z.discriminatedUnion('type', [
     itemCode: z.string().min(1),
     warehouse: z.string().optional(),
     qty: z.number().positive(),
-    rate: z.number().nonnegative(),
+    // Zero silently passed ERPNext's Stock Entry submission with no
+    // accounting effect until the item had zero valuation history left to
+    // fall back on, then failed with a raw, untranslated 417 — confirmed
+    // live (3 real submissions, rate 0, all rejected). The PWA form already
+    // requires a positive rate (build-action.ts); this is the actual write
+    // boundary, so it must reject it too, not just the form.
+    rate: z.number().positive(),
   }),
   z.object({
     type: z.literal('reduce-stock'),

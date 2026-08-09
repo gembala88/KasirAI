@@ -53,6 +53,11 @@ const PAYMENT_METHODS = [
 // 0.25 needs a decimal point, not just whole scans).
 const KEYPAD_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', '⌫'] as const;
 
+/** Only Kg is seeded as a weight unit in this system (see README's UOM setup) — everything else (Pcs, Dus, Renteng…) sells in whole units, so tapping it from the search dropdown can keep adding instantly at qty 1. */
+function isWeightUom(uom: string): boolean {
+  return uom === 'Kg';
+}
+
 /**
  * Cashier checkout screen (spec §1.3 "POS screen (cashier): optimized for
  * speed — barcode scan auto-adds to cart, numeric keypad always visible,
@@ -83,6 +88,13 @@ export default function Kasir() {
   );
   const [syncingQueue, setSyncingQueue] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
+  // Real bug found live: tapping a Kg item from the search dropdown always
+  // added it at whatever qty the keypad happened to be showing (usually the
+  // untouched default of 1), with only whole-unit +/- available afterward
+  // — no way to actually ring up 1.5 Kg. For weight items, a tap now stages
+  // the item here instead of adding it immediately, so the keypad's
+  // already-decimal-safe input can set a real weight before it's committed.
+  const [pendingKgItem, setPendingKgItem] = useState<ProductSearchResult | null>(null);
   // Set once a sale is confirmed and synced — while non-null, the payment
   // panel shows Kembalian + (optional) receipt instead of the payment
   // form, until the cashier taps "Transaksi Baru".
@@ -195,6 +207,7 @@ export default function Kasir() {
     const trimmed = rawQuery.trim();
     if (!trimmed) return;
 
+    setPendingKgItem(null);
     setSubmitSearching(true);
     setError(null);
     try {
@@ -397,6 +410,16 @@ export default function Kasir() {
                 <button
                   type="button"
                   onClick={() => {
+                    if (isWeightUom(item.stockUom)) {
+                      // Stage it — the keypad below sets the real (decimal)
+                      // weight, "Tambah ke Keranjang" here commits it.
+                      setPendingKgItem(item);
+                      clearResults();
+                      setQuery('');
+                      setPendingQty('1');
+                      setQtyTouched(false);
+                      return;
+                    }
                     addToCart(item, qtyToAdd);
                     clearResults();
                     setQuery('');
@@ -414,6 +437,39 @@ export default function Kasir() {
               </li>
             ))}
           </ul>
+        )}
+
+        {pendingKgItem && (
+          <div className="pending-kg-item card">
+            <span className="card-label">Jumlah untuk {pendingKgItem.itemName}</span>
+            <span className="card-value">
+              {pendingQty} {pendingKgItem.stockUom}
+            </span>
+            <div className="pending-kg-item-actions">
+              <button
+                type="button"
+                onClick={() => {
+                  addToCart(pendingKgItem, qtyToAdd);
+                  setPendingKgItem(null);
+                  setPendingQty('1');
+                  setQtyTouched(false);
+                }}
+              >
+                Tambah ke Keranjang
+              </button>
+              <button
+                type="button"
+                className="link-button"
+                onClick={() => {
+                  setPendingKgItem(null);
+                  setPendingQty('1');
+                  setQtyTouched(false);
+                }}
+              >
+                Batal
+              </button>
+            </div>
+          </div>
         )}
 
         <div className="keypad-section">

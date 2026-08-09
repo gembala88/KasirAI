@@ -171,6 +171,20 @@ export default function WarehouseScan({ isOnline }: { isOnline: boolean }) {
                 <input
                   value={itemCode}
                   onChange={(e) => setItemCode(e.target.value)}
+                  // Real bug found live: Enter here submitted the whole
+                  // Input Stok transaction with whatever raw/partial text
+                  // was typed, bypassing the dropdown below entirely. Now
+                  // Enter only confirms an unambiguous single match (same
+                  // as tapping it) — with 0 or several candidates, it does
+                  // nothing rather than guess.
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter') return;
+                    e.preventDefault();
+                    if (itemSearchResults.length === 1 && itemSearchResults[0]) {
+                      setItemCode(itemSearchResults[0].itemCode);
+                      clearItemSearch();
+                    }
+                  }}
                   placeholder="mis. BRG-001, atau ketik nama produk"
                   inputMode="text"
                 />
