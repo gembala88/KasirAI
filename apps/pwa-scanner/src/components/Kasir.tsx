@@ -18,6 +18,7 @@ import { formatRupiah, formatSyncedAt, statusBadge } from '../lib/format';
 import { listQueuedActions, type QueuedAction } from '../lib/offline-queue';
 import { submitOrQueue, syncPendingQueue } from '../lib/sync';
 import type { PosSaleAction } from '../lib/types';
+import { useProductSearch } from '../lib/use-product-search';
 
 interface CartLine {
   itemCode: string;
@@ -54,8 +55,7 @@ const KEYPAD_KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', '⌫
  */
 export default function Kasir() {
   const [query, setQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<ProductSearchResult[]>([]);
-  const [searching, setSearching] = useState(false);
+  const [submitSearching, setSubmitSearching] = useState(false);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [pendingQty, setPendingQty] = useState('1');
   const [customerId, setCustomerId] = useState('');
@@ -72,6 +72,15 @@ export default function Kasir() {
   );
   const [syncingQueue, setSyncingQueue] = useState(false);
   const lastSyncedAt = getLastSyncedAt();
+
+  const {
+    results: searchResults,
+    searching: debouncedSearching,
+    error: searchError,
+    setResults: setSearchResults,
+    clearResults,
+  } = useProductSearch(query, !!customerId.trim());
+  const searching = submitSearching || debouncedSearching;
 
   const refreshPendingSales = useCallback(async () => {
     const all = await listQueuedActions();
@@ -134,55 +143,24 @@ export default function Kasir() {
     setCart((current) => current.filter((line) => line.itemCode !== itemCode));
   }
 
-  // Live dropdown as the cashier types (debounced) — never adds anything
-  // to the cart by itself, purely populates the picker below. Real bug
-  // found live: with growing near-duplicate products (same item in
-  // multiple sizes/flavors/UOMs — several Cimory variants, Rinso in more
-  // than one size), a partial name that happened to match only one
-  // product today was silently added straight to the cart with no
-  // picker and no chance to double-check what was about to be sold. Only
-  // an exact item_code match (handleSearch below, on Enter/submit — what
-  // a barcode scanner's keystrokes-then-Enter behaves like) is allowed
-  // to add directly; every name-based match, however few, requires an
-  // explicit tap.
-  useEffect(() => {
-    const trimmed = query.trim();
-    if (trimmed.length < 2) {
-      setSearchResults([]);
-      return;
-    }
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      setSearching(true);
-      searchProducts(trimmed, !!customerId.trim())
-        .then(({ results }) => {
-          // Guards against an older, slower request resolving after a
-          // newer one — showing the cashier a stale match list is exactly
-          // the kind of mistake this whole change exists to prevent.
-          if (cancelled) return;
-          setError(null);
-          setSearchResults(results);
-        })
-        .catch((err: unknown) => {
-          if (cancelled) return;
-          setError(err instanceof Error ? err.message : String(err));
-        })
-        .finally(() => {
-          if (!cancelled) setSearching(false);
-        });
-    }, 200);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [query, customerId]);
+  // Live dropdown as the cashier types (debounced, see useProductSearch)
+  // — never adds anything to the cart by itself, purely populates the
+  // picker below. Real bug found live: with growing near-duplicate
+  // products (same item in multiple sizes/flavors/UOMs — several Cimory
+  // variants, Rinso in more than one size), a partial name that happened
+  // to match only one product today was silently added straight to the
+  // cart with no picker and no chance to double-check what was about to
+  // be sold. Only an exact item_code match (handleSearch below, on
+  // Enter/submit — what a barcode scanner's keystrokes-then-Enter
+  // behaves like) is allowed to add directly; every name-based match,
+  // however few, requires an explicit tap.
 
   async function handleSearch(event: React.FormEvent): Promise<void> {
     event.preventDefault();
     const trimmed = query.trim();
     if (!trimmed) return;
 
-    setSearching(true);
+    setSubmitSearching(true);
     setError(null);
     try {
       const { results } = await searchProducts(trimmed, !!customerId.trim());
@@ -195,7 +173,7 @@ export default function Kasir() {
       const exactMatch = results.find((r) => r.itemCode.toLowerCase() === trimmed.toLowerCase());
       if (exactMatch) {
         addToCart(exactMatch, qtyToAdd);
-        setSearchResults([]);
+        clearResults();
         setQuery('');
         setPendingQty('1');
       } else {
@@ -204,7 +182,7 @@ export default function Kasir() {
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
-      setSearching(false);
+      setSubmitSearching(false);
     }
   }
 
@@ -335,7 +313,7 @@ export default function Kasir() {
                   type="button"
                   onClick={() => {
                     addToCart(item, qtyToAdd);
-                    setSearchResults([]);
+                    clearResults();
                     setQuery('');
                     setPendingQty('1');
                   }}
@@ -368,7 +346,7 @@ export default function Kasir() {
           <input value={customerId} onChange={(e) => setCustomerId(e.target.value)} />
         </label>
 
-        {error && <p className="error-box">{error}</p>}
+        {(error ?? searchError) && <p className="error-box">{error ?? searchError}</p>}
         {message && <p className="message">{message}</p>}
 
         {pendingSales.length > 0 && (

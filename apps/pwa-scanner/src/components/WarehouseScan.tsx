@@ -10,6 +10,7 @@ import { statusBadge } from '../lib/format';
 import { listQueuedActions, type QueuedAction } from '../lib/offline-queue';
 import { submitOrQueue, syncPendingQueue } from '../lib/sync';
 import type { ScanAction, ScanActionType } from '../lib/types';
+import { useProductSearch } from '../lib/use-product-search';
 
 const WAREHOUSES_CACHE_KEY = 'hermes-pwa-scanner-warehouses';
 
@@ -52,6 +53,12 @@ export default function WarehouseScan({ isOnline }: { isOnline: boolean }) {
   const [toWarehouse, setToWarehouse] = useState('');
   const [cameraOpen, setCameraOpen] = useState(false);
   const [warehouses, setWarehouses] = useState<WarehouseOption[]>([]);
+  // Not a sales screen, so no customer/tier to worry about — always false.
+  const {
+    results: itemSearchResults,
+    searching: itemSearching,
+    clearResults: clearItemSearch,
+  } = useProductSearch(itemCode, false);
 
   const refreshQueue = useCallback(async () => {
     setQueue((await listQueuedActions()).filter(isScanAction));
@@ -164,7 +171,7 @@ export default function WarehouseScan({ isOnline }: { isOnline: boolean }) {
                 <input
                   value={itemCode}
                   onChange={(e) => setItemCode(e.target.value)}
-                  placeholder="mis. BRG-001 (scan atau ketik manual)"
+                  placeholder="mis. BRG-001, atau ketik nama produk"
                   inputMode="text"
                 />
                 <button
@@ -176,6 +183,42 @@ export default function WarehouseScan({ isOnline }: { isOnline: boolean }) {
                 </button>
               </div>
             </label>
+
+            {/* Suppresses itself once itemCode already holds the exact
+                code of the single match — otherwise reappears right after
+                a tap/scan, since itemCode is both the search query and
+                the field's real value (unlike Kasir, which clears its
+                separate query field on selection). */}
+            {itemSearchResults.length > 0 &&
+              !(
+                itemSearchResults.length === 1 &&
+                itemSearchResults[0]?.itemCode.toLowerCase() === itemCode.trim().toLowerCase()
+              ) && (
+                <ul className="search-results">
+                  {itemSearchResults.map((item) => (
+                    <li key={item.itemCode}>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setItemCode(item.itemCode);
+                          clearItemSearch();
+                        }}
+                      >
+                        <span className="search-result-name">{item.itemName}</span>
+                        <span className="hint">
+                          {item.itemCode} · {item.stockUom}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+            {itemCode.trim().length >= 2 && itemSearchResults.length === 0 && !itemSearching && (
+              <p className="hint">
+                Tidak ada barang yang cocok dengan &quot;{itemCode.trim()}&quot;.
+              </p>
+            )}
 
             <label>
               Jumlah
