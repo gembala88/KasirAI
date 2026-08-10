@@ -7,6 +7,7 @@
  */
 import { env } from '../../../config/env.js';
 import { erpNextClient } from '../../../shared/erpnext-client/index.js';
+import { ValidationError } from '../../../shared/errors/index.js';
 import { stockCache, stockCacheKey } from '../infrastructure/stock-cache.js';
 
 interface StockEntryResult {
@@ -61,6 +62,9 @@ export async function scanTransfer(
   toWarehouse: string,
   qty: number,
 ): Promise<StockEntryResult> {
+  if (fromWarehouse === toWarehouse) {
+    throw new ValidationError('Gudang asal dan tujuan tidak boleh sama');
+  }
   const entry = await erpNextClient.create<StockEntryResult>('Stock Entry', {
     company: env.ERPNEXT_DEFAULT_COMPANY,
     stock_entry_type: 'Material Transfer',

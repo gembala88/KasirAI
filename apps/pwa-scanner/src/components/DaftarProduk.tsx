@@ -30,6 +30,7 @@ export default function DaftarProduk() {
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<CatalogItem | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
   const lastSyncedAt = getLastSyncedAt();
   const canEditPrice = EDIT_PRICE_ROLES.has(getStoredAuth()?.user.role ?? '');
 
@@ -85,27 +86,57 @@ export default function DaftarProduk() {
             {visible.length} dari {items.length} produk
           </p>
           <ul className="product-list">
-            {visible.map((item) => (
-              <li key={item.itemCode} className="product-list-row">
-                <div className="product-list-main">
-                  <span className="product-list-name">{item.itemName}</span>
-                  <span className="hint">
-                    {item.itemCode} · {item.stockUom}
-                  </span>
-                </div>
-                <div className="product-list-figures">
-                  <span style={item.stockQty > 0 ? undefined : { color: 'var(--color-warning)' }}>
-                    {item.stockQty} {item.stockUom}
-                  </span>
-                  <span>{item.retailPrice != null ? formatRupiah(item.retailPrice) : '—'}</span>
-                  {canEditPrice && (
-                    <button type="button" className="link-button" onClick={() => setEditing(item)}>
-                      Edit
-                    </button>
+            {visible.map((item) => {
+              const hasBreakdown = item.stockByWarehouse.length > 1;
+              const isExpanded = expanded === item.itemCode;
+              return (
+                <li key={item.itemCode} className="product-list-row">
+                  <div className="product-list-main">
+                    <span className="product-list-name">{item.itemName}</span>
+                    <span className="hint">
+                      {item.itemCode} · {item.stockUom}
+                    </span>
+                  </div>
+                  <div className="product-list-figures">
+                    {hasBreakdown ? (
+                      <button
+                        type="button"
+                        className="link-button"
+                        style={item.stockQty > 0 ? undefined : { color: 'var(--color-warning)' }}
+                        onClick={() => setExpanded(isExpanded ? null : item.itemCode)}
+                      >
+                        {item.stockQty} {item.stockUom} {isExpanded ? '▲' : '▼'}
+                      </button>
+                    ) : (
+                      <span
+                        style={item.stockQty > 0 ? undefined : { color: 'var(--color-warning)' }}
+                      >
+                        {item.stockQty} {item.stockUom}
+                      </span>
+                    )}
+                    <span>{item.retailPrice != null ? formatRupiah(item.retailPrice) : '—'}</span>
+                    {canEditPrice && (
+                      <button
+                        type="button"
+                        className="link-button"
+                        onClick={() => setEditing(item)}
+                      >
+                        Edit
+                      </button>
+                    )}
+                  </div>
+                  {hasBreakdown && isExpanded && (
+                    <ul className="product-list-breakdown">
+                      {item.stockByWarehouse.map((w) => (
+                        <li key={w.warehouse} className="hint">
+                          {w.warehouse}: {w.qty} {item.stockUom}
+                        </li>
+                      ))}
+                    </ul>
                   )}
-                </div>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         </>
       )}

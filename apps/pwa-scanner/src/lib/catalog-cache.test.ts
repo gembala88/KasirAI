@@ -7,15 +7,30 @@ import { matchCatalog, type CatalogItem } from './catalog-cache';
 // covered by live verification instead. matchCatalog is the pure part.
 
 const CATALOG: CatalogItem[] = [
-  { itemCode: 'BRG-001', itemName: 'Beras 5kg', stockUom: 'Pcs', retailPrice: 65000, stockQty: 10 },
+  {
+    itemCode: 'BRG-001',
+    itemName: 'Beras 5kg',
+    stockUom: 'Pcs',
+    retailPrice: 65000,
+    stockQty: 10,
+    stockByWarehouse: [{ warehouse: 'Gudang Utama - TH', qty: 10 }],
+  },
   {
     itemCode: 'BRG-002',
     itemName: 'Minyak Goreng 1L',
     stockUom: 'Pcs',
     retailPrice: 18000,
     stockQty: 24,
+    stockByWarehouse: [{ warehouse: 'Gudang Utama - TH', qty: 24 }],
   },
-  { itemCode: 'GULA-KG', itemName: 'Gula Pasir', stockUom: 'Kg', retailPrice: 15000, stockQty: 0 },
+  {
+    itemCode: 'GULA-KG',
+    itemName: 'Gula Pasir',
+    stockUom: 'Kg',
+    retailPrice: 15000,
+    stockQty: 0,
+    stockByWarehouse: [],
+  },
 ];
 
 describe('matchCatalog', () => {

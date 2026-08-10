@@ -51,6 +51,9 @@ export function buildAction(type: StockActionType, fields: ScanFormFields): Stoc
   if (!toWarehouse) {
     return 'Gudang tujuan wajib diisi';
   }
+  if (fields.warehouse.trim() && fields.warehouse.trim() === toWarehouse) {
+    return 'Gudang asal dan tujuan tidak boleh sama';
+  }
   return {
     type,
     itemCode,

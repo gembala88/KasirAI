@@ -31,6 +31,7 @@ export interface CatalogItem {
   stockUom: string;
   retailPrice: number | null;
   stockQty: number;
+  stockByWarehouse: { warehouse: string; qty: number }[];
 }
 
 interface CatalogPage {

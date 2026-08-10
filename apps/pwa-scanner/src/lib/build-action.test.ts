@@ -80,4 +80,16 @@ describe('buildAction', () => {
       'Gudang tujuan wajib diisi',
     );
   });
+
+  it('rejects a transfer where source and destination are the same warehouse', () => {
+    expect(
+      buildAction('transfer', {
+        ...baseFields,
+        itemCode: 'X',
+        qty: '1',
+        warehouse: 'Gudang Utama - TH',
+        toWarehouse: 'Gudang Utama - TH',
+      }),
+    ).toBe('Gudang asal dan tujuan tidak boleh sama');
+  });
 });

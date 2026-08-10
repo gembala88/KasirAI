@@ -1,6 +1,7 @@
 /**
  * Sales/POS module — product search & tier-aware pricing (spec §1.3 FR-1).
  */
+import { env } from '../../../config/env.js';
 import { erpNextClient, ErpNextApiError } from '../../../shared/erpnext-client/index.js';
 import { lookupItemPrice, resolvePriceListForTier } from '../../../shared/erpnext-queries/index.js';
 import type {
@@ -182,7 +183,12 @@ interface ItemPriceRecord {
 
 interface BinRecord {
   item_code: string;
+  warehouse: string;
   actual_qty: number;
+}
+
+interface WarehouseRecord {
+  name: string;
 }
 
 export interface CatalogPage {
@@ -241,30 +247,52 @@ export async function listCatalogPage(offset: number, limit: number): Promise<Ca
     }
   }
 
+  // Same company scoping as listWarehouses() (spec: this ERPNext instance
+  // has a second, unrelated Company with its own warehouse tree — see that
+  // function's doc comment for the "Toko - NPG" leak bug this mirrors).
+  // Fetched once per page, not per item.
+  const warehouseRecords = await erpNextClient.list<WarehouseRecord>('Warehouse', {
+    filters: [
+      ['is_group', '=', 0],
+      ['company', '=', env.ERPNEXT_DEFAULT_COMPANY],
+    ],
+    fields: ['name'],
+    limit_page_length: '200',
+  });
+  const ownWarehouses = new Set(warehouseRecords.map((w) => w.name));
+
   // Bulk Bin read, same batching rationale as the Item Price fetch above —
-  // one query for the whole page instead of one per item. Summed across
-  // every warehouse: this is a browse list, not a per-warehouse view.
+  // one query for the whole page instead of one per item. Per-warehouse
+  // breakdown for Daftar Produk, scoped to Hermes' own company only.
   const bins = await erpNextClient.list<BinRecord>('Bin', {
     filters: [['item_code', 'in', itemCodes]],
-    fields: ['item_code', 'actual_qty'],
+    fields: ['item_code', 'warehouse', 'actual_qty'],
     limit_page_length: String(itemCodes.length * 10),
   });
-  const stockQtyByItemCode = new Map<string, number>();
+  const stockByWarehouseByItemCode = new Map<string, { warehouse: string; qty: number }[]>();
   for (const bin of bins) {
-    stockQtyByItemCode.set(
-      bin.item_code,
-      (stockQtyByItemCode.get(bin.item_code) ?? 0) + bin.actual_qty,
-    );
+    if (!ownWarehouses.has(bin.warehouse)) {
+      continue;
+    }
+    const existing = stockByWarehouseByItemCode.get(bin.item_code) ?? [];
+    existing.push({ warehouse: bin.warehouse, qty: bin.actual_qty });
+    stockByWarehouseByItemCode.set(bin.item_code, existing);
   }
 
   return {
-    items: items.map((item) => ({
-      itemCode: item.item_code,
-      itemName: item.item_name,
-      stockUom: item.stock_uom,
-      retailPrice: priceByItemCode.get(item.item_code) ?? null,
-      stockQty: stockQtyByItemCode.get(item.item_code) ?? 0,
-    })),
+    items: items.map((item) => {
+      const stockByWarehouse = (stockByWarehouseByItemCode.get(item.item_code) ?? []).sort((a, b) =>
+        a.warehouse.localeCompare(b.warehouse),
+      );
+      return {
+        itemCode: item.item_code,
+        itemName: item.item_name,
+        stockUom: item.stock_uom,
+        retailPrice: priceByItemCode.get(item.item_code) ?? null,
+        stockQty: stockByWarehouse.reduce((sum, w) => sum + w.qty, 0),
+        stockByWarehouse,
+      };
+    }),
     hasMore: items.length === limit,
   };
 }

@@ -592,9 +592,23 @@ h1 {
   border-radius: var(--radius-sm);
   padding: 0.6rem 0.8rem;
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-start;
   gap: 0.75rem;
+}
+
+/* Per-warehouse stock breakdown, shown when a Daftar Produk row is
+   expanded — flex-basis 100% drops it to its own line below the row's
+   name/qty/price columns instead of squeezing in as a third column. */
+.product-list-breakdown {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  margin: 0;
+  padding: 0.4rem 0 0;
+  border-top: 1px dashed var(--color-border);
 }
 
 .product-list-main {

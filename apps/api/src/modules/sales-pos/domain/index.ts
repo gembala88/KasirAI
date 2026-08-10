@@ -32,8 +32,9 @@ export interface CatalogItem {
   itemName: string;
   stockUom: string;
   retailPrice: number | null;
-  /** Summed across every warehouse — a browse-list total, not a per-warehouse breakdown. */
+  /** Sum of stockByWarehouse — Hermes' own company's warehouses only (see listCatalogPage). */
   stockQty: number;
+  stockByWarehouse: { warehouse: string; qty: number }[];
 }
 
 /**

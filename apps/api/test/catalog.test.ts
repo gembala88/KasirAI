@@ -34,8 +34,13 @@ describe('listCatalogPage — bulk offline-catalog pull', () => {
           expect(params.filters).toContainEqual(['price_list', '=', 'Retail']);
           return Promise.resolve([{ item_code: 'A', price_list_rate: 15000 }]);
         }
+        if (doctype === 'Warehouse') {
+          return Promise.resolve([{ name: 'Gudang Utama - TH' }]);
+        }
         if (doctype === 'Bin') {
-          return Promise.resolve([{ item_code: 'A', actual_qty: 8 }]);
+          return Promise.resolve([
+            { item_code: 'A', actual_qty: 8, warehouse: 'Gudang Utama - TH' },
+          ]);
         }
         return Promise.resolve([]);
       },
@@ -44,20 +49,37 @@ describe('listCatalogPage — bulk offline-catalog pull', () => {
     const page = await listCatalogPage(0, 200);
 
     expect(page.items).toEqual([
-      { itemCode: 'A', itemName: 'Item A', stockUom: 'Pcs', retailPrice: 15000, stockQty: 8 },
-      { itemCode: 'B', itemName: 'Item B', stockUom: 'Pcs', retailPrice: null, stockQty: 0 },
+      {
+        itemCode: 'A',
+        itemName: 'Item A',
+        stockUom: 'Pcs',
+        retailPrice: 15000,
+        stockQty: 8,
+        stockByWarehouse: [{ warehouse: 'Gudang Utama - TH', qty: 8 }],
+      },
+      {
+        itemCode: 'B',
+        itemName: 'Item B',
+        stockUom: 'Pcs',
+        retailPrice: null,
+        stockQty: 0,
+        stockByWarehouse: [],
+      },
     ]);
   });
 
-  it('sums Bin rows across multiple warehouses for the same item', async () => {
+  it('sums Bin rows across multiple of Hermes’ own warehouses for the same item', async () => {
     erpNextClientMock.list.mockImplementation((doctype: string) => {
       if (doctype === 'Item') {
         return Promise.resolve([{ item_code: 'A', item_name: 'Item A', stock_uom: 'Pcs' }]);
       }
+      if (doctype === 'Warehouse') {
+        return Promise.resolve([{ name: 'Gudang Utama - TH' }, { name: 'Stores - TH' }]);
+      }
       if (doctype === 'Bin') {
         return Promise.resolve([
           { item_code: 'A', actual_qty: 5, warehouse: 'Gudang Utama - TH' },
-          { item_code: 'A', actual_qty: 3, warehouse: 'Toko - NPG' },
+          { item_code: 'A', actual_qty: 3, warehouse: 'Stores - TH' },
         ]);
       }
       return Promise.resolve([]);
@@ -65,6 +87,35 @@ describe('listCatalogPage — bulk offline-catalog pull', () => {
 
     const page = await listCatalogPage(0, 200);
     expect(page.items[0]?.stockQty).toBe(8);
+    expect(page.items[0]?.stockByWarehouse).toEqual([
+      { warehouse: 'Gudang Utama - TH', qty: 5 },
+      { warehouse: 'Stores - TH', qty: 3 },
+    ]);
+  });
+
+  it('excludes Bin rows from the other Company\'s warehouse tree — real bug this mirrors: listWarehouses() had to fix the same "Toko - NPG" leak (see its doc comment)', async () => {
+    erpNextClientMock.list.mockImplementation(
+      (doctype: string, params: Record<string, unknown>) => {
+        if (doctype === 'Item') {
+          return Promise.resolve([{ item_code: 'A', item_name: 'Item A', stock_uom: 'Pcs' }]);
+        }
+        if (doctype === 'Warehouse') {
+          expect(params.filters).toContainEqual(['company', '=', expect.any(String)]);
+          return Promise.resolve([{ name: 'Gudang Utama - TH' }]);
+        }
+        if (doctype === 'Bin') {
+          return Promise.resolve([
+            { item_code: 'A', actual_qty: 5, warehouse: 'Gudang Utama - TH' },
+            { item_code: 'A', actual_qty: 3, warehouse: 'Toko - NPG' },
+          ]);
+        }
+        return Promise.resolve([]);
+      },
+    );
+
+    const page = await listCatalogPage(0, 200);
+    expect(page.items[0]?.stockQty).toBe(5);
+    expect(page.items[0]?.stockByWarehouse).toEqual([{ warehouse: 'Gudang Utama - TH', qty: 5 }]);
   });
 
   it('only queries disabled=0 items, never a disabled Item', async () => {
