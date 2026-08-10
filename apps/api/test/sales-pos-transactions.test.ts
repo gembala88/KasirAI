@@ -121,34 +121,39 @@ describe('listCompletedTransactions — Riwayat Transaksi', () => {
     vi.clearAllMocks();
   });
 
-  it('bulk-fetches payment rows for the whole page in one call, keyed correctly per invoice', async () => {
-    erpNextClientMock.list.mockImplementation((doctype: string) => {
-      if (doctype === 'Sales Invoice') {
-        return Promise.resolve([
-          {
-            name: 'ACC-SINV-0001',
-            customer_name: 'Walk-in Customer',
-            posting_date: '2026-08-10',
-            posting_time: '10:00:00',
-            grand_total: 5000,
-            outstanding_amount: 0,
-          },
-          {
-            name: 'ACC-SINV-0002',
-            customer_name: 'Budi',
-            posting_date: '2026-08-10',
-            posting_time: '09:00:00',
-            grand_total: 20000,
-            outstanding_amount: 20000,
-          },
-        ]);
+  it('fetches each invoice individually for payment rows, keyed correctly per invoice', async () => {
+    // Real ERPNext behavior this guards against: the generic list endpoint
+    // for a child-table doctype (`Sales Invoice Payment`) silently drops
+    // every requested field except `name`, filter or no filter — so
+    // payment method can only be read via each invoice's own GET, same as
+    // getTransactionDetail already does.
+    erpNextClientMock.list.mockResolvedValue([
+      { name: 'ACC-SINV-0001' },
+      { name: 'ACC-SINV-0002' },
+    ]);
+    erpNextClientMock.get.mockImplementation((doctype: string, name: string) => {
+      if (name === 'ACC-SINV-0001') {
+        return Promise.resolve({
+          name: 'ACC-SINV-0001',
+          customer_name: 'Walk-in Customer',
+          posting_date: '2026-08-10',
+          posting_time: '10:00:00',
+          grand_total: 5000,
+          outstanding_amount: 0,
+          payments: [{ mode_of_payment: 'Cash', amount: 5000 }],
+          items: [],
+        });
       }
-      if (doctype === 'Sales Invoice Payment') {
-        return Promise.resolve([
-          { parent: 'ACC-SINV-0001', mode_of_payment: 'Cash', amount: 5000 },
-        ]);
-      }
-      return Promise.resolve([]);
+      return Promise.resolve({
+        name: 'ACC-SINV-0002',
+        customer_name: 'Budi',
+        posting_date: '2026-08-10',
+        posting_time: '09:00:00',
+        grand_total: 20000,
+        outstanding_amount: 20000,
+        payments: [],
+        items: [],
+      });
     });
 
     const page = await listCompletedTransactions(0, 20);
@@ -169,12 +174,8 @@ describe('listCompletedTransactions — Riwayat Transaksi', () => {
       payments: [],
     });
 
-    const paymentListCall = erpNextClientMock.list.mock.calls.find(
-      (call) => call[0] === 'Sales Invoice Payment',
-    );
-    expect(paymentListCall?.[1]).toMatchObject({
-      filters: [['parent', 'in', ['ACC-SINV-0001', 'ACC-SINV-0002']]],
-    });
+    expect(erpNextClientMock.get).toHaveBeenCalledWith('Sales Invoice', 'ACC-SINV-0001');
+    expect(erpNextClientMock.get).toHaveBeenCalledWith('Sales Invoice', 'ACC-SINV-0002');
   });
 
   it('only queries submitted POS sales, never drafts or non-POS invoices', async () => {
@@ -196,19 +197,22 @@ describe('listCompletedTransactions — Riwayat Transaksi', () => {
   it('sets hasMore only when a full page came back', async () => {
     erpNextClientMock.list.mockImplementation((doctype: string) => {
       if (doctype === 'Sales Invoice') {
-        return Promise.resolve(
-          Array.from({ length: 2 }, (_, i) => ({
-            name: `ACC-SINV-000${i}`,
-            customer_name: 'Walk-in Customer',
-            posting_date: '2026-08-10',
-            posting_time: '10:00:00',
-            grand_total: 1000,
-            outstanding_amount: 0,
-          })),
-        );
+        return Promise.resolve(Array.from({ length: 2 }, (_, i) => ({ name: `ACC-SINV-000${i}` })));
       }
       return Promise.resolve([]);
     });
+    erpNextClientMock.get.mockImplementation((_doctype: string, name: string) =>
+      Promise.resolve({
+        name,
+        customer_name: 'Walk-in Customer',
+        posting_date: '2026-08-10',
+        posting_time: '10:00:00',
+        grand_total: 1000,
+        outstanding_amount: 0,
+        payments: [],
+        items: [],
+      }),
+    );
 
     expect((await listCompletedTransactions(0, 2)).hasMore).toBe(true);
     expect((await listCompletedTransactions(0, 5)).hasMore).toBe(false);

@@ -331,55 +331,46 @@ function toTransactionSummary(
 /**
  * Riwayat Transaksi (spec: transaction history) — every submitted sale,
  * Paid or not (Kasbon/credit sales aren't reachable yet, but this list is
- * deliberately built to already handle both). Payment method is a bulk
- * fetch of the `Sales Invoice Payment` child table across the whole page —
- * same batching rationale as listCatalogPage's Item Price fetch — instead
- * of one extra request per row.
+ * deliberately built to already handle both).
+ *
+ * Payment method is fetched per-invoice via a full `Sales Invoice` GET,
+ * NOT a bulk list of the `Sales Invoice Payment` child-table doctype —
+ * confirmed against real ERPNext that its generic `/api/resource/{doctype}`
+ * list endpoint silently drops every requested field except `name` for
+ * child-table (istable=1) doctypes, filter or no filter. A parent
+ * document's own GET correctly returns its full child array, which is
+ * what getTransactionDetail already relied on — so this reuses the same
+ * approach. Bounded by the page size (default 20, max 100), so the N+1
+ * fetch is an acceptable, deliberate cost for correctness.
  */
 export async function listCompletedTransactions(
   offset: number,
   limit: number,
 ): Promise<TransactionListPage> {
-  const docs = await erpNextClient.list<SalesInvoiceListRow>('Sales Invoice', {
+  const names = await erpNextClient.list<{ name: string }>('Sales Invoice', {
     filters: [
       ['docstatus', '=', 1],
       ['is_pos', '=', 1],
     ],
-    fields: [
-      'name',
-      'customer_name',
-      'posting_date',
-      'posting_time',
-      'grand_total',
-      'outstanding_amount',
-    ],
+    fields: ['name'],
     order_by: 'posting_date desc, posting_time desc',
     limit_start: String(offset),
     limit_page_length: String(limit),
   });
 
-  if (docs.length === 0) {
+  if (names.length === 0) {
     return { transactions: [], hasMore: false };
   }
 
-  const names = docs.map((d) => d.name);
-  const payments = await erpNextClient.list<SalesInvoicePaymentRow>('Sales Invoice Payment', {
-    filters: [['parent', 'in', names]],
-    fields: ['parent', 'mode_of_payment', 'amount'],
-    // A split payment can have more than one row per invoice — overfetch
-    // generously rather than assume exactly one.
-    limit_page_length: String(names.length * 5),
-  });
-  const paymentsByInvoice = new Map<string, TransactionPayment[]>();
-  for (const p of payments) {
-    const list = paymentsByInvoice.get(p.parent) ?? [];
-    list.push(toTransactionPayment(p));
-    paymentsByInvoice.set(p.parent, list);
-  }
+  const docs = await Promise.all(
+    names.map((n) => erpNextClient.get<SalesInvoiceDetailDoc>('Sales Invoice', n.name)),
+  );
 
   return {
-    transactions: docs.map((d) => toTransactionSummary(d, paymentsByInvoice.get(d.name) ?? [])),
-    hasMore: docs.length === limit,
+    transactions: docs.map((doc) =>
+      toTransactionSummary(doc, doc.payments.map(toTransactionPayment)),
+    ),
+    hasMore: names.length === limit,
   };
 }
 
