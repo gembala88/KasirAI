@@ -36,17 +36,25 @@ async function trySyncOne(queued: QueuedAction): Promise<SubmitResult> {
   try {
     response = await syncAction(queued);
   } catch (err) {
-    // Network/API error — leave it Pending-equivalent (Failed) in the
-    // local queue; the next sync sweep (reconnect or manual button)
-    // carries the identical UUID, so a retry here is always safe.
-    // Real bug found live: this used to discard the caught error
-    // entirely, so a real, specific ERPNext validation reason (e.g.
-    // "Could not find Row #1: Item Code: X" for a barcode with no
-    // matching Item) only ever showed up as "Failed" in the UI, visible
-    // nowhere except server logs.
+    // Either way, the next sync sweep (reconnect or manual button)
+    // carries the identical UUID, so a retry here is always safe. But
+    // the *status* shown to the cashier must distinguish two very
+    // different situations:
+    //  - ApiError: the request reached our own server and it said no
+    //    (a real, specific ERPNext validation reason — e.g. "Could not
+    //    find Row #1: Item Code: X" for a barcode with no matching
+    //    Item). This genuinely needs attention, so it's shown as Failed.
+    //  - anything else (fetch itself threw — offline, DNS, connection
+    //    refused): the request never reached anyone, so nothing was
+    //    actually rejected. Real bug found live: this used to show
+    //    "Gagal" for this case too, which reads to a cashier as "this
+    //    sale is broken" when it's simply not-yet-tried and perfectly
+    //    safe — stays Pending so the UI shows "Menunggu Sinkron"
+    //    instead.
     const message = err instanceof Error ? err.message : String(err);
-    await updateActionStatus(queued.uuid, 'Failed', message);
-    return { outcome: 'queued', reason: err instanceof ApiError ? 'rejected' : 'network' };
+    const reachedServer = err instanceof ApiError;
+    await updateActionStatus(queued.uuid, reachedServer ? 'Failed' : 'Pending', message);
+    return { outcome: 'queued', reason: reachedServer ? 'rejected' : 'network' };
   }
 
   if (response.status === 'Conflict') {

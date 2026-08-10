@@ -59,6 +59,13 @@ describe('syncPendingQueue', () => {
 
     expect(apiMock.syncAction).toHaveBeenCalledTimes(2);
     expect(summary).toEqual({ synced: 1, stillQueued: 1, conflicts: 0 });
+    // The server was actually reached and it said no — this is a real
+    // Failed, not a "haven't tried yet" state.
+    expect(offlineQueueMock.updateActionStatus).toHaveBeenCalledWith(
+      'dead-item',
+      'Failed',
+      'Nilai Penilaian diperlukan',
+    );
   });
 
   it('a genuine network failure stops the sweep — every other item would fail identically right now', async () => {
@@ -72,6 +79,17 @@ describe('syncPendingQueue', () => {
 
     expect(apiMock.syncAction).toHaveBeenCalledTimes(1);
     expect(summary).toEqual({ synced: 0, stillQueued: 1, conflicts: 0 });
+    // Real bug found live: a pure network failure (fetch never reached
+    // our server at all, e.g. genuinely offline) used to be stamped
+    // Failed same as a real server rejection — alarming a cashier over a
+    // sale that's perfectly safe and hasn't actually been rejected by
+    // anyone. Nothing was tried-and-refused here, so it stays Pending
+    // ("Menunggu Sinkron" in the UI), not Failed ("Gagal").
+    expect(offlineQueueMock.updateActionStatus).toHaveBeenCalledWith(
+      'unreachable-1',
+      'Pending',
+      'Failed to fetch',
+    );
   });
 
   it('a Conflict-flagged item is skipped, never retried, and does not block subsequent items', async () => {

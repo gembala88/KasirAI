@@ -15,7 +15,7 @@ export function formatQty(qty: number): string {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  Pending: 'Menunggu',
+  Pending: 'Menunggu Sinkron',
   Processing: 'Memproses',
   Failed: 'Gagal',
   Retry: 'Mencoba Lagi',

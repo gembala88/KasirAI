@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatQty, formatTransactionDateTime, paymentStatusBadge } from './format';
+import { formatQty, formatTransactionDateTime, paymentStatusBadge, statusBadge } from './format';
 
 describe('formatQty', () => {
   it('prints whole numbers plain, no decimal point', () => {
@@ -27,6 +27,16 @@ describe('formatTransactionDateTime', () => {
 
   it('handles a posting_date that includes a time component too', () => {
     expect(formatTransactionDateTime('2026-08-10 00:00:00', '09:03:00')).toBe('10-08-2026 09:03');
+  });
+});
+
+describe('statusBadge', () => {
+  it('labels a not-yet-attempted queued sale "Menunggu Sinkron", not an alarming "Gagal"', () => {
+    expect(statusBadge('Pending').label).toBe('Menunggu Sinkron');
+  });
+
+  it('labels a real, server-attempted rejection "Gagal"', () => {
+    expect(statusBadge('Failed').label).toBe('Gagal');
   });
 });
 
