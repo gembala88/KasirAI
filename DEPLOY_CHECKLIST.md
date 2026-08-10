@@ -41,9 +41,21 @@ frappe.core.doctype.user.user.generate_keys`), not copied from local
       — those two must match exactly, or the verification handshake
       (`GET /whatsapp/webhook`) will fail.
 - [ ] **`QRIS_STATIC_IMAGE_URL`** — empty on both VPS and local. Needs a
-      real hosted image URL of your actual QRIS code before the WhatsApp QRIS
-      payment flow can show a real image (it would currently send nothing/a
-      broken link).
+      real hosted image URL of your actual QRIS code before either the
+      WhatsApp QRIS payment flow **or** the in-app Kasir "Menunggu
+      Konfirmasi Pembayaran" screen (Group 2) can show a real QRIS image —
+      both read this same one setting, so it's one fix for both. Until
+      it's set, picking QRIS at checkout correctly shows "QRIS belum
+      dikonfigurasi" and blocks confirming that payment, rather than
+      showing a broken image.
+- [ ] **`BANK_TRANSFER_BANK_NAME`/`_ACCOUNT_NUMBER`/`_ACCOUNT_NAME`** —
+      already set on the VPS (`BCA` / `1234567890` / `Toko Hermes`), but
+      `1234567890` reads like a placeholder, not a real account number.
+      **Action needed from you:** confirm this is the store's actual BCA
+      account before a real cashier hands it to a real customer at
+      checkout — same setting now drives both the WhatsApp transfer flow
+      and the in-app Kasir "Menunggu Konfirmasi Pembayaran" screen (Group
+      2).
 - [x] **`SENTRY_DSN`** — confirmed empty on the VPS = Sentry reporting is
       simply off (this is the designed no-op behavior, not a bug — see
       README's Phase 8 section). Not a blocker, but you won't get error

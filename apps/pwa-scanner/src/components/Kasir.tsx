@@ -8,7 +8,13 @@ import {
   IconCloudCheck,
   IconQrcode,
 } from '@tabler/icons-react';
-import { searchProducts, type PosTransaction, type ProductSearchResult } from '../lib/api';
+import {
+  fetchPaymentInfo,
+  searchProducts,
+  type PaymentInfo,
+  type PosTransaction,
+  type ProductSearchResult,
+} from '../lib/api';
 import CameraScanner from './CameraScanner';
 import ReceiptPreview from './ReceiptPreview';
 import { getLastSyncedAt } from '../lib/catalog-cache';
@@ -75,6 +81,17 @@ export default function Kasir() {
     useState<(typeof PAYMENT_METHODS)[number]['id']>('Cash');
   const [amountTendered, setAmountTendered] = useState('');
   const [printReceipt, setPrintReceipt] = useState(true);
+  // QRIS/Transfer confirmation gate (Group 2 spec): while true, the
+  // payment panel shows "Menunggu Konfirmasi Pembayaran" instead of the
+  // normal form — the actual createTransaction+addPayment call (below in
+  // handleConfirmPayment) only fires once the cashier taps "Konfirmasi
+  // Pembayaran Diterima" here, never just from picking QRIS/Transfer.
+  // Cash skips this screen entirely — there's nothing to wait for, the
+  // cash is already in hand.
+  const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
+  const [paymentInfo, setPaymentInfo] = useState<PaymentInfo | null>(null);
+  const [paymentInfoLoading, setPaymentInfoLoading] = useState(false);
+  const [paymentInfoError, setPaymentInfoError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -269,6 +286,27 @@ export default function Kasir() {
     }
   }
 
+  async function handlePayButtonTap(): Promise<void> {
+    if (paymentMethod === 'Cash') {
+      await handleConfirmPayment();
+      return;
+    }
+    // QRIS/Transfer: show the waiting screen first — fetch the store's
+    // QRIS image / bank details fresh each time rather than caching them
+    // for the component's lifetime, so an owner who just filled in
+    // BANK_TRANSFER_* config doesn't need the cashier to reload the app.
+    setAwaitingConfirmation(true);
+    setPaymentInfoLoading(true);
+    setPaymentInfoError(null);
+    try {
+      setPaymentInfo(await fetchPaymentInfo());
+    } catch (err) {
+      setPaymentInfoError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPaymentInfoLoading(false);
+    }
+  }
+
   async function handleConfirmPayment(): Promise<void> {
     setSubmitting(true);
     setError(null);
@@ -336,6 +374,8 @@ export default function Kasir() {
     setPrintReceipt(true);
     setStage('cart');
     setSaleResult(null);
+    setAwaitingConfirmation(false);
+    setPaymentInfo(null);
   }
 
   return (
@@ -567,7 +607,10 @@ export default function Kasir() {
           <button
             type="button"
             className="link-button home-back kasir-mobile-only"
-            onClick={() => setStage('cart')}
+            onClick={() => {
+              setAwaitingConfirmation(false);
+              setStage('cart');
+            }}
           >
             <IconArrowLeft size={18} /> Kembali ke keranjang
           </button>
@@ -591,6 +634,71 @@ export default function Kasir() {
 
             <button type="button" className="bayar-button" onClick={resetAfterSale}>
               Transaksi Baru
+            </button>
+          </>
+        ) : awaitingConfirmation ? (
+          <>
+            <div className="payment-summary card">
+              <span className="card-label">Menunggu Konfirmasi Pembayaran</span>
+              <span className="card-value">{formatRupiah(total)}</span>
+            </div>
+
+            {paymentInfoLoading && <p className="hint">Memuat info pembayaran…</p>}
+            {paymentInfoError && <p className="error-box">{paymentInfoError}</p>}
+
+            {paymentMethod === 'QRIS' &&
+              paymentInfo &&
+              (paymentInfo.qris.imageUrl ? (
+                <div className="qris-display card">
+                  <img src={paymentInfo.qris.imageUrl} alt="Kode QRIS" className="qris-image" />
+                  <p className="hint">Minta pelanggan scan kode QRIS di atas.</p>
+                </div>
+              ) : (
+                <p className="hint">
+                  QRIS belum dikonfigurasi untuk toko ini. Batalkan dan pilih Transfer atau Tunai.
+                </p>
+              ))}
+
+            {paymentMethod === 'Transfer' &&
+              paymentInfo &&
+              (paymentInfo.transfer.bankName && paymentInfo.transfer.accountNumber ? (
+                <div className="transfer-details card">
+                  <span className="card-label">Transfer ke</span>
+                  <span className="card-value">
+                    {paymentInfo.transfer.bankName} {paymentInfo.transfer.accountNumber}
+                  </span>
+                  <span className="hint">a/n {paymentInfo.transfer.accountName}</span>
+                </div>
+              ) : (
+                <p className="hint">
+                  Rekening transfer belum dikonfigurasi untuk toko ini. Batalkan dan pilih QRIS atau
+                  Tunai.
+                </p>
+              ))}
+
+            {error && <p className="error-box">{error}</p>}
+
+            <button
+              type="button"
+              className="bayar-button"
+              disabled={
+                submitting ||
+                paymentInfoLoading ||
+                (paymentMethod === 'QRIS' && !paymentInfo?.qris.imageUrl) ||
+                (paymentMethod === 'Transfer' &&
+                  !(paymentInfo?.transfer.bankName && paymentInfo.transfer.accountNumber))
+              }
+              onClick={() => void handleConfirmPayment()}
+            >
+              {submitting ? 'Memproses…' : 'Konfirmasi Pembayaran Diterima'}
+            </button>
+            <button
+              type="button"
+              className="link-button"
+              disabled={submitting}
+              onClick={() => setAwaitingConfirmation(false)}
+            >
+              Batalkan
             </button>
           </>
         ) : (
@@ -671,7 +779,7 @@ export default function Kasir() {
               type="button"
               className="bayar-button"
               disabled={submitting || cart.length === 0}
-              onClick={() => void handleConfirmPayment()}
+              onClick={() => void handlePayButtonTap()}
             >
               {submitting ? 'Memproses…' : 'Konfirmasi Pembayaran'}
             </button>

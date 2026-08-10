@@ -12,7 +12,8 @@ vi.mock('../src/shared/erpnext-client/index.js', () => ({
   erpNextClient: erpNextClientMock,
 }));
 
-const { getReceiptTemplate, setReceiptTemplate, printFormatForTemplate } =
+const { env } = await import('../src/config/env.js');
+const { getReceiptTemplate, setReceiptTemplate, printFormatForTemplate, getPaymentInfo } =
   await import('../src/modules/sales-pos/application/settings.js');
 
 describe('getReceiptTemplate', () => {
@@ -59,5 +60,25 @@ describe('printFormatForTemplate', () => {
     expect(printFormatForTemplate('Minimal')).toBe('Hermes Struk Kasir - Minimal');
     expect(printFormatForTemplate('Standard')).toBe('Hermes Struk Kasir');
     expect(printFormatForTemplate('Detailed')).toBe('Hermes Struk Kasir - Detail');
+  });
+});
+
+describe('getPaymentInfo', () => {
+  it('maps each field from its own distinct env var, never mixing QRIS and transfer config', () => {
+    const info = getPaymentInfo();
+    expect(info.qris.imageUrl).toBe(env.QRIS_STATIC_IMAGE_URL || null);
+    expect(info.transfer.bankName).toBe(env.BANK_TRANSFER_BANK_NAME || null);
+    expect(info.transfer.accountNumber).toBe(env.BANK_TRANSFER_ACCOUNT_NUMBER || null);
+    expect(info.transfer.accountName).toBe(env.BANK_TRANSFER_ACCOUNT_NAME || null);
+  });
+
+  it('reports an unset (empty-string) field as null, not an empty string', () => {
+    // Real config on this project's own VPS today: QRIS_STATIC_IMAGE_URL is
+    // unset — the cashier UI must be able to tell "not configured" apart
+    // from "configured to an empty string" (which zod's .default('') can't
+    // distinguish on its own).
+    if (env.QRIS_STATIC_IMAGE_URL === '') {
+      expect(getPaymentInfo().qris.imageUrl).toBeNull();
+    }
   });
 });

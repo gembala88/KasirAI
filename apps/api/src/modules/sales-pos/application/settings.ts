@@ -51,3 +51,28 @@ export async function setReceiptTemplate(template: string): Promise<ReceiptTempl
 export function printFormatForTemplate(template: ReceiptTemplate): string {
   return TEMPLATE_PRINT_FORMAT[template];
 }
+
+/**
+ * QRIS/Transfer confirmation screen (spec Group 2): the same static
+ * payment config already used to build the WhatsApp channel's payment
+ * instructions (see whatsapp/application/payment-reply.ts) — one store
+ * QRIS code and one bank account, never two different ones depending on
+ * which channel a sale came through. `null` (not an empty string) means
+ * "not configured", so the cashier UI can show a clear fallback instead of
+ * a broken image or blank bank details.
+ */
+export interface PaymentInfo {
+  qris: { imageUrl: string | null };
+  transfer: { bankName: string | null; accountNumber: string | null; accountName: string | null };
+}
+
+export function getPaymentInfo(): PaymentInfo {
+  return {
+    qris: { imageUrl: env.QRIS_STATIC_IMAGE_URL || null },
+    transfer: {
+      bankName: env.BANK_TRANSFER_BANK_NAME || null,
+      accountNumber: env.BANK_TRANSFER_ACCOUNT_NUMBER || null,
+      accountName: env.BANK_TRANSFER_ACCOUNT_NAME || null,
+    },
+  };
+}

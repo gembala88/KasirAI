@@ -858,6 +858,24 @@ h1 {
   background: rgba(34, 197, 94, 0.15);
 }
 
+/* --- QRIS/Transfer payment confirmation (Group 2) --- */
+.qris-display {
+  align-items: center;
+  text-align: center;
+}
+
+.qris-image {
+  width: 100%;
+  max-width: 260px;
+  border-radius: var(--radius-sm);
+  background: #fff;
+  padding: var(--space-2);
+}
+
+.transfer-details {
+  text-align: center;
+}
+
 .print-toggle {
   display: flex !important;
   flex-direction: row !important;

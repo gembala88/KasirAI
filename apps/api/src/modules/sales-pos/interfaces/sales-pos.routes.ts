@@ -6,6 +6,7 @@ import {
   addPayment,
   createTransaction,
   getItemUomPrices,
+  getPaymentInfo,
   getProductPrice,
   getReceiptHtml,
   getReceiptTemplate,
@@ -179,6 +180,13 @@ export function registerSalesPosRoutes(app: FastifyInstance): void {
     '/api/v1/pos/transactions/:id/park',
     { preHandler: requireRole(...POS_ROLES) },
     async (request) => parkTransaction(request.params.id),
+  );
+
+  // QRIS image / bank transfer details for the "Menunggu Konfirmasi
+  // Pembayaran" screen (spec Group 2) — POS_ROLES, not SETTINGS_ROLES,
+  // since a Cashier needs this at checkout time, not just Owner/Manager.
+  app.get('/api/v1/pos/payment-info', { preHandler: requireRole(...POS_ROLES) }, async () =>
+    getPaymentInfo(),
   );
 
   app.get<{ Params: { id: string } }>(

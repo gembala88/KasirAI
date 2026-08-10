@@ -26,5 +26,7 @@ export {
   RECEIPT_TEMPLATES,
   getReceiptTemplate,
   setReceiptTemplate,
+  getPaymentInfo,
   type ReceiptTemplate,
+  type PaymentInfo,
 } from './settings.js';

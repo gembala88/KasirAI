@@ -392,6 +392,17 @@ export async function searchItemsByName(query: string): Promise<ItemSearchCandid
   return results.map((r) => ({ itemCode: r.itemCode, itemName: r.itemName, retailPrice: r.price }));
 }
 
+// --- QRIS/Transfer payment confirmation (Group 2) ---
+
+export interface PaymentInfo {
+  qris: { imageUrl: string | null };
+  transfer: { bankName: string | null; accountNumber: string | null; accountName: string | null };
+}
+
+export function fetchPaymentInfo(): Promise<PaymentInfo> {
+  return get('/api/v1/pos/payment-info');
+}
+
 /**
  * Fetches the ERPNext-rendered receipt (real HTML from its Print Format —
  * see the receipt endpoint for why this isn't built client-side) for
