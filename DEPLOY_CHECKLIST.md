@@ -114,17 +114,17 @@ frappe.core.doctype.user.user.generate_keys`), not copied from local
       in this codebase — confirmed live across all 3 templates below.
       **Action needed from you**, three fields, all in ERPNext at Setup >
       Company > Toko Hermes:
-      - **`Phone` (shows on the receipt as "No. WhatsApp Toko")** — fill
-        this in with the store's real WhatsApp number. Currently blank, so
-        the receipt correctly omits the line rather than showing "No.
-        WhatsApp Toko: " with nothing after it — but it won't show at all
-        until this is set.
-      - **`Store Address (for receipt)`** — a new custom field just below
-        the company logo field. Fill in the store's address for it to
-        appear under the store name.
-      - **`Company Logo`** — native ERPNext field; upload one for it to
-        appear on the Detailed template (Minimal and Standard don't show a
-        logo by design).
+  - **`Phone` (shows on the receipt as "No. WhatsApp Toko")** — fill this
+    in with the store's real WhatsApp number. Currently blank, so the
+    receipt correctly omits the line rather than showing "No. WhatsApp
+    Toko: " with nothing after it — but it won't show at all until this
+    is set.
+  - **`Store Address (for receipt)`** — a new custom field just below the
+    company logo field. Fill in the store's address for it to appear
+    under the store name.
+  - **`Company Logo`** — native ERPNext field; upload one for it to
+    appear on the Detailed template (Minimal and Standard don't show a
+    logo by design).
 - [x] **3 receipt templates** (Minimal / Standard / Detailed — increasing
       branding/spacing) now exist as real ERPNext Print Formats ("Hermes
       Struk Kasir", "Hermes Struk Kasir - Minimal", "Hermes Struk Kasir -
