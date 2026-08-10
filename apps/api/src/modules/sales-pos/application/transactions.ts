@@ -461,6 +461,50 @@ function toTransactionPayment(row: SalesInvoicePaymentRow): TransactionPayment {
   return { modeOfPayment: row.mode_of_payment, amount: row.amount };
 }
 
+interface PaymentEntryRow {
+  mode_of_payment: string;
+  paid_amount: number;
+}
+
+/**
+ * Payment method for Riwayat Transaksi. Most invoices carry it directly
+ * on their own `payments` child table (Cash/QRIS/Transfer, all paid at
+ * checkout). A settled Kasbon invoice never does — submitKasbonInvoice
+ * submits with an empty `payments` table by design, and confirmKasbonPaid
+ * settles it via a separate Payment Entry, not by writing back to the
+ * invoice (confirmed live: Sales Invoice.payments isn't allow_on_submit).
+ * Real bug found live: Riwayat Transaksi showed "—" for every paid-off
+ * Kasbon sale because of this.
+ *
+ * Frappe's list API supports filtering a *parent* doctype by a *child*
+ * table field via dotted notation (`references.reference_name`) — this
+ * is different from, and not affected by, the child-table list bug
+ * documented above `listCompletedTransactions` below (that bug is about
+ * listing the *child* doctype itself; Payment Entry is a normal parent
+ * doctype, so its own field selection works correctly).
+ */
+async function resolvePayments(doc: SalesInvoiceDetailDoc): Promise<TransactionPayment[]> {
+  if (doc.payments.length > 0) {
+    return doc.payments.map(toTransactionPayment);
+  }
+  if (doc.outstanding_amount > 0) {
+    return []; // genuinely still unpaid — nothing to show, not an error
+  }
+
+  const entries = await erpNextClient.list<PaymentEntryRow>('Payment Entry', {
+    filters: [
+      ['references.reference_doctype', '=', 'Sales Invoice'],
+      ['references.reference_name', '=', doc.name],
+      ['docstatus', '=', 1],
+    ],
+    fields: ['mode_of_payment', 'paid_amount'],
+  });
+  return entries.map((entry) => ({
+    modeOfPayment: `Kasbon → ${entry.mode_of_payment}`,
+    amount: entry.paid_amount,
+  }));
+}
+
 function toTransactionSummary(
   doc: SalesInvoiceListRow,
   payments: TransactionPayment[],
@@ -522,12 +566,11 @@ export async function listCompletedTransactions(
     names.map((n) => erpNextClient.get<SalesInvoiceDetailDoc>('Sales Invoice', n.name)),
   );
 
-  return {
-    transactions: docs.map((doc) =>
-      toTransactionSummary(doc, doc.payments.map(toTransactionPayment)),
-    ),
-    hasMore: names.length === limit,
-  };
+  const transactions = await Promise.all(
+    docs.map(async (doc) => toTransactionSummary(doc, await resolvePayments(doc))),
+  );
+
+  return { transactions, hasMore: names.length === limit };
 }
 
 interface SalesInvoiceDetailDoc extends SalesInvoiceListRow {
@@ -545,7 +588,7 @@ interface SalesInvoiceDetailDoc extends SalesInvoiceListRow {
 export async function getTransactionDetail(name: string): Promise<TransactionDetail> {
   const doc = await erpNextClient.get<SalesInvoiceDetailDoc>('Sales Invoice', name);
   return {
-    ...toTransactionSummary(doc, doc.payments.map(toTransactionPayment)),
+    ...toTransactionSummary(doc, await resolvePayments(doc)),
     items: doc.items.map((item) => ({
       itemCode: item.item_code,
       itemName: item.item_name,

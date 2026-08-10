@@ -257,4 +257,54 @@ describe('getTransactionDetail', () => {
       },
     ]);
   });
+
+  it('resolves payment method from the settling Payment Entry for a paid-off Kasbon invoice — real bug found live: this invoice\'s own payments table is empty by design, so it used to show "—" even after being fully paid', async () => {
+    erpNextClientMock.get.mockResolvedValue({
+      name: 'ACC-SINV-KASBON',
+      customer_name: 'Budi Santoso',
+      posting_date: '2026-08-11',
+      posting_time: '10:00:00',
+      grand_total: 6000,
+      outstanding_amount: 0,
+      payments: [],
+      items: [],
+    });
+    erpNextClientMock.list.mockImplementation(
+      (doctype: string, options: Record<string, unknown>) => {
+        if (doctype === 'Payment Entry') {
+          expect(options.filters).toContainEqual([
+            'references.reference_name',
+            '=',
+            'ACC-SINV-KASBON',
+          ]);
+          return Promise.resolve([{ mode_of_payment: 'Cash', paid_amount: 6000 }]);
+        }
+        return Promise.resolve([]);
+      },
+    );
+
+    const detail = await getTransactionDetail('ACC-SINV-KASBON');
+
+    expect(detail.isPaid).toBe(true);
+    expect(detail.payments).toEqual([{ modeOfPayment: 'Kasbon → Cash', amount: 6000 }]);
+  });
+
+  it('does not look up a Payment Entry for a genuinely still-unpaid Kasbon invoice', async () => {
+    erpNextClientMock.get.mockResolvedValue({
+      name: 'ACC-SINV-UNPAID-KASBON',
+      customer_name: 'Budi Santoso',
+      posting_date: '2026-08-11',
+      posting_time: '10:00:00',
+      grand_total: 6000,
+      outstanding_amount: 6000,
+      payments: [],
+      items: [],
+    });
+
+    const detail = await getTransactionDetail('ACC-SINV-UNPAID-KASBON');
+
+    expect(detail.isPaid).toBe(false);
+    expect(detail.payments).toEqual([]);
+    expect(erpNextClientMock.list).not.toHaveBeenCalledWith('Payment Entry', expect.anything());
+  });
 });
