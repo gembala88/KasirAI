@@ -5,6 +5,7 @@ import Kasir from './components/Kasir';
 import Login from './components/Login';
 import RiwayatTransaksi from './components/RiwayatTransaksi';
 import Settings from './components/Settings';
+import TagihanKasbon from './components/TagihanKasbon';
 import WarehouseScan from './components/WarehouseScan';
 import { STORE_NAME } from './branding';
 import { logout, triggerCatalogSync } from './lib/api';
@@ -148,6 +149,7 @@ export default function App() {
           hide-from-menu + trust-the-server-403 pattern as every other
           role-restricted action in this app). */}
       {view === 'riwayat' && <RiwayatTransaksi />}
+      {view === 'kasbon' && <TagihanKasbon />}
       {view === 'settings' && <Settings />}
     </main>
   );

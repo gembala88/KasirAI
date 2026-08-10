@@ -54,6 +54,11 @@ const offlineActionSchema = z.discriminatedUnion('type', [
     amount: z.number().positive(),
   }),
   z.object({
+    type: z.literal('kasbon-sale'),
+    lines: z.array(posSaleLineSchema).min(1),
+    customerId: z.string().min(1),
+  }),
+  z.object({
     type: z.literal('create-item'),
     itemCode: z.string().min(1),
     itemName: z.string().min(1),
@@ -94,6 +99,7 @@ const ALLOWED_ROLES_BY_ACTION: Record<OfflineActionType, Role[]> = {
   'reduce-stock': ['Owner', 'Manager', 'Warehouse Staff'],
   transfer: ['Owner', 'Manager', 'Warehouse Staff'],
   'pos-sale': ['Owner', 'Manager', 'Cashier'],
+  'kasbon-sale': ['Owner', 'Manager', 'Cashier'],
   'create-item': ['Owner', 'Manager', 'Warehouse Staff'],
   // Price-setting is an Owner/Manager decision, not a Cashier/Warehouse
   // Staff one — narrower than create-item on purpose.

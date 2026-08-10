@@ -7,7 +7,12 @@
  * or cached as a separate source of truth (§1.4 NFR "Data consistency").
  */
 import { erpNextClient } from '../../../shared/erpnext-client/index.js';
-import type { PiutangLine, PiutangReminder, PiutangSummary } from '../domain/index.js';
+import type {
+  KasbonInvoice,
+  PiutangLine,
+  PiutangReminder,
+  PiutangSummary,
+} from '../domain/index.js';
 import { triggerPiutangCheckNow } from '../infrastructure/index.js';
 
 interface OutstandingInvoice {
@@ -17,6 +22,10 @@ interface OutstandingInvoice {
   due_date: string;
   grand_total: number;
   outstanding_amount: number;
+}
+
+interface OutstandingInvoiceWithCustomerName extends OutstandingInvoice {
+  customer_name: string;
 }
 
 function daysUntil(dueDate: string): number {
@@ -56,6 +65,48 @@ export async function getPiutang(customerId: string): Promise<PiutangSummary> {
     totalOutstanding: lines.reduce((sum, line) => sum + line.outstandingAmount, 0),
     invoices: lines,
   };
+}
+
+/**
+ * "Tagihan Kasbon" screen (spec Group 3) — every outstanding invoice
+ * across every customer, regardless of due date (unlike
+ * findDuePiutangReminders below, which only surfaces ones due soon for
+ * the scheduled reminder job). Same live-ledger-read principle as
+ * getPiutang: outstanding_amount/due_date come straight from ERPNext,
+ * never cached separately.
+ */
+export async function listKasbonInvoices(): Promise<KasbonInvoice[]> {
+  const invoices = await erpNextClient.list<OutstandingInvoiceWithCustomerName>('Sales Invoice', {
+    filters: [
+      ['docstatus', '=', 1],
+      ['outstanding_amount', '>', 0],
+    ],
+    fields: [
+      'name',
+      'customer',
+      'customer_name',
+      'posting_date',
+      'due_date',
+      'grand_total',
+      'outstanding_amount',
+    ],
+    order_by: 'due_date asc',
+  });
+
+  return invoices.map((invoice) => {
+    const daysUntilDue = daysUntil(invoice.due_date);
+    return {
+      invoice: invoice.name,
+      customer: invoice.customer,
+      customerName: invoice.customer_name,
+      grandTotal: invoice.grand_total,
+      outstandingAmount: invoice.outstanding_amount,
+      postingDate: invoice.posting_date,
+      dueDate: invoice.due_date,
+      daysUntilDue,
+      overdue: daysUntilDue < 0,
+    };
+  });
 }
 
 /**

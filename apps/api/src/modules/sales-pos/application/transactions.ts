@@ -289,6 +289,147 @@ export async function addPayment(name: string, payments: PaymentInput[]): Promis
   return toPosTransaction(updated);
 }
 
+// --- Kasbon / credit sale (spec Group 3) ---
+
+/** Used whenever a customer's own `payment_term_days` is 0/unset — keeps Kasbon usable for a newly-picked credit customer immediately, rather than blocking the sale until the owner configures a real term in ERPNext. The owner's own term always wins once set. */
+const DEFAULT_KASBON_TERM_DAYS = 30;
+
+interface CustomerTermDoc {
+  payment_term_days?: number;
+}
+
+async function computeKasbonDueDate(customerId: string): Promise<string> {
+  const customer = await erpNextClient.get<CustomerTermDoc>('Customer', customerId);
+  const days =
+    customer.payment_term_days && customer.payment_term_days > 0
+      ? customer.payment_term_days
+      : DEFAULT_KASBON_TERM_DAYS;
+  const due = new Date();
+  due.setDate(due.getDate() + days);
+  return due.toISOString().slice(0, 10);
+}
+
+/** Exported so the offline-sync path (processKasbonSale) can enforce this before ever writing a draft invoice, not just createKasbonTransaction's own single-call convenience path. */
+export function assertRealCustomer(customerId: string): void {
+  if (!customerId.trim() || customerId === 'Walk-in Customer') {
+    throw new ValidationError('Kasbon memerlukan pelanggan terdaftar, tidak bisa Walk-in Customer');
+  }
+}
+
+/**
+ * Second half of a Kasbon sale: submits an already-created draft invoice
+ * (from createTransaction) with no payment at all — the invoice stays
+ * Unpaid (outstanding_amount = grand_total) until confirmKasbonPaid
+ * settles it later. Split out from createKasbonTransaction below as its
+ * own exported step so the offline-sync path (processKasbonSale) can
+ * checkpoint between "draft created" and "submitted", the same two-step
+ * pattern processPosSale already uses for createTransaction+addPayment —
+ * without it, retrying a sync that succeeded at step 1 but failed at
+ * step 2 would create a second, duplicate invoice.
+ */
+export async function submitKasbonInvoice(
+  invoiceName: string,
+  customerId: string,
+): Promise<PosTransaction> {
+  const dueDate = await computeKasbonDueDate(customerId);
+  const updated = await erpNextClient.update<SalesInvoiceDoc>('Sales Invoice', invoiceName, {
+    due_date: dueDate,
+    docstatus: 1,
+  });
+  return toPosTransaction(updated);
+}
+
+/**
+ * Kasbon / credit sale, single-call convenience for direct (non-offline-
+ * queue) callers: same item/price resolution as a normal checkout
+ * (createTransaction reused as-is, including its real per-customer tier
+ * pricing) followed immediately by submitKasbonInvoice above. Stock still
+ * reduces immediately (update_stock=1, same as every other Kasir sale)
+ * since the goods physically leave the store at sale time even though
+ * payment is deferred.
+ *
+ * Requires a real registered Customer — never Walk-in Customer, which
+ * has no meaningful payment_term_days/credit relationship. Enforced
+ * here, not just in the Kasir UI, since this is the actual write
+ * boundary.
+ */
+export async function createKasbonTransaction(
+  customerId: string,
+  rawLines: CartLineInput[],
+): Promise<PosTransaction> {
+  assertRealCustomer(customerId);
+  const draft = await createTransaction(customerId, rawLines);
+  return submitKasbonInvoice(draft.name, customerId);
+}
+
+interface CompanyReceivableDoc {
+  default_receivable_account?: string;
+}
+
+async function getReceivableAccount(): Promise<string> {
+  const company = await erpNextClient.get<CompanyReceivableDoc>(
+    'Company',
+    env.ERPNEXT_DEFAULT_COMPANY,
+  );
+  if (!company.default_receivable_account) {
+    throw new ValidationError(
+      `Company ${env.ERPNEXT_DEFAULT_COMPANY} has no default receivable account configured`,
+    );
+  }
+  return company.default_receivable_account;
+}
+
+/**
+ * "Konfirmasi Lunas" — settles an existing Kasbon debt. Confirmed live
+ * against this project's own ERPNext that Sales Invoice's `payments`
+ * child table has `allow_on_submit: 0`, so a plain update (the approach
+ * addPayment uses for a still-draft invoice) cannot touch it once the
+ * invoice is already submitted — a real ERPNext Payment Entry, linked via
+ * its `references` child table, is the standard way to record a payment
+ * against an already-submitted invoice; ERPNext updates the invoice's
+ * own outstanding_amount/status automatically as a side effect of
+ * submitting it. Cash only for now (spec: a single confirm button, no
+ * method picker) — reuses the same Mode of Payment → account resolution
+ * addPayment already relies on.
+ */
+export async function confirmKasbonPaid(invoiceName: string): Promise<PosTransaction> {
+  const invoice = await erpNextClient.get<SalesInvoiceDoc>('Sales Invoice', invoiceName);
+  if (invoice.outstanding_amount <= 0) {
+    throw new ValidationError(`Invoice ${invoiceName} sudah lunas`);
+  }
+
+  const [receivableAccount, cashAccount] = await Promise.all([
+    getReceivableAccount(),
+    getAccountForModeOfPayment('Cash'),
+  ]);
+
+  const paymentEntry = await erpNextClient.create<{ name: string }>('Payment Entry', {
+    payment_type: 'Receive',
+    company: env.ERPNEXT_DEFAULT_COMPANY,
+    party_type: 'Customer',
+    party: invoice.customer,
+    mode_of_payment: 'Cash',
+    paid_from: receivableAccount,
+    paid_to: cashAccount,
+    paid_amount: invoice.outstanding_amount,
+    received_amount: invoice.outstanding_amount,
+    references: [
+      {
+        reference_doctype: 'Sales Invoice',
+        reference_name: invoiceName,
+        allocated_amount: invoice.outstanding_amount,
+      },
+    ],
+  });
+  // Same create-draft-then-submit two-step every other write in this
+  // module uses — Frappe's insert() never honours a docstatus passed at
+  // create time, submitted or not.
+  await erpNextClient.update('Payment Entry', paymentEntry.name, { docstatus: 1 });
+
+  const updated = await erpNextClient.get<SalesInvoiceDoc>('Sales Invoice', invoiceName);
+  return toPosTransaction(updated);
+}
+
 interface SalesInvoiceListRow {
   name: string;
   customer_name: string;

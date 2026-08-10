@@ -480,3 +480,41 @@ export function updateReceiptTemplate(
 ): Promise<{ template: ReceiptTemplate }> {
   return put('/api/v1/settings/receipt-template', { template });
 }
+
+// --- Kasbon / credit sale (Group 3) ---
+
+export interface CustomerSearchResult {
+  id: string;
+  name: string;
+  mobileNo: string;
+  tier: string;
+}
+
+/** Live only (always online, like searchItemsByName) — no offline customer cache exists, so Kasbon's customer picker requires connectivity even though the rest of Kasir works offline. */
+export async function searchCustomers(query: string): Promise<CustomerSearchResult[]> {
+  const { results } = await get<{ results: CustomerSearchResult[] }>(
+    `/api/v1/customers/search?q=${encodeURIComponent(query)}`,
+  );
+  return results;
+}
+
+export interface KasbonInvoice {
+  invoice: string;
+  customer: string;
+  customerName: string;
+  grandTotal: number;
+  outstandingAmount: number;
+  postingDate: string;
+  dueDate: string;
+  daysUntilDue: number;
+  overdue: boolean;
+}
+
+/** "Tagihan Kasbon" screen — always-online, like Riwayat Transaksi/Daftar Produk. */
+export function fetchKasbonInvoices(): Promise<{ invoices: KasbonInvoice[] }> {
+  return get('/api/v1/customers/kasbon');
+}
+
+export function confirmKasbonPaid(invoiceName: string): Promise<PosTransaction> {
+  return post(`/api/v1/pos/kasbon/${encodeURIComponent(invoiceName)}/confirm-payment`, {});
+}

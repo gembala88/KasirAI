@@ -6,6 +6,7 @@ import { NotFoundError, ValidationError } from '../../../shared/errors/index.js'
 import {
   CUSTOMER_TIERS,
   type CustomerProfile,
+  type CustomerSearchResult,
   type PurchaseHistoryEntry,
 } from '../domain/index.js';
 
@@ -62,6 +63,37 @@ export async function findCustomerByMobile(mobileNo: string): Promise<CustomerPr
     limit_page_length: '1',
   });
   return doc ? toProfile(doc) : null;
+}
+
+/**
+ * Cashier-facing customer picker (spec Group 3: Kasbon "requires selecting
+ * a registered Customer, not Walk-in"). Matches by name or phone, same
+ * or_filters + `like` pattern as searchProducts (sales-pos/pricing.ts) —
+ * the one existing precedent for a live search-as-you-type picker in this
+ * codebase. Walk-in Customer is deliberately excluded: it has no real
+ * payment_term_days/credit relationship, so it can never be a valid
+ * Kasbon result even if it happened to match the query text.
+ */
+export async function searchCustomers(query: string): Promise<CustomerSearchResult[]> {
+  const trimmed = query.trim();
+  if (!trimmed) {
+    return [];
+  }
+  const docs = await erpNextClient.list<CustomerDoc>('Customer', {
+    or_filters: [
+      ['customer_name', 'like', `%${trimmed}%`],
+      ['mobile_no', 'like', `%${trimmed}%`],
+    ],
+    filters: [['name', '!=', 'Walk-in Customer']],
+    fields: ['name', 'customer_name', 'customer_tier', 'mobile_no'],
+    limit_page_length: '20',
+  });
+  return docs.map((doc) => ({
+    id: doc.name,
+    name: doc.customer_name,
+    mobileNo: doc.mobile_no ?? '',
+    tier: doc.customer_tier ?? 'Retail',
+  }));
 }
 
 export interface CreateCustomerInput {

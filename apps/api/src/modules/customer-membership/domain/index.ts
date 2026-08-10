@@ -48,3 +48,24 @@ export interface PiutangReminder {
   daysUntilDue: number;
   overdue: boolean;
 }
+
+/** A search-result row for picking a real registered Customer (spec Group 3: Kasbon requires one, never Walk-in) — deliberately thinner than CustomerProfile, matching ProductSearchResult's role as a picker-list shape, not a full profile. */
+export interface CustomerSearchResult {
+  id: string;
+  name: string;
+  mobileNo: string;
+  tier: string;
+}
+
+/** "Tagihan Kasbon" screen's list row (spec Group 3) — every outstanding invoice across every customer, not just those due soon like PiutangReminder (that one backs the scheduled reminder job; this one is a full ledger view). */
+export interface KasbonInvoice {
+  invoice: string;
+  customer: string;
+  customerName: string;
+  grandTotal: number;
+  outstandingAmount: number;
+  postingDate: string;
+  dueDate: string;
+  daysUntilDue: number;
+  overdue: boolean;
+}

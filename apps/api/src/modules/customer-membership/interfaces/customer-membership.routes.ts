@@ -9,6 +9,8 @@ import {
   getCustomerProfile,
   getPiutang,
   getPurchaseHistory,
+  listKasbonInvoices,
+  searchCustomers,
   triggerReminderCheck,
 } from '../application/index.js';
 
@@ -53,6 +55,27 @@ export function registerCustomerMembershipRoutes(app: FastifyInstance): void {
     '/api/v1/customers/piutang/check-reminders',
     { preHandler: requireRole(...PIUTANG_ROLES) },
     async () => triggerReminderCheck(),
+  );
+
+  // "Tagihan Kasbon" (spec Group 3) — every outstanding invoice across
+  // every customer. CUSTOMER_ROLES, not PIUTANG_ROLES: unlike the
+  // aggregate reminder job, this is day-to-day POS work — a Cashier
+  // needs to look up and settle a walk-in customer's debt at the
+  // register, the same reason Kasbon sale creation itself is
+  // Cashier-accessible. Static path, registered before /:id for the same
+  // reason as piutang/due-reminders above.
+  app.get('/api/v1/customers/kasbon', { preHandler: requireRole(...CUSTOMER_ROLES) }, async () => ({
+    invoices: await listKasbonInvoices(),
+  }));
+
+  // Cashier-facing customer picker (spec Group 3: Kasbon "requires
+  // selecting a registered Customer") — CUSTOMER_ROLES, not
+  // PIUTANG_ROLES, since a Cashier needs this at checkout time, not just
+  // Owner/Manager.
+  app.get<{ Querystring: { q?: string } }>(
+    '/api/v1/customers/search',
+    { preHandler: requireRole(...CUSTOMER_ROLES) },
+    async (request) => ({ results: await searchCustomers(request.query.q ?? '') }),
   );
 
   app.post('/api/v1/customers', { preHandler: requireRole(...CUSTOMER_ROLES) }, async (request) => {

@@ -20,6 +20,10 @@ export {
   addPayment,
   listCompletedTransactions,
   getTransactionDetail,
+  createKasbonTransaction,
+  submitKasbonInvoice,
+  confirmKasbonPaid,
+  assertRealCustomer,
 } from './transactions.js';
 export { getReceiptHtml } from './receipt.js';
 export {

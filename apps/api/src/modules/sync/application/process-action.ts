@@ -9,10 +9,12 @@ import { ErpNextApiError } from '../../../shared/erpnext-client/index.js';
 import { scanAddStock, scanReduceStock, scanTransfer } from '../../inventory/application/index.js';
 import {
   addPayment,
+  assertRealCustomer,
   createItem,
   createItemPrices,
   createTransaction,
   DuplicateItemError,
+  submitKasbonInvoice,
   updateItemPrice,
 } from '../../sales-pos/application/index.js';
 import type { OfflineAction } from '../domain/index.js';
@@ -66,6 +68,31 @@ async function processPosSale(
   }
 
   return addPayment(invoiceName, [{ modeOfPayment: action.modeOfPayment, amount: action.amount }]);
+}
+
+/**
+ * Kasbon / credit sale — same checkpointing shape as processPosSale
+ * above (two ERPNext writes, resume from the existing invoice on retry
+ * rather than creating a second one), but the second write is
+ * submitKasbonInvoice (due date + submit, no payment) instead of
+ * addPayment.
+ */
+async function processKasbonSale(
+  uuid: string,
+  action: Extract<OfflineAction, { type: 'kasbon-sale' }>,
+): Promise<unknown> {
+  assertRealCustomer(action.customerId);
+
+  const existing = syncStore.findByUuid(uuid);
+  let invoiceName = existing?.erpnextReference ?? null;
+
+  if (!invoiceName) {
+    const draft = await createTransaction(action.customerId, action.lines);
+    invoiceName = draft.name;
+    syncStore.savePartialReference(uuid, invoiceName);
+  }
+
+  return submitKasbonInvoice(invoiceName, action.customerId);
 }
 
 /**
@@ -153,6 +180,8 @@ export async function processAction(uuid: string, action: OfflineAction): Promis
       );
     case 'pos-sale':
       return processPosSale(uuid, action);
+    case 'kasbon-sale':
+      return processKasbonSale(uuid, action);
     case 'create-item':
       return processCreateItem(uuid, action);
     case 'update-item-price':

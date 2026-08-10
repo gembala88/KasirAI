@@ -86,5 +86,17 @@ export interface PosSaleAction {
   amount: number;
 }
 
-export type OfflineAction = ScanAction | PosSaleAction | UpdateItemPriceAction;
+/**
+ * Kasbon / credit sale (Group 3) — a distinct action from PosSaleAction,
+ * not a variant of it: there's no modeOfPayment/amount at all (the
+ * invoice is submitted with zero payment by design), and customerId is
+ * required, not optional — Kasbon is meaningless for Walk-in Customer.
+ */
+export interface KasbonSaleAction {
+  type: 'kasbon-sale';
+  lines: PosSaleLine[];
+  customerId: string;
+}
+
+export type OfflineAction = ScanAction | PosSaleAction | KasbonSaleAction | UpdateItemPriceAction;
 export type OfflineActionType = OfflineAction['type'];

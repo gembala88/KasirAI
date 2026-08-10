@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
   IconBoxSeam,
+  IconCalendarTime,
   IconChevronRight,
   IconHistory,
   IconLayoutDashboard,
@@ -13,7 +14,7 @@ import {
 import { listQueuedActions } from '../lib/offline-queue';
 import type { AuthUser } from '../lib/auth';
 
-export type HomeDestination = 'warehouse' | 'kasir' | 'riwayat' | 'settings';
+export type HomeDestination = 'warehouse' | 'kasir' | 'riwayat' | 'kasbon' | 'settings';
 
 interface MenuItem {
   id: HomeDestination | 'dashboard';
@@ -36,6 +37,12 @@ const MENU_BY_ROLE: Record<AuthUser['role'], MenuItem[]> = {
       label: 'Riwayat Transaksi',
       subtitle: 'Daftar & detail transaksi, cetak ulang struk',
       icon: <IconHistory />,
+    },
+    {
+      id: 'kasbon',
+      label: 'Tagihan Kasbon',
+      subtitle: 'Tagihan belum lunas, konfirmasi pembayaran',
+      icon: <IconCalendarTime />,
     },
     {
       id: 'dashboard',
@@ -65,6 +72,12 @@ const MENU_BY_ROLE: Record<AuthUser['role'], MenuItem[]> = {
       icon: <IconHistory />,
     },
     {
+      id: 'kasbon',
+      label: 'Tagihan Kasbon',
+      subtitle: 'Tagihan belum lunas, konfirmasi pembayaran',
+      icon: <IconCalendarTime />,
+    },
+    {
       id: 'dashboard',
       label: 'Dashboard',
       subtitle: 'Laporan & analitik',
@@ -84,6 +97,12 @@ const MENU_BY_ROLE: Record<AuthUser['role'], MenuItem[]> = {
       label: 'Riwayat Transaksi',
       subtitle: 'Daftar & detail transaksi, cetak ulang struk',
       icon: <IconHistory />,
+    },
+    {
+      id: 'kasbon',
+      label: 'Tagihan Kasbon',
+      subtitle: 'Tagihan belum lunas, konfirmasi pembayaran',
+      icon: <IconCalendarTime />,
     },
     {
       id: 'dashboard',

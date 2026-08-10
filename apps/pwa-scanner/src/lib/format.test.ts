@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { formatQty, formatTransactionDateTime, paymentStatusBadge, statusBadge } from './format';
+import {
+  formatDate,
+  formatQty,
+  formatTransactionDateTime,
+  overdueBadge,
+  paymentStatusBadge,
+  statusBadge,
+} from './format';
 
 describe('formatQty', () => {
   it('prints whole numbers plain, no decimal point', () => {
@@ -37,6 +44,28 @@ describe('statusBadge', () => {
 
   it('labels a real, server-attempted rejection "Gagal"', () => {
     expect(statusBadge('Failed').label).toBe('Gagal');
+  });
+});
+
+describe('formatDate', () => {
+  it('reformats a plain ERPNext date ("YYYY-MM-DD") into "dd-MM-yyyy"', () => {
+    expect(formatDate('2026-08-10')).toBe('10-08-2026');
+  });
+});
+
+describe('overdueBadge', () => {
+  it('labels an overdue Kasbon invoice "Jatuh Tempo" with the failed (red) style', () => {
+    expect(overdueBadge(true)).toEqual({
+      label: 'Jatuh Tempo',
+      className: 'status-badge status-badge--failed',
+    });
+  });
+
+  it('labels a not-yet-due Kasbon invoice "Belum Jatuh Tempo" with the pending (neutral) style', () => {
+    expect(overdueBadge(false)).toEqual({
+      label: 'Belum Jatuh Tempo',
+      className: 'status-badge status-badge--pending',
+    });
   });
 });
 

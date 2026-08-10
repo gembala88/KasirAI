@@ -3,6 +3,7 @@ import {
   IconAlertTriangle,
   IconArrowLeft,
   IconBuildingBank,
+  IconCalendarTime,
   IconCamera,
   IconCash,
   IconCloudCheck,
@@ -10,7 +11,9 @@ import {
 } from '@tabler/icons-react';
 import {
   fetchPaymentInfo,
+  searchCustomers,
   searchProducts,
+  type CustomerSearchResult,
   type PaymentInfo,
   type PosTransaction,
   type ProductSearchResult,
@@ -21,7 +24,7 @@ import { getLastSyncedAt } from '../lib/catalog-cache';
 import { formatQty, formatRupiah, formatSyncedAt, statusBadge } from '../lib/format';
 import { listQueuedActions, QUEUE_CHANGED_EVENT, type QueuedAction } from '../lib/offline-queue';
 import { submitOrQueue, syncPendingQueue } from '../lib/sync';
-import type { PosSaleAction } from '../lib/types';
+import type { KasbonSaleAction, PosSaleAction } from '../lib/types';
 import { useProductSearch } from '../lib/use-product-search';
 
 interface CartLine {
@@ -47,6 +50,7 @@ const PAYMENT_METHODS = [
   { id: 'Cash', label: 'Tunai', icon: <IconCash size={24} /> },
   { id: 'QRIS', label: 'QRIS', icon: <IconQrcode size={24} /> },
   { id: 'Transfer', label: 'Transfer', icon: <IconBuildingBank size={24} /> },
+  { id: 'Kasbon', label: 'Kasbon', icon: <IconCalendarTime size={24} /> },
 ] as const;
 // 'C' (clear) lives next to the "Jumlah scan berikutnya" label instead of
 // in the grid — keeps this a clean 4-row-of-3 layout once '.' joined the
@@ -92,12 +96,21 @@ export default function Kasir() {
   const [paymentInfo, setPaymentInfo] = useState<PaymentInfo | null>(null);
   const [paymentInfoLoading, setPaymentInfoLoading] = useState(false);
   const [paymentInfoError, setPaymentInfoError] = useState<string | null>(null);
+  // Kasbon (Group 3 spec: "requires selecting a registered Customer, not
+  // Walk-in") — a real search-and-select picker, deliberately separate
+  // from the free-text "ID Pelanggan" field above (which stays exactly as
+  // it was for Cash/QRIS/Transfer's tier-pricing lookup) since Kasbon
+  // needs a *confirmed* real Customer, not just an ID typed and hoped for.
+  const [kasbonQuery, setKasbonQuery] = useState('');
+  const [kasbonResults, setKasbonResults] = useState<CustomerSearchResult[]>([]);
+  const [kasbonSearching, setKasbonSearching] = useState(false);
+  const [kasbonCustomer, setKasbonCustomer] = useState<CustomerSearchResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pendingSales, setPendingSales] = useState<Array<QueuedAction & { action: PosSaleAction }>>(
-    [],
-  );
+  const [pendingSales, setPendingSales] = useState<
+    Array<QueuedAction & { action: PosSaleAction | KasbonSaleAction }>
+  >([]);
   const [syncingQueue, setSyncingQueue] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   // Real bug found live: tapping a Kg item from the search dropdown always
@@ -125,11 +138,31 @@ export default function Kasir() {
   } = useProductSearch(query, !!customerId.trim());
   const searching = submitSearching || debouncedSearching;
 
+  // Debounced customer search for the Kasbon picker — same 300ms shape as
+  // use-product-search.ts, but this is Kasbon's only caller, so it's not
+  // worth extracting into a shared hook.
+  useEffect(() => {
+    const trimmed = kasbonQuery.trim();
+    if (!trimmed) {
+      setKasbonResults([]);
+      return;
+    }
+    setKasbonSearching(true);
+    const timer = setTimeout(() => {
+      searchCustomers(trimmed)
+        .then((results) => setKasbonResults(results))
+        .catch(() => setKasbonResults([]))
+        .finally(() => setKasbonSearching(false));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [kasbonQuery]);
+
   const refreshPendingSales = useCallback(async () => {
     const all = await listQueuedActions();
     setPendingSales(
       all.filter(
-        (item): item is QueuedAction & { action: PosSaleAction } => item.actionType === 'pos-sale',
+        (item): item is QueuedAction & { action: PosSaleAction | KasbonSaleAction } =>
+          item.actionType === 'pos-sale' || item.actionType === 'kasbon-sale',
       ),
     );
   }, []);
@@ -287,7 +320,11 @@ export default function Kasir() {
   }
 
   async function handlePayButtonTap(): Promise<void> {
-    if (paymentMethod === 'Cash') {
+    // Kasbon behaves like Cash here — there's no external payment to wait
+    // on (it's deferred, not pending confirmation), so it submits
+    // immediately. The customer-selected requirement is enforced by the
+    // button's own disabled state below, not by a waiting screen.
+    if (paymentMethod === 'Cash' || paymentMethod === 'Kasbon') {
       await handleConfirmPayment();
       return;
     }
@@ -308,16 +345,19 @@ export default function Kasir() {
   }
 
   async function handleConfirmPayment(): Promise<void> {
+    if (paymentMethod === 'Kasbon' && !kasbonCustomer) {
+      setError('Pilih pelanggan terlebih dahulu untuk Kasbon');
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
     try {
-      const action: PosSaleAction = {
-        type: 'pos-sale',
-        lines: cart.map((line) => ({ itemCode: line.itemCode, qty: line.qty, rate: line.rate })),
-        ...(customerId.trim() ? { customerId: customerId.trim() } : {}),
-        modeOfPayment: paymentMethod,
-        amount: Number(amountTendered) || total,
-      };
+      const lines = cart.map((line) => ({
+        itemCode: line.itemCode,
+        qty: line.qty,
+        rate: line.rate,
+      }));
 
       // Durable-write-then-sync (spec §15.2) — the sale is recorded
       // locally the instant "Konfirmasi Pembayaran" is pressed, before
@@ -325,7 +365,21 @@ export default function Kasir() {
       // mid-request, the sale is queued, not lost, and this same call is
       // safe to retry later since the server dedupes by this action's
       // UUID.
-      const result = await submitOrQueue('pos-sale', action);
+      const result =
+        paymentMethod === 'Kasbon'
+          ? await submitOrQueue('kasbon-sale', {
+              type: 'kasbon-sale',
+              lines,
+              // kasbonCustomer is guaranteed non-null here by the guard above.
+              customerId: (kasbonCustomer as CustomerSearchResult).id,
+            } satisfies KasbonSaleAction)
+          : await submitOrQueue('pos-sale', {
+              type: 'pos-sale',
+              lines,
+              ...(customerId.trim() ? { customerId: customerId.trim() } : {}),
+              modeOfPayment: paymentMethod,
+              amount: Number(amountTendered) || total,
+            } satisfies PosSaleAction);
       await refreshPendingSales();
 
       if (result.outcome === 'queued') {
@@ -360,6 +414,8 @@ export default function Kasir() {
       setCart([]);
       setCustomerId('');
       setAmountTendered('');
+      setKasbonCustomer(null);
+      setKasbonQuery('');
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -376,6 +432,8 @@ export default function Kasir() {
     setSaleResult(null);
     setAwaitingConfirmation(false);
     setPaymentInfo(null);
+    setKasbonCustomer(null);
+    setKasbonQuery('');
   }
 
   return (
@@ -540,9 +598,18 @@ export default function Kasir() {
             <ul>
               {pendingSales.map((item) => {
                 const badge = statusBadge(item.status);
+                // Kasbon has no "amount tendered" (nothing was paid up
+                // front) — show the cart's real value instead, same
+                // number either way for a normal full-payment sale.
+                const action = item.action;
+                const amount =
+                  action.type === 'kasbon-sale'
+                    ? action.lines.reduce((sum, line) => sum + line.qty * (line.rate ?? 0), 0)
+                    : action.amount;
                 return (
                   <li key={item.uuid}>
-                    {formatRupiah(item.action.amount)} ({item.action.lines.length} barang){' '}
+                    {formatRupiah(amount)} ({action.lines.length} barang)
+                    {action.type === 'kasbon-sale' ? ' · Kasbon' : ''}{' '}
                     <span className={badge.className}>{badge.label}</span>
                     {item.lastError && <div className="hint">{item.lastError}</div>}
                   </li>
@@ -751,17 +818,82 @@ export default function Kasir() {
               ))}
             </div>
 
-            <form className="scan-form payment-form" onSubmit={(e) => e.preventDefault()}>
-              <label>
-                Jumlah Diterima
-                <input
-                  value={amountTendered}
-                  onChange={(e) => setAmountTendered(e.target.value)}
-                  inputMode="decimal"
-                  placeholder={String(total)}
-                />
-              </label>
-            </form>
+            {paymentMethod === 'Kasbon' && (
+              <div className="kasbon-customer-picker">
+                <h2 className="section-label">Pelanggan (wajib untuk Kasbon)</h2>
+                {kasbonCustomer ? (
+                  <div className="card kasbon-selected-customer">
+                    <span className="card-label">{kasbonCustomer.name}</span>
+                    {kasbonCustomer.mobileNo && (
+                      <span className="hint">{kasbonCustomer.mobileNo}</span>
+                    )}
+                    <button
+                      type="button"
+                      className="link-button"
+                      onClick={() => setKasbonCustomer(null)}
+                    >
+                      Ganti Pelanggan
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <label>
+                      Cari Pelanggan (nama atau nomor HP)
+                      <input
+                        value={kasbonQuery}
+                        onChange={(e) => setKasbonQuery(e.target.value)}
+                        placeholder="Contoh: Budi atau 0812…"
+                      />
+                    </label>
+                    {kasbonSearching && <p className="hint">Mencari…</p>}
+                    {!kasbonSearching &&
+                      kasbonQuery.trim().length >= 2 &&
+                      kasbonResults.length === 0 && (
+                        <p className="hint">
+                          Tidak ada pelanggan yang cocok dengan "{kasbonQuery.trim()}". Daftarkan
+                          pelanggan ini di ERPNext terlebih dahulu.
+                        </p>
+                      )}
+                    {kasbonResults.length > 0 && (
+                      <ul className="search-results">
+                        {kasbonResults.map((customer) => (
+                          <li key={customer.id}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setKasbonCustomer(customer);
+                                setKasbonQuery('');
+                                setKasbonResults([]);
+                              }}
+                            >
+                              <span className="search-result-name">{customer.name}</span>
+                              <span className="hint">
+                                {customer.mobileNo || 'Tanpa nomor HP'} · {customer.tier}
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* Jumlah Diterima only makes sense when something is actually tendered up front — Kasbon defers payment entirely, so there's nothing to enter here. */}
+            {paymentMethod !== 'Kasbon' && (
+              <form className="scan-form payment-form" onSubmit={(e) => e.preventDefault()}>
+                <label>
+                  Jumlah Diterima
+                  <input
+                    value={amountTendered}
+                    onChange={(e) => setAmountTendered(e.target.value)}
+                    inputMode="decimal"
+                    placeholder={String(total)}
+                  />
+                </label>
+              </form>
+            )}
 
             <label className="print-toggle">
               <input
@@ -778,7 +910,9 @@ export default function Kasir() {
             <button
               type="button"
               className="bayar-button"
-              disabled={submitting || cart.length === 0}
+              disabled={
+                submitting || cart.length === 0 || (paymentMethod === 'Kasbon' && !kasbonCustomer)
+              }
               onClick={() => void handlePayButtonTap()}
             >
               {submitting ? 'Memproses…' : 'Konfirmasi Pembayaran'}

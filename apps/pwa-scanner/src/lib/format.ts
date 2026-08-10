@@ -67,3 +67,17 @@ export function paymentStatusBadge(isPaid: boolean): { label: string; className:
     ? { label: 'Lunas', className: 'status-badge status-badge--synced' }
     : { label: 'Belum Lunas', className: 'status-badge status-badge--conflict' };
 }
+
+/** "Tagihan Kasbon" due-date column — a plain "YYYY-MM-DD" date, no time component (unlike Riwayat Transaksi's posting_date+posting_time). */
+export function formatDate(dateStr: string): string {
+  const [datePart] = dateStr.split(' ');
+  const [year, month, day] = (datePart ?? dateStr).split('-');
+  return `${day}-${month}-${year}`;
+}
+
+/** Overdue/on-time badge for "Tagihan Kasbon" — same red/green convention as paymentStatusBadge. */
+export function overdueBadge(overdue: boolean): { label: string; className: string } {
+  return overdue
+    ? { label: 'Jatuh Tempo', className: 'status-badge status-badge--failed' }
+    : { label: 'Belum Jatuh Tempo', className: 'status-badge status-badge--pending' };
+}

@@ -4,6 +4,8 @@ import { requireRole } from '../../auth/interfaces/index.js';
 import { ValidationError } from '../../../shared/errors/index.js';
 import {
   addPayment,
+  confirmKasbonPaid,
+  createKasbonTransaction,
   createTransaction,
   getItemUomPrices,
   getPaymentInfo,
@@ -24,6 +26,20 @@ import {
 
 const createTransactionSchema = z.object({
   customerId: z.string().optional(),
+  lines: z
+    .array(
+      z.object({
+        itemCode: z.string().min(1),
+        qty: z.number().positive(),
+        rate: z.number().nonnegative().optional(),
+        warehouse: z.string().optional(),
+      }),
+    )
+    .min(1),
+});
+
+const createKasbonTransactionSchema = z.object({
+  customerId: z.string().min(1),
   lines: z
     .array(
       z.object({
@@ -180,6 +196,28 @@ export function registerSalesPosRoutes(app: FastifyInstance): void {
     '/api/v1/pos/transactions/:id/park',
     { preHandler: requireRole(...POS_ROLES) },
     async (request) => parkTransaction(request.params.id),
+  );
+
+  // Kasbon / credit sale (spec Group 3) — registered after the more
+  // specific /parked and /:id/park routes above only for readability;
+  // Fastify matches by path specificity, not registration order, so this
+  // plain suffix route can never be shadowed by them.
+  app.post(
+    '/api/v1/pos/transactions/kasbon',
+    { preHandler: requireRole(...POS_ROLES) },
+    async (request) => {
+      const parsed = createKasbonTransactionSchema.safeParse(request.body);
+      if (!parsed.success) {
+        throw new ValidationError(parsed.error.issues.map((i) => i.message).join('; '));
+      }
+      return createKasbonTransaction(parsed.data.customerId, parsed.data.lines);
+    },
+  );
+
+  app.post<{ Params: { id: string } }>(
+    '/api/v1/pos/kasbon/:id/confirm-payment',
+    { preHandler: requireRole(...POS_ROLES) },
+    async (request) => confirmKasbonPaid(request.params.id),
   );
 
   // QRIS image / bank transfer details for the "Menunggu Konfirmasi

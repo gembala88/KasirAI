@@ -83,6 +83,19 @@ export interface PosSaleAction {
 }
 
 /**
+ * Kasbon / credit sale (spec Group 3) — a distinct action type from
+ * PosSaleAction, not a variant of it: there's no modeOfPayment/amount at
+ * all (createKasbonTransaction submits the invoice with zero payment by
+ * design), and customerId is required, not optional — Kasbon is
+ * meaningless for Walk-in Customer.
+ */
+export interface KasbonSaleAction {
+  type: 'kasbon-sale';
+  lines: PosSaleLine[];
+  customerId: string;
+}
+
+/**
  * "Edit from Daftar Produk" (price-only — see sales-pos/application's
  * updateItemPrice doc comment for why a UOM change isn't offered here).
  * At least one of retailPrice/grosirPrice is required — enforced in
@@ -101,6 +114,7 @@ export type OfflineAction =
   | ReduceStockAction
   | TransferAction
   | PosSaleAction
+  | KasbonSaleAction
   | CreateItemAction
   | UpdateItemPriceAction;
 export type OfflineActionType = OfflineAction['type'];

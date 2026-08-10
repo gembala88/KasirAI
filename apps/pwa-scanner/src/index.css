@@ -904,6 +904,37 @@ h1 {
   background: #fff;
 }
 
+/* --- Tagihan Kasbon --- */
+.kasbon-row {
+  flex-direction: column !important;
+  align-items: stretch !important;
+}
+
+.kasbon-row-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.kasbon-confirm-button {
+  margin-top: 0.5rem;
+}
+
+.kasbon-receipt {
+  align-items: center;
+  text-align: center;
+}
+
+/* --- Kasbon customer picker (Kasir payment panel) --- */
+.kasbon-customer-picker {
+  margin: 0.5rem 0;
+}
+
+.kasbon-selected-customer {
+  text-align: center;
+}
+
 /* --- Camera barcode scanning (warehouse screens + Kasir) --- */
 
 .scan-input-row {
