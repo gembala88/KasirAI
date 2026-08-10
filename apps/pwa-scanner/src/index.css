@@ -337,6 +337,31 @@ h1 {
   gap: 1rem;
 }
 
+.template-option-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0.75rem 0 1.25rem;
+}
+
+/* Overrides .card's own column direction — a radio + its label text sit
+   side by side, not stacked. */
+.template-option {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.75rem;
+  cursor: pointer;
+}
+
+.template-option input[type='radio'] {
+  margin-top: 0.2rem;
+  flex-shrink: 0;
+}
+
+.template-option--selected {
+  border-color: var(--color-primary);
+}
+
 .scan-form {
   display: flex;
   flex-direction: column;
@@ -581,6 +606,25 @@ h1 {
 
 .product-list-name {
   font-weight: 600;
+}
+
+/* A product-list-row that's a real <button> (Riwayat Transaksi's tappable
+   rows) instead of a plain <li> — resets button chrome, then reproduces
+   .product-list-row's own inner flex layout so it looks identical. */
+.transaction-row-button {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
 }
 
 .product-list-figures {

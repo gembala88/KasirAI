@@ -8,12 +8,17 @@ import {
   getItemUomPrices,
   getProductPrice,
   getReceiptHtml,
+  getReceiptTemplate,
+  getTransactionDetail,
   listCatalogPage,
+  listCompletedTransactions,
   listItemGroups,
   listParkedTransactions,
   listUoms,
   parkTransaction,
+  RECEIPT_TEMPLATES,
   searchProducts,
+  setReceiptTemplate,
 } from '../application/index.js';
 
 const createTransactionSchema = z.object({
@@ -49,6 +54,15 @@ const catalogQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(500).optional().default(200),
 });
 
+const transactionListQuerySchema = z.object({
+  offset: z.coerce.number().int().nonnegative().optional().default(0),
+  limit: z.coerce.number().int().positive().max(100).optional().default(20),
+});
+
+const receiptTemplateSchema = z.object({
+  template: z.enum(RECEIPT_TEMPLATES),
+});
+
 const POS_ROLES = ['Owner', 'Manager', 'Cashier'] as const;
 // Read-only product/catalog endpoints also need to be reachable from the
 // Gudang scan screen (Warehouse Staff) — "Tambah Produk Baru" checks
@@ -65,6 +79,9 @@ const POS_ROLES = ['Owner', 'Manager', 'Cashier'] as const;
 // (pos/transactions, park, payment, receipt) below still correctly stay
 // Owner/Manager/Cashier only.
 const PRODUCT_READ_ROLES = ['Owner', 'Manager', 'Cashier', 'Warehouse Staff'] as const;
+// Receipt template is a business decision, not every staff role's call —
+// same narrower gate as update-item-price.
+const SETTINGS_ROLES = ['Owner', 'Manager'] as const;
 
 /**
  * Sales/POS module — public HTTP boundary (spec §1.3 FR-1, §6).
@@ -183,6 +200,47 @@ export function registerSalesPosRoutes(app: FastifyInstance): void {
         throw new ValidationError(parsed.error.issues.map((i) => i.message).join('; '));
       }
       return addPayment(request.params.id, parsed.data.payments);
+    },
+  );
+
+  // Riwayat Transaksi (spec: transaction history) — every submitted sale,
+  // paginated, newest first. Registered after the more specific
+  // /parked and /:id/... routes above only for readability; Fastify's
+  // router matches by path specificity, not registration order, so a
+  // plain GET here can never be shadowed by them.
+  app.get<{ Querystring: { offset?: string; limit?: string } }>(
+    '/api/v1/pos/transactions',
+    { preHandler: requireRole(...POS_ROLES) },
+    async (request) => {
+      const parsed = transactionListQuerySchema.safeParse(request.query);
+      if (!parsed.success) {
+        throw new ValidationError(parsed.error.issues.map((i) => i.message).join('; '));
+      }
+      return listCompletedTransactions(parsed.data.offset, parsed.data.limit);
+    },
+  );
+
+  app.get<{ Params: { id: string } }>(
+    '/api/v1/pos/transactions/:id/detail',
+    { preHandler: requireRole(...POS_ROLES) },
+    async (request) => getTransactionDetail(request.params.id),
+  );
+
+  app.get(
+    '/api/v1/settings/receipt-template',
+    { preHandler: requireRole(...SETTINGS_ROLES) },
+    async () => ({ template: await getReceiptTemplate() }),
+  );
+
+  app.put(
+    '/api/v1/settings/receipt-template',
+    { preHandler: requireRole(...SETTINGS_ROLES) },
+    async (request) => {
+      const parsed = receiptTemplateSchema.safeParse(request.body);
+      if (!parsed.success) {
+        throw new ValidationError(parsed.error.issues.map((i) => i.message).join('; '));
+      }
+      return { template: await setReceiptTemplate(parsed.data.template) };
     },
   );
 }

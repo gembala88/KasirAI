@@ -52,3 +52,18 @@ export function formatSyncedAt(iso: string): string {
     minute: '2-digit',
   });
 }
+
+/** Riwayat Transaksi's date+time column — ERPNext's own "dd-MM-yyyy" receipt convention, plus HH:mm from postingTime (a "HH:MM:SS[.ffffff]" string). */
+export function formatTransactionDateTime(postingDate: string, postingTime: string): string {
+  const [datePart] = postingDate.split(' ');
+  const [year, month, day] = (datePart ?? postingDate).split('-');
+  const [hour, minute] = postingTime.split(':');
+  return `${day}-${month}-${year} ${hour}:${minute}`;
+}
+
+/** Lunas/Belum Lunas badge — same color convention as statusBadge, but keyed off a plain boolean since payment status isn't one of the sync-queue's status strings. */
+export function paymentStatusBadge(isPaid: boolean): { label: string; className: string } {
+  return isPaid
+    ? { label: 'Lunas', className: 'status-badge status-badge--synced' }
+    : { label: 'Belum Lunas', className: 'status-badge status-badge--conflict' };
+}

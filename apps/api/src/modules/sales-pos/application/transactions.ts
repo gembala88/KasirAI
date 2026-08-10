@@ -17,7 +17,15 @@
 import { env } from '../../../config/env.js';
 import { erpNextClient } from '../../../shared/erpnext-client/index.js';
 import { ValidationError } from '../../../shared/errors/index.js';
-import type { CartLineInput, PaymentInput, PosTransaction } from '../domain/index.js';
+import type {
+  CartLineInput,
+  PaymentInput,
+  PosTransaction,
+  TransactionDetail,
+  TransactionListPage,
+  TransactionPayment,
+  TransactionSummary,
+} from '../domain/index.js';
 import { getProductPrice, resolvePriceList } from './pricing.js';
 
 interface SalesInvoiceDoc {
@@ -279,4 +287,125 @@ export async function addPayment(name: string, payments: PaymentInput[]): Promis
   });
 
   return toPosTransaction(updated);
+}
+
+interface SalesInvoiceListRow {
+  name: string;
+  customer_name: string;
+  posting_date: string;
+  posting_time: string;
+  grand_total: number;
+  outstanding_amount: number;
+}
+
+interface SalesInvoicePaymentRow {
+  parent: string;
+  mode_of_payment: string;
+  amount: number;
+}
+
+function toTransactionPayment(row: SalesInvoicePaymentRow): TransactionPayment {
+  return { modeOfPayment: row.mode_of_payment, amount: row.amount };
+}
+
+function toTransactionSummary(
+  doc: SalesInvoiceListRow,
+  payments: TransactionPayment[],
+): TransactionSummary {
+  return {
+    name: doc.name,
+    customerName: doc.customer_name,
+    postingDate: doc.posting_date,
+    postingTime: doc.posting_time,
+    grandTotal: doc.grand_total,
+    outstandingAmount: doc.outstanding_amount,
+    // Derived from the real outstanding balance, not ERPNext's own status
+    // string — correct for both a Paid POS sale today and a genuinely
+    // Unpaid Kasbon invoice once Group 3 starts creating those, no change
+    // needed here when that lands.
+    isPaid: doc.outstanding_amount <= 0,
+    payments,
+  };
+}
+
+/**
+ * Riwayat Transaksi (spec: transaction history) — every submitted sale,
+ * Paid or not (Kasbon/credit sales aren't reachable yet, but this list is
+ * deliberately built to already handle both). Payment method is a bulk
+ * fetch of the `Sales Invoice Payment` child table across the whole page —
+ * same batching rationale as listCatalogPage's Item Price fetch — instead
+ * of one extra request per row.
+ */
+export async function listCompletedTransactions(
+  offset: number,
+  limit: number,
+): Promise<TransactionListPage> {
+  const docs = await erpNextClient.list<SalesInvoiceListRow>('Sales Invoice', {
+    filters: [
+      ['docstatus', '=', 1],
+      ['is_pos', '=', 1],
+    ],
+    fields: [
+      'name',
+      'customer_name',
+      'posting_date',
+      'posting_time',
+      'grand_total',
+      'outstanding_amount',
+    ],
+    order_by: 'posting_date desc, posting_time desc',
+    limit_start: String(offset),
+    limit_page_length: String(limit),
+  });
+
+  if (docs.length === 0) {
+    return { transactions: [], hasMore: false };
+  }
+
+  const names = docs.map((d) => d.name);
+  const payments = await erpNextClient.list<SalesInvoicePaymentRow>('Sales Invoice Payment', {
+    filters: [['parent', 'in', names]],
+    fields: ['parent', 'mode_of_payment', 'amount'],
+    // A split payment can have more than one row per invoice — overfetch
+    // generously rather than assume exactly one.
+    limit_page_length: String(names.length * 5),
+  });
+  const paymentsByInvoice = new Map<string, TransactionPayment[]>();
+  for (const p of payments) {
+    const list = paymentsByInvoice.get(p.parent) ?? [];
+    list.push(toTransactionPayment(p));
+    paymentsByInvoice.set(p.parent, list);
+  }
+
+  return {
+    transactions: docs.map((d) => toTransactionSummary(d, paymentsByInvoice.get(d.name) ?? [])),
+    hasMore: docs.length === limit,
+  };
+}
+
+interface SalesInvoiceDetailDoc extends SalesInvoiceListRow {
+  items: Array<{
+    item_code: string;
+    item_name: string;
+    qty: number;
+    uom: string;
+    rate: number;
+    amount: number;
+  }>;
+  payments: SalesInvoicePaymentRow[];
+}
+
+export async function getTransactionDetail(name: string): Promise<TransactionDetail> {
+  const doc = await erpNextClient.get<SalesInvoiceDetailDoc>('Sales Invoice', name);
+  return {
+    ...toTransactionSummary(doc, doc.payments.map(toTransactionPayment)),
+    items: doc.items.map((item) => ({
+      itemCode: item.item_code,
+      itemName: item.item_name,
+      qty: item.qty,
+      uom: item.uom,
+      rate: item.rate,
+      amount: item.amount,
+    })),
+  };
 }

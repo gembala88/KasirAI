@@ -129,3 +129,44 @@ export interface PosTransaction {
   /** Customer's phone number, for the dashboard's payment-confirmation UI (§10 Phase 7) to notify without a second lookup. */
   contactMobile?: string;
 }
+
+export interface TransactionPayment {
+  modeOfPayment: string;
+  amount: number;
+}
+
+/**
+ * Riwayat Transaksi's list-row shape. `isPaid` is derived from
+ * `outstandingAmount`, not ERPNext's own `status` string — deliberately,
+ * so an Unpaid Kasbon invoice (not built yet, but the list is designed for
+ * it now) reads correctly the moment Group 3 starts creating real unpaid
+ * ones, with no change needed here.
+ */
+export interface TransactionSummary {
+  name: string;
+  customerName: string;
+  postingDate: string;
+  postingTime: string;
+  grandTotal: number;
+  outstandingAmount: number;
+  isPaid: boolean;
+  payments: TransactionPayment[];
+}
+
+export interface TransactionLineItem {
+  itemCode: string;
+  itemName: string;
+  qty: number;
+  uom: string;
+  rate: number;
+  amount: number;
+}
+
+export interface TransactionDetail extends TransactionSummary {
+  items: TransactionLineItem[];
+}
+
+export interface TransactionListPage {
+  transactions: TransactionSummary[];
+  hasMore: boolean;
+}

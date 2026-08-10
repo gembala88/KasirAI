@@ -12,7 +12,8 @@ vi.mock('../src/shared/erpnext-client/index.js', () => ({
   erpNextClient: erpNextClientMock,
 }));
 
-const { createTransaction } = await import('../src/modules/sales-pos/application/transactions.js');
+const { createTransaction, listCompletedTransactions, getTransactionDetail } =
+  await import('../src/modules/sales-pos/application/transactions.js');
 
 const PRICE_LIST = {
   price_list_rate: 5000,
@@ -112,5 +113,147 @@ describe('createTransaction — duplicate barcode scan merging', () => {
 
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ qty: 2, rate: 9999 });
+  });
+});
+
+describe('listCompletedTransactions — Riwayat Transaksi', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('bulk-fetches payment rows for the whole page in one call, keyed correctly per invoice', async () => {
+    erpNextClientMock.list.mockImplementation((doctype: string) => {
+      if (doctype === 'Sales Invoice') {
+        return Promise.resolve([
+          {
+            name: 'ACC-SINV-0001',
+            customer_name: 'Walk-in Customer',
+            posting_date: '2026-08-10',
+            posting_time: '10:00:00',
+            grand_total: 5000,
+            outstanding_amount: 0,
+          },
+          {
+            name: 'ACC-SINV-0002',
+            customer_name: 'Budi',
+            posting_date: '2026-08-10',
+            posting_time: '09:00:00',
+            grand_total: 20000,
+            outstanding_amount: 20000,
+          },
+        ]);
+      }
+      if (doctype === 'Sales Invoice Payment') {
+        return Promise.resolve([
+          { parent: 'ACC-SINV-0001', mode_of_payment: 'Cash', amount: 5000 },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+
+    const page = await listCompletedTransactions(0, 20);
+
+    expect(page.transactions).toHaveLength(2);
+    expect(page.transactions[0]).toMatchObject({
+      name: 'ACC-SINV-0001',
+      isPaid: true,
+      payments: [{ modeOfPayment: 'Cash', amount: 5000 }],
+    });
+    // Real bug this guards against: an Unpaid/Kasbon-style invoice (no
+    // payment rows yet, positive outstanding balance) must still show up
+    // correctly — isPaid false, an empty payments array, not thrown away
+    // or crashed on.
+    expect(page.transactions[1]).toMatchObject({
+      name: 'ACC-SINV-0002',
+      isPaid: false,
+      payments: [],
+    });
+
+    const paymentListCall = erpNextClientMock.list.mock.calls.find(
+      (call) => call[0] === 'Sales Invoice Payment',
+    );
+    expect(paymentListCall?.[1]).toMatchObject({
+      filters: [['parent', 'in', ['ACC-SINV-0001', 'ACC-SINV-0002']]],
+    });
+  });
+
+  it('only queries submitted POS sales, never drafts or non-POS invoices', async () => {
+    erpNextClientMock.list.mockResolvedValue([]);
+
+    await listCompletedTransactions(0, 20);
+
+    const invoiceListCall = erpNextClientMock.list.mock.calls.find(
+      (call) => call[0] === 'Sales Invoice',
+    );
+    expect(invoiceListCall?.[1]).toMatchObject({
+      filters: [
+        ['docstatus', '=', 1],
+        ['is_pos', '=', 1],
+      ],
+    });
+  });
+
+  it('sets hasMore only when a full page came back', async () => {
+    erpNextClientMock.list.mockImplementation((doctype: string) => {
+      if (doctype === 'Sales Invoice') {
+        return Promise.resolve(
+          Array.from({ length: 2 }, (_, i) => ({
+            name: `ACC-SINV-000${i}`,
+            customer_name: 'Walk-in Customer',
+            posting_date: '2026-08-10',
+            posting_time: '10:00:00',
+            grand_total: 1000,
+            outstanding_amount: 0,
+          })),
+        );
+      }
+      return Promise.resolve([]);
+    });
+
+    expect((await listCompletedTransactions(0, 2)).hasMore).toBe(true);
+    expect((await listCompletedTransactions(0, 5)).hasMore).toBe(false);
+  });
+});
+
+describe('getTransactionDetail', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('includes full line items alongside the same summary fields the list uses', async () => {
+    erpNextClientMock.get.mockResolvedValue({
+      name: 'ACC-SINV-0001',
+      customer_name: 'Walk-in Customer',
+      posting_date: '2026-08-10',
+      posting_time: '10:00:00',
+      grand_total: 5500,
+      outstanding_amount: 0,
+      payments: [{ mode_of_payment: 'Cash', amount: 5500 }],
+      items: [
+        {
+          item_code: 'KOPI-1',
+          item_name: 'Kopi Kapal Api',
+          qty: 1,
+          uom: 'Pcs',
+          rate: 5500,
+          amount: 5500,
+        },
+      ],
+    });
+
+    const detail = await getTransactionDetail('ACC-SINV-0001');
+
+    expect(detail.isPaid).toBe(true);
+    expect(detail.payments).toEqual([{ modeOfPayment: 'Cash', amount: 5500 }]);
+    expect(detail.items).toEqual([
+      {
+        itemCode: 'KOPI-1',
+        itemName: 'Kopi Kapal Api',
+        qty: 1,
+        uom: 'Pcs',
+        rate: 5500,
+        amount: 5500,
+      },
+    ]);
   });
 });

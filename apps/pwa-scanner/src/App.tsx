@@ -3,6 +3,8 @@ import { IconArrowLeft } from '@tabler/icons-react';
 import Home, { type HomeDestination } from './components/Home';
 import Kasir from './components/Kasir';
 import Login from './components/Login';
+import RiwayatTransaksi from './components/RiwayatTransaksi';
+import Settings from './components/Settings';
 import WarehouseScan from './components/WarehouseScan';
 import { STORE_NAME } from './branding';
 import { logout, triggerCatalogSync } from './lib/api';
@@ -116,31 +118,37 @@ export default function App() {
         <Home user={user} isOnline={isOnline} onNavigate={(destination) => setView(destination)} />
       )}
 
-      {view !== 'home' && visibleTabs.length === 0 && (
-        <p className="hint">Belum ada tampilan untuk role Anda ({user.role}).</p>
-      )}
+      {(view === 'warehouse' || view === 'kasir') &&
+        (visibleTabs.length === 0 ? (
+          <p className="hint">Belum ada tampilan untuk role Anda ({user.role}).</p>
+        ) : (
+          <>
+            {visibleTabs.length > 1 && (
+              <nav className="tabs">
+                {visibleTabs.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={view === item.id ? 'tab tab--active' : 'tab'}
+                    onClick={() => setView(item.id)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </nav>
+            )}
 
-      {view !== 'home' && visibleTabs.length > 0 && (
-        <>
-          {visibleTabs.length > 1 && (
-            <nav className="tabs">
-              {visibleTabs.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={view === item.id ? 'tab tab--active' : 'tab'}
-                  onClick={() => setView(item.id)}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </nav>
-          )}
+            {view === 'warehouse' && <WarehouseScan />}
+            {view === 'kasir' && <Kasir />}
+          </>
+        ))}
 
-          {view === 'warehouse' && <WarehouseScan />}
-          {view === 'kasir' && <Kasir />}
-        </>
-      )}
+      {/* Standalone screens, not part of the Warehouse/Kasir tab-bar above —
+          each is already role-gated at the Home menu level (same
+          hide-from-menu + trust-the-server-403 pattern as every other
+          role-restricted action in this app). */}
+      {view === 'riwayat' && <RiwayatTransaksi />}
+      {view === 'settings' && <Settings />}
     </main>
   );
 }

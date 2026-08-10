@@ -55,6 +55,33 @@ interface CustomFieldSpec {
   description?: string;
 }
 
+// Receipt personalization (spec: store name/address/WA/logo on the
+// receipt, pulled from ERPNext Company settings, not hardcoded). No native
+// Company field holds a plain-text address (address_html is a read-only
+// rollup of the separate Address doctype, real overkill for one receipt
+// line) — company_logo and phone_no already exist natively and are reused
+// as-is; phone_no is what appears on the receipt as "No. WhatsApp Toko",
+// so the owner should fill it with the store's actual WhatsApp number.
+const COMPANY_CUSTOM_FIELDS: CustomFieldSpec[] = [
+  {
+    fieldname: 'custom_store_address',
+    label: 'Store Address (for receipt)',
+    fieldtype: 'Small Text',
+    insertAfter: 'company_logo',
+    description: 'Printed on the receipt below the store name — fill in for it to appear.',
+  },
+  {
+    fieldname: 'custom_receipt_template',
+    label: 'Receipt Template',
+    fieldtype: 'Select',
+    insertAfter: 'custom_store_address',
+    options: 'Minimal\nStandard\nDetailed',
+    default: 'Standard',
+    description:
+      "Which of the 3 Hermes receipt layouts to print — also changeable from the app's Settings screen.",
+  },
+];
+
 const CUSTOMER_CUSTOM_FIELDS: CustomFieldSpec[] = [
   {
     fieldname: 'customer_tier',
@@ -151,28 +178,26 @@ const MODES_OF_PAYMENT: Array<{
   { name: 'Transfer', type: 'Bank', dedicatedAccountName: 'Bank Transfer' },
 ];
 
-// Compact, Indonesian-language checkout receipt (pre-Phase-9 polish pass,
-// 2026-08-03) — replaces ERPNext's own default Sales Invoice print format
-// (a full-page, English-language business invoice: "Bill to:", "In Words:",
-// A4-sized) which is real ERPNext content, not hardcoded, but the wrong
-// *shape* for a quick retail receipt. This is a real, user-editable ERPNext
-// Print Format (Setup > Printing > Print Format), not app code — the owner
-// can open it in ERPNext's Print Format designer and change it later
-// without touching this repository at all. Company name/address/logo still
-// come from ERPNext's own Letter Head (Setup > Printing > Letter Head),
-// rendered separately by the /printview route itself before this template's
-// own HTML — fill in the Company's address there for it to appear on
-// printed receipts.
-const RECEIPT_PRINT_FORMAT_NAME = 'Hermes Struk Kasir';
-const RECEIPT_PRINT_FORMAT_HTML = `<div style="font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; color: #171717; max-width: 380px; margin: 0 auto;">
-  <div style="text-align:center; margin-bottom: 12px;">
-    <div style="font-size: 12px; color:#666;">No. Struk: {{ doc.name }}</div>
-    <div style="font-size: 12px; color:#666;">{{ frappe.utils.formatdate(doc.posting_date, "dd-MM-yyyy") }} {{ ((doc.posting_time or "0:0:0")|string).split(".")[0] }}</div>
-  </div>
-  <div style="border-top: 1px dashed #999; border-bottom: 1px dashed #999; padding: 8px 0; margin-bottom: 8px;">
-    <div style="font-size:12px; color:#666;">Pelanggan: {{ doc.customer_name }}</div>
-  </div>
-  <table style="width:100%; border-collapse: collapse; font-size: 12px;">
+// Three Indonesian-language checkout receipt layouts (pre-Phase-9 polish
+// pass originally added one; this pass adds the other two plus a real
+// store-details header) — replaces ERPNext's own default Sales Invoice
+// print format (a full-page, English-language business invoice: "Bill to:",
+// "In Words:", A4-sized), real ERPNext content but the wrong *shape* for a
+// quick retail receipt. These are real, user-editable ERPNext Print Formats
+// (Setup > Printing > Print Format), not app code — the owner can open any
+// of them in ERPNext's Print Format designer and change it later without
+// touching this repository. Store name/address/WA/logo come from the
+// Company doctype (Setup > Company > Toko Hermes) via `frappe.db.get_value`
+// — a Jinja print format's sandboxed environment blocks method calls like
+// `frappe.get_doc(...).as_json()` (see the existing webhook_json comment
+// below for the same constraint hit elsewhere), but `frappe.db.get_value`
+// is a plain value lookup and is allowed. Fill in Company.phone_no with the
+// store's real WhatsApp number and Company.custom_store_address for them to
+// appear correctly — see DEPLOY_CHECKLIST.md.
+const RECEIPT_HEADER_LOOKUP =
+  '{% set company = frappe.db.get_value("Company", doc.company, ["company_name", "custom_store_address", "phone_no", "website", "company_logo"], as_dict=True) %}';
+
+const RECEIPT_ITEMS_TABLE = `<table style="width:100%; border-collapse: collapse; font-size: 12px;">
     <thead>
       <tr style="border-bottom: 1px solid #ddd;">
         <td style="padding: 4px 2px; text-align:left;">Barang</td>
@@ -191,8 +216,9 @@ const RECEIPT_PRINT_FORMAT_HTML = `<div style="font-family: 'Segoe UI', Arial, s
       </tr>
       {% endfor %}
     </tbody>
-  </table>
-  <div style="border-top: 1px dashed #999; margin-top: 8px; padding-top: 8px;">
+  </table>`;
+
+const RECEIPT_TOTALS_BLOCK = `<div style="border-top: 1px dashed #999; margin-top: 8px; padding-top: 8px;">
     {% if doc.discount_amount %}
     <div style="display:flex; justify-content:space-between; font-size:12px;">
       <span>Diskon</span><span>Rp {{ "{:,.0f}".format(doc.discount_amount)|replace(",", ".") }}</span>
@@ -211,9 +237,99 @@ const RECEIPT_PRINT_FORMAT_HTML = `<div style="font-family: 'Segoe UI', Arial, s
       <span>Kembalian</span><span>Rp {{ "{:,.0f}".format(doc.change_amount)|replace(",", ".") }}</span>
     </div>
     {% endif %}
+  </div>`;
+
+const RECEIPT_PRINT_FORMAT_STANDARD_NAME = 'Hermes Struk Kasir';
+const RECEIPT_PRINT_FORMAT_STANDARD_HTML = `${RECEIPT_HEADER_LOOKUP}
+<div style="font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; color: #171717; max-width: 380px; margin: 0 auto;">
+  <div style="text-align:center; margin-bottom: 10px;">
+    <div style="font-size:15px; font-weight:700;">{{ company.company_name }}</div>
+    {% if company.custom_store_address %}
+    <div style="font-size:11px; color:#666;">{{ company.custom_store_address }}</div>
+    {% endif %}
+    {% if company.phone_no %}
+    <div style="font-size:11px; color:#666;">No. WhatsApp Toko: {{ company.phone_no }}</div>
+    {% endif %}
   </div>
+  <div style="text-align:center; margin-bottom: 12px;">
+    <div style="font-size: 12px; color:#666;">No. Struk: {{ doc.name }}</div>
+    <div style="font-size: 12px; color:#666;">{{ frappe.utils.formatdate(doc.posting_date, "dd-MM-yyyy") }} {{ ((doc.posting_time or "0:0:0")|string).split(".")[0] }}</div>
+  </div>
+  <div style="border-top: 1px dashed #999; border-bottom: 1px dashed #999; padding: 8px 0; margin-bottom: 8px;">
+    <div style="font-size:12px; color:#666;">Pelanggan: {{ doc.customer_name }}</div>
+  </div>
+  ${RECEIPT_ITEMS_TABLE}
+  ${RECEIPT_TOTALS_BLOCK}
   <div style="text-align:center; margin-top:16px; font-size:12px; color:#666;">
     Terima kasih atas kunjungan Anda!
+  </div>
+</div>
+`;
+
+// Compact — no logo, no address block, tightest spacing/font. Store name
+// only (a receipt with literally no store identity isn't useful), for
+// shops that want the shortest possible strip on a small thermal printer.
+const RECEIPT_PRINT_FORMAT_MINIMAL_NAME = 'Hermes Struk Kasir - Minimal';
+const RECEIPT_PRINT_FORMAT_MINIMAL_HTML = `${RECEIPT_HEADER_LOOKUP}
+<div style="font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: #171717; max-width: 320px; margin: 0 auto;">
+  <div style="text-align:center; margin-bottom: 6px;">
+    <div style="font-size:13px; font-weight:700;">{{ company.company_name }}</div>
+    <div style="font-size:10px; color:#666;">{{ doc.name }} · {{ frappe.utils.formatdate(doc.posting_date, "dd-MM-yyyy") }}</div>
+  </div>
+  <table style="width:100%; border-collapse: collapse; font-size: 10px; border-top: 1px dashed #999; padding-top:4px;">
+    <tbody>
+      {% for item in doc.items %}
+      <tr>
+        <td style="padding: 2px 1px;">{{ item.item_name }} x{{ item.qty|int if item.qty == item.qty|int else item.qty }}</td>
+        <td style="padding: 2px 1px; text-align:right; white-space:nowrap;">{{ "{:,.0f}".format(item.amount)|replace(",", ".") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div style="border-top: 1px dashed #999; margin-top: 4px; padding-top: 4px; display:flex; justify-content:space-between; font-size:13px; font-weight:700;">
+    <span>Total</span><span>Rp {{ "{:,.0f}".format(doc.grand_total)|replace(",", ".") }}</span>
+  </div>
+  {% for pmt in doc.payments %}
+  <div style="display:flex; justify-content:space-between; font-size:10px;">
+    <span>{{ pmt.mode_of_payment }}</span><span>Rp {{ "{:,.0f}".format(pmt.amount)|replace(",", ".") }}</span>
+  </div>
+  {% endfor %}
+</div>
+`;
+
+// Detailed — full branding: logo, address, WA, website, a bordered card and
+// a warmer footer, for owners who want the receipt to double as a small
+// piece of marketing.
+const RECEIPT_PRINT_FORMAT_DETAILED_NAME = 'Hermes Struk Kasir - Detail';
+const RECEIPT_PRINT_FORMAT_DETAILED_HTML = `${RECEIPT_HEADER_LOOKUP}
+<div style="font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; color: #171717; max-width: 380px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px; padding: 14px;">
+  <div style="text-align:center; margin-bottom: 10px;">
+    {% if company.company_logo %}
+    <img src="{{ company.company_logo }}" style="max-height:56px; max-width:180px; margin-bottom:8px;" />
+    {% endif %}
+    <div style="font-size:17px; font-weight:700;">{{ company.company_name }}</div>
+    {% if company.custom_store_address %}
+    <div style="font-size:11px; color:#666; margin-top:2px;">{{ company.custom_store_address }}</div>
+    {% endif %}
+    {% if company.phone_no %}
+    <div style="font-size:11px; color:#666;">No. WhatsApp Toko: {{ company.phone_no }}</div>
+    {% endif %}
+    {% if company.website %}
+    <div style="font-size:11px; color:#666;">{{ company.website }}</div>
+    {% endif %}
+  </div>
+  <div style="text-align:center; margin-bottom: 12px;">
+    <div style="font-size: 12px; color:#666;">No. Struk: {{ doc.name }}</div>
+    <div style="font-size: 12px; color:#666;">{{ frappe.utils.formatdate(doc.posting_date, "dd-MM-yyyy") }} {{ ((doc.posting_time or "0:0:0")|string).split(".")[0] }}</div>
+  </div>
+  <div style="border-top: 1px dashed #999; border-bottom: 1px dashed #999; padding: 8px 0; margin-bottom: 8px;">
+    <div style="font-size:12px; color:#666;">Pelanggan: {{ doc.customer_name }}</div>
+  </div>
+  ${RECEIPT_ITEMS_TABLE}
+  ${RECEIPT_TOTALS_BLOCK}
+  <div style="text-align:center; margin-top:16px; font-size:12px; color:#666;">
+    Terima kasih atas kunjungan Anda di {{ company.company_name }}!
+    {% if company.phone_no %}<br />Ada pertanyaan? WhatsApp kami di {{ company.phone_no }}.{% endif %}
   </div>
 </div>
 `;
@@ -327,6 +443,46 @@ async function ensureDoc(
 
   await erpNextClient.create(doctype, createPayload);
   logger.info({ doctype, name }, 'seed.doc.created');
+}
+
+/**
+ * Print Format content evolves (this exact seed script upgraded the
+ * receipt layout twice already) — unlike the master-list doctypes
+ * `ensureDoc` handles, re-running the seed should converge an *existing*
+ * Print Format's HTML to the latest version here, not silently leave a
+ * stale one in place just because a doc with that name already exists.
+ */
+async function upsertPrintFormat(
+  name: string,
+  html: string,
+  extra: Record<string, unknown> = {},
+): Promise<void> {
+  const payload = {
+    doc_type: 'Sales Invoice',
+    module: 'Accounts',
+    print_format_type: 'Jinja',
+    standard: 'No',
+    custom_format: 1,
+    disabled: 0,
+    font_size: 12,
+    page_number: 'Hide',
+    html,
+    ...extra,
+  };
+
+  try {
+    await erpNextClient.get('Print Format', name);
+    await erpNextClient.update('Print Format', name, payload);
+    logger.info({ name }, 'seed.print_format.updated');
+    return;
+  } catch (error) {
+    if (!(error instanceof ErpNextApiError) || error.statusCode !== 404) {
+      throw error;
+    }
+  }
+
+  await erpNextClient.create('Print Format', { name, ...payload });
+  logger.info({ name }, 'seed.print_format.created');
 }
 
 async function ensureCompany(): Promise<{ name: string; defaultCashAccount: string }> {
@@ -552,18 +708,13 @@ async function main(): Promise<void> {
   await ensureWalkInCustomer();
   await ensureErpNextWebhooks();
 
-  await ensureDoc('Print Format', RECEIPT_PRINT_FORMAT_NAME, {
-    name: RECEIPT_PRINT_FORMAT_NAME,
-    doc_type: 'Sales Invoice',
-    module: 'Accounts',
-    print_format_type: 'Jinja',
-    standard: 'No',
-    custom_format: 1,
-    disabled: 0,
-    font_size: 12,
-    page_number: 'Hide',
-    html: RECEIPT_PRINT_FORMAT_HTML,
-  });
+  for (const field of COMPANY_CUSTOM_FIELDS) {
+    await ensureCustomField('Company', field);
+  }
+
+  await upsertPrintFormat(RECEIPT_PRINT_FORMAT_STANDARD_NAME, RECEIPT_PRINT_FORMAT_STANDARD_HTML);
+  await upsertPrintFormat(RECEIPT_PRINT_FORMAT_MINIMAL_NAME, RECEIPT_PRINT_FORMAT_MINIMAL_HTML);
+  await upsertPrintFormat(RECEIPT_PRINT_FORMAT_DETAILED_NAME, RECEIPT_PRINT_FORMAT_DETAILED_HTML);
 
   await ensureCustomField('User', USER_ROLE_FIELD);
   for (const user of SEED_USERS) {

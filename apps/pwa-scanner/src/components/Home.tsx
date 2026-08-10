@@ -2,8 +2,10 @@ import { useEffect, useState, type ReactNode } from 'react';
 import {
   IconBoxSeam,
   IconChevronRight,
+  IconHistory,
   IconLayoutDashboard,
   IconRefresh,
+  IconSettings,
   IconShoppingCart,
   IconWifi,
   IconWifiOff,
@@ -11,7 +13,7 @@ import {
 import { listQueuedActions } from '../lib/offline-queue';
 import type { AuthUser } from '../lib/auth';
 
-export type HomeDestination = 'warehouse' | 'kasir';
+export type HomeDestination = 'warehouse' | 'kasir' | 'riwayat' | 'settings';
 
 interface MenuItem {
   id: HomeDestination | 'dashboard';
@@ -30,10 +32,22 @@ const MENU_BY_ROLE: Record<AuthUser['role'], MenuItem[]> = {
       icon: <IconBoxSeam />,
     },
     {
+      id: 'riwayat',
+      label: 'Riwayat Transaksi',
+      subtitle: 'Daftar & detail transaksi, cetak ulang struk',
+      icon: <IconHistory />,
+    },
+    {
       id: 'dashboard',
       label: 'Dashboard',
       subtitle: 'Laporan & analitik',
       icon: <IconLayoutDashboard />,
+    },
+    {
+      id: 'settings',
+      label: 'Pengaturan',
+      subtitle: 'Template struk',
+      icon: <IconSettings />,
     },
   ],
   Manager: [
@@ -45,14 +59,32 @@ const MENU_BY_ROLE: Record<AuthUser['role'], MenuItem[]> = {
       icon: <IconBoxSeam />,
     },
     {
+      id: 'riwayat',
+      label: 'Riwayat Transaksi',
+      subtitle: 'Daftar & detail transaksi, cetak ulang struk',
+      icon: <IconHistory />,
+    },
+    {
       id: 'dashboard',
       label: 'Dashboard',
       subtitle: 'Laporan & analitik',
       icon: <IconLayoutDashboard />,
     },
+    {
+      id: 'settings',
+      label: 'Pengaturan',
+      subtitle: 'Template struk',
+      icon: <IconSettings />,
+    },
   ],
   Cashier: [
     { id: 'kasir', label: 'Kasir', subtitle: 'Checkout & pembayaran', icon: <IconShoppingCart /> },
+    {
+      id: 'riwayat',
+      label: 'Riwayat Transaksi',
+      subtitle: 'Daftar & detail transaksi, cetak ulang struk',
+      icon: <IconHistory />,
+    },
     {
       id: 'dashboard',
       label: 'Dashboard',

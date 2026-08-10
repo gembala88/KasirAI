@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   IconAlertTriangle,
   IconArrowLeft,
@@ -6,16 +6,11 @@ import {
   IconCamera,
   IconCash,
   IconCloudCheck,
-  IconPrinter,
   IconQrcode,
 } from '@tabler/icons-react';
-import {
-  fetchReceiptHtml,
-  searchProducts,
-  type PosTransaction,
-  type ProductSearchResult,
-} from '../lib/api';
+import { searchProducts, type PosTransaction, type ProductSearchResult } from '../lib/api';
 import CameraScanner from './CameraScanner';
+import ReceiptPreview from './ReceiptPreview';
 import { getLastSyncedAt } from '../lib/catalog-cache';
 import { formatQty, formatRupiah, formatSyncedAt, statusBadge } from '../lib/format';
 import { listQueuedActions, QUEUE_CHANGED_EVENT, type QueuedAction } from '../lib/offline-queue';
@@ -102,10 +97,6 @@ export default function Kasir() {
     transaction: PosTransaction;
     changeDue: number;
   } | null>(null);
-  const [receiptHtml, setReceiptHtml] = useState<string | null>(null);
-  const [receiptLoading, setReceiptLoading] = useState(false);
-  const [receiptError, setReceiptError] = useState<string | null>(null);
-  const receiptFrameRef = useRef<HTMLIFrameElement>(null);
   const lastSyncedAt = getLastSyncedAt();
 
   const {
@@ -320,10 +311,10 @@ export default function Kasir() {
       // left the cashier to calculate change by hand, and receipt
       // printing auto-opened a popup (browser-blocked half the time) with
       // no user gesture backing the print() call. Now: show Kembalian
-      // immediately, and if the cashier wanted a receipt, fetch it for
-      // inline preview — printing itself only happens on an explicit tap
-      // of "Cetak Struk" below, which is neither a popup nor an
-      // auto-triggered print.
+      // immediately, and if the cashier wanted a receipt, ReceiptPreview
+      // below fetches and shows it inline — printing itself only happens
+      // on an explicit tap of "Cetak Struk", which is neither a popup nor
+      // an auto-triggered print.
       setSaleResult({
         transaction,
         changeDue: Math.max(0, (Number(amountTendered) || total) - total),
@@ -331,16 +322,6 @@ export default function Kasir() {
       setCart([]);
       setCustomerId('');
       setAmountTendered('');
-      if (printReceipt) {
-        setReceiptLoading(true);
-        setReceiptError(null);
-        fetchReceiptHtml(transaction.name)
-          .then(setReceiptHtml)
-          .catch((err: unknown) => {
-            setReceiptError(err instanceof Error ? err.message : String(err));
-          })
-          .finally(() => setReceiptLoading(false));
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -355,8 +336,6 @@ export default function Kasir() {
     setPrintReceipt(true);
     setStage('cart');
     setSaleResult(null);
-    setReceiptHtml(null);
-    setReceiptError(null);
   }
 
   return (
@@ -605,29 +584,7 @@ export default function Kasir() {
               {formatRupiah(saleResult.transaction.grandTotal)}).
             </p>
 
-            {printReceipt && (
-              <section className="receipt-preview card">
-                <h2 className="section-label">Struk</h2>
-                {receiptLoading && <p className="hint">Memuat struk…</p>}
-                {receiptError && <p className="error-box">Struk gagal dimuat: {receiptError}</p>}
-                {receiptHtml && (
-                  <>
-                    <iframe
-                      ref={receiptFrameRef}
-                      srcDoc={receiptHtml}
-                      className="receipt-frame"
-                      title="Struk"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => receiptFrameRef.current?.contentWindow?.print()}
-                    >
-                      <IconPrinter size={18} /> Cetak Struk
-                    </button>
-                  </>
-                )}
-              </section>
-            )}
+            {printReceipt && <ReceiptPreview transactionName={saleResult.transaction.name} />}
 
             {error && <p className="error-box">{error}</p>}
             {message && <p className="message">{message}</p>}

@@ -160,6 +160,22 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+async function put<T>(path: string, body: unknown): Promise<T> {
+  const response = await authorizedFetch(path, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const detail = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new ApiError(
+      detail?.message ?? `PUT ${path} failed with status ${response.status}`,
+      response.status,
+    );
+  }
+  return response.json() as Promise<T>;
+}
+
 // --- Offline sync (spec §15.2) ---
 // One shared endpoint for every offline action type (scan or POS sale) —
 // see apps/api/src/modules/sync for the server-side idempotency this
@@ -395,4 +411,61 @@ export async function fetchReceiptHtml(transactionName: string): Promise<string>
     throw new Error(`Gagal memuat struk (status ${response.status})`);
   }
   return response.text();
+}
+
+// --- Riwayat Transaksi (transaction history) ---
+
+export interface TransactionPayment {
+  modeOfPayment: string;
+  amount: number;
+}
+
+export interface TransactionSummary {
+  name: string;
+  customerName: string;
+  postingDate: string;
+  postingTime: string;
+  grandTotal: number;
+  outstandingAmount: number;
+  isPaid: boolean;
+  payments: TransactionPayment[];
+}
+
+export interface TransactionLineItem {
+  itemCode: string;
+  itemName: string;
+  qty: number;
+  uom: string;
+  rate: number;
+  amount: number;
+}
+
+export interface TransactionDetail extends TransactionSummary {
+  items: TransactionLineItem[];
+}
+
+/** Always-online, like the rest of Daftar Produk/Edit Price — history lookup has no offline cache. */
+export function fetchTransactions(
+  offset: number,
+  limit: number,
+): Promise<{ transactions: TransactionSummary[]; hasMore: boolean }> {
+  return get(`/api/v1/pos/transactions?offset=${offset}&limit=${limit}`);
+}
+
+export function fetchTransactionDetail(name: string): Promise<TransactionDetail> {
+  return get(`/api/v1/pos/transactions/${encodeURIComponent(name)}/detail`);
+}
+
+// --- Settings ---
+
+export type ReceiptTemplate = 'Minimal' | 'Standard' | 'Detailed';
+
+export function fetchReceiptTemplate(): Promise<{ template: ReceiptTemplate }> {
+  return get('/api/v1/settings/receipt-template');
+}
+
+export function updateReceiptTemplate(
+  template: ReceiptTemplate,
+): Promise<{ template: ReceiptTemplate }> {
+  return put('/api/v1/settings/receipt-template', { template });
 }

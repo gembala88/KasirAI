@@ -7,6 +7,11 @@
  * a code change — see the user's explicit ask that nothing here be
  * hardcoded.
  *
+ * Which of the 3 Print Formats prints is resolved per request from the
+ * Company's own `custom_receipt_template` selection (settings.ts) — not a
+ * fixed choice — so changing it from the Settings screen takes effect on
+ * the very next print with no redeploy.
+ *
  * Hand-rolled fetch, not the shared `erpNextClient` (which only talks to
  * the JSON `/api/resource` REST surface) — `/printview` is a Frappe
  * website route that returns rendered HTML, a different shape entirely.
@@ -22,10 +27,20 @@
  */
 import { env } from '../../../config/env.js';
 import { AppError } from '../../../shared/errors/index.js';
+import { getReceiptTemplate, printFormatForTemplate } from './settings.js';
 
 export class ReceiptRenderError extends AppError {
   constructor(message: string) {
     super(message, 502, 'RECEIPT_RENDER_ERROR');
+  }
+}
+
+/** Falls back to the static env default if the Company lookup itself fails — a receipt should still print with whatever format ERPNext defaults to, not hard-fail over a second-order setting. */
+async function resolvePrintFormat(): Promise<string | undefined> {
+  try {
+    return printFormatForTemplate(await getReceiptTemplate());
+  } catch {
+    return env.ERPNEXT_RECEIPT_PRINT_FORMAT || undefined;
   }
 }
 
@@ -35,8 +50,9 @@ export async function getReceiptHtml(invoiceName: string): Promise<string> {
     name: invoiceName,
     no_letterhead: '0',
   });
-  if (env.ERPNEXT_RECEIPT_PRINT_FORMAT) {
-    query.set('format', env.ERPNEXT_RECEIPT_PRINT_FORMAT);
+  const format = await resolvePrintFormat();
+  if (format) {
+    query.set('format', format);
   }
 
   let response: Response;
