@@ -23,6 +23,7 @@ import ReceiptPreview from './ReceiptPreview';
 import { getLastSyncedAt } from '../lib/catalog-cache';
 import { formatQty, formatRupiah, formatSyncedAt, statusBadge } from '../lib/format';
 import { listQueuedActions, QUEUE_CHANGED_EVENT, type QueuedAction } from '../lib/offline-queue';
+import { pressQtyKey } from '../lib/qty-keypad';
 import { submitOrQueue, syncPendingQueue } from '../lib/sync';
 import type { KasbonSaleAction, PosSaleAction } from '../lib/types';
 import { useProductSearch } from '../lib/use-product-search';
@@ -126,6 +127,7 @@ export default function Kasir() {
   const [saleResult, setSaleResult] = useState<{
     transaction: PosTransaction;
     changeDue: number;
+    itemCount: number;
   } | null>(null);
   const lastSyncedAt = getLastSyncedAt();
 
@@ -293,30 +295,9 @@ export default function Kasir() {
   }
 
   function pressKey(key: string): void {
-    if (key === 'C') {
-      setPendingQty('1');
-      setQtyTouched(false);
-    } else if (key === '⌫') {
-      if (!qtyTouched || pendingQty.length <= 1) {
-        setPendingQty('1');
-        setQtyTouched(false);
-      } else {
-        const next = pendingQty.slice(0, -1);
-        setPendingQty(next);
-        setQtyTouched(next.length > 0);
-      }
-    } else if (key === '.') {
-      if (!qtyTouched) {
-        setPendingQty('0.');
-      } else if (!pendingQty.includes('.')) {
-        setPendingQty(pendingQty + '.');
-      }
-      setQtyTouched(true);
-    } else {
-      const base = qtyTouched ? pendingQty : '';
-      setPendingQty((base + key).replace(/^0+(?=\d)/, '') || '1');
-      setQtyTouched(true);
-    }
+    const next = pressQtyKey({ pendingQty, qtyTouched }, key);
+    setPendingQty(next.pendingQty);
+    setQtyTouched(next.qtyTouched);
   }
 
   async function handlePayButtonTap(): Promise<void> {
@@ -410,6 +391,7 @@ export default function Kasir() {
       setSaleResult({
         transaction,
         changeDue: Math.max(0, (Number(amountTendered) || total) - total),
+        itemCount: cart.length,
       });
       setCart([]);
       setCustomerId('');
@@ -437,7 +419,11 @@ export default function Kasir() {
   }
 
   return (
-    <div className="kasir" data-stage={stage}>
+    <div
+      className="kasir"
+      data-stage={stage}
+      data-receipt={saleResult && printReceipt ? 'true' : undefined}
+    >
       <div className="kasir-cart-panel">
         <form onSubmit={(e) => void handleSearch(e)} className="scan-form">
           <label>
@@ -560,12 +546,28 @@ export default function Kasir() {
         )}
 
         <div className="keypad-section">
-          <span className="hint keypad-label">
-            Jumlah scan berikutnya: {pendingQty}
+          <div className="keypad-label">
+            <label className="hint">
+              Jumlah scan berikutnya
+              {/* Real bug found live: this used to be plain text, driven
+                  only by the on-screen keypad below — a physical keyboard
+                  had nothing to type into, so its number keys visibly did
+                  nothing. Now a real input, so both input methods write
+                  to the same pendingQty state. */}
+              <input
+                value={pendingQty}
+                onChange={(e) => {
+                  setPendingQty(e.target.value);
+                  setQtyTouched(true);
+                }}
+                inputMode="decimal"
+                className="qty-input"
+              />
+            </label>
             <button type="button" className="link-button" onClick={() => pressKey('C')}>
               Hapus
             </button>
-          </span>
+          </div>
           <div className="keypad">
             {KEYPAD_KEYS.map((key) => (
               <button type="button" key={key} onClick={() => pressKey(key)}>
@@ -694,7 +696,12 @@ export default function Kasir() {
               {formatRupiah(saleResult.transaction.grandTotal)}).
             </p>
 
-            {printReceipt && <ReceiptPreview transactionName={saleResult.transaction.name} />}
+            {printReceipt && (
+              <ReceiptPreview
+                transactionName={saleResult.transaction.name}
+                itemCount={saleResult.itemCount}
+              />
+            )}
 
             {error && <p className="error-box">{error}</p>}
             {message && <p className="message">{message}</p>}

@@ -511,6 +511,15 @@ h1 {
     gap: 1.5rem;
   }
 
+  /* A receipt is real printed-paper-shaped content, not a compact form
+     control like the rest of the payment panel — 380px made it cramped
+     and hard to read on a wide desktop screen. Widens only while a
+     receipt is actually showing (data-receipt, set by Kasir.tsx), so the
+     normal payment-form/cart-review view keeps its narrower column. */
+  .kasir[data-receipt='true'] {
+    grid-template-columns: 1fr 640px;
+  }
+
   .kasir-cart-panel,
   .kasir-payment-panel {
     display: flex !important;
@@ -696,6 +705,23 @@ h1 {
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+}
+
+.keypad-label label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* Real physical keyboard entry point for pendingQty, alongside the
+   on-screen keypad below — small and centered since it only ever holds a
+   short number like "1" or "0.25". */
+.qty-input {
+  width: 4.5rem;
+  text-align: center;
+  min-height: auto;
+  padding: 0.25rem 0.4rem;
 }
 
 .keypad-label .link-button {
@@ -909,10 +935,14 @@ h1 {
    auto-triggered print() with no user gesture). The iframe holds
    ERPNext's own Print Format HTML, styled for printer paper — a fixed
    white background regardless of app theme, since that's genuinely what
-   will come out of the printer. */
+   will come out of the printer.
+   Real UX gap found live: a fixed 320px height meant most real receipts
+   needed scrolling to read in full — ReceiptPreview.tsx now measures the
+   actual content and sets height inline via style, so this min-height is
+   only the pre-measurement fallback (first paint, before onLoad fires). */
 .receipt-frame {
   width: 100%;
-  height: 320px;
+  min-height: 320px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: #fff;
