@@ -72,6 +72,7 @@ export async function listWarehouses(): Promise<WarehouseList> {
   const warehouses = await erpNextClient.list<WarehouseRecord>('Warehouse', {
     filters: [
       ['is_group', '=', 0],
+      ['disabled', '=', 0],
       ['company', '=', env.ERPNEXT_DEFAULT_COMPANY],
     ],
     fields: ['name'],

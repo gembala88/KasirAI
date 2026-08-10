@@ -20,7 +20,7 @@ describe('listWarehouses — Gudang dropdown source (spec: fixes free-text Gudan
     vi.clearAllMocks();
   });
 
-  it('only requests leaf warehouses (is_group=0), never category/parent nodes', async () => {
+  it('only requests leaf, non-disabled warehouses, never category/parent nodes or a decommissioned one', async () => {
     erpNextClientMock.list.mockResolvedValue([{ name: 'Gudang Utama - TH' }]);
 
     const result = await listWarehouses();
@@ -30,6 +30,7 @@ describe('listWarehouses — Gudang dropdown source (spec: fixes free-text Gudan
       expect.objectContaining({
         filters: [
           ['is_group', '=', 0],
+          ['disabled', '=', 0],
           ['company', '=', 'Toko Hermes'],
         ],
       }),
