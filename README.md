@@ -216,6 +216,16 @@ version of this walkthrough is a backlog item — see
    subscriptions. **Rename the placeholder company** ("Toko Hermes") to
    the real store name in ERPNext (Setup > Company), and fill in the
    company address — it appears on printed receipts.
+   **After renaming, you must also update `ERPNEXT_DEFAULT_COMPANY` in
+   `.env` to the new name and restart the `api` container**
+   (`docker compose up -d api`) — every Sales Invoice/Stock Entry the
+   API creates is tagged with this exact company name, so a stale value
+   here makes every new sale fail with "Cannot find Company" the moment
+   the rename happens in ERPNext, even though nothing in the app code
+   itself changed. (Confirmed live: this is exactly what happened on
+   this project's own deployment.) `ERPNEXT_DEFAULT_WAREHOUSE` is safe
+   to leave as-is — it's keyed by the company's abbreviation suffix
+   (e.g. `- TH`), which a rename doesn't change.
 7. **Set up HTTPS**: install Nginx and certbot on the VPS, use
    `infra/nginx/hermes.conf.template` as a starting point (fill in the
    real domain), then:
