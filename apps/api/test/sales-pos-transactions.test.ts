@@ -178,7 +178,7 @@ describe('listCompletedTransactions — Riwayat Transaksi', () => {
     expect(erpNextClientMock.get).toHaveBeenCalledWith('Sales Invoice', 'ACC-SINV-0002');
   });
 
-  it('only queries submitted POS sales, never drafts or non-POS invoices', async () => {
+  it('only queries submitted invoices, never drafts — but does not filter on is_pos, real bug found live: Kasbon invoices are deliberately is_pos=0 (ERPNext refuses to submit an is_pos=1 invoice with zero payments), so an is_pos filter here would silently drop every Kasbon sale', async () => {
     erpNextClientMock.list.mockResolvedValue([]);
 
     await listCompletedTransactions(0, 20);
@@ -187,10 +187,7 @@ describe('listCompletedTransactions — Riwayat Transaksi', () => {
       (call) => call[0] === 'Sales Invoice',
     );
     expect(invoiceListCall?.[1]).toMatchObject({
-      filters: [
-        ['docstatus', '=', 1],
-        ['is_pos', '=', 1],
-      ],
+      filters: [['docstatus', '=', 1]],
     });
   });
 

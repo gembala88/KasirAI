@@ -326,6 +326,17 @@ export function assertRealCustomer(customerId: string): void {
  * pattern processPosSale already uses for createTransaction+addPayment —
  * without it, retrying a sync that succeeded at step 1 but failed at
  * step 2 would create a second, duplicate invoice.
+ *
+ * Also flips `is_pos` back to 0 here. Confirmed live against real
+ * ERPNext: it refuses to submit an `is_pos=1` invoice with an empty
+ * `payments` table ("Setidaknya satu mode pembayaran diperlukan untuk
+ * faktur POS" — at least one payment mode is required for a POS
+ * invoice), which is exactly Kasbon's whole point. A Kasbon sale isn't a
+ * till sale paid at the register anyway — it's a genuine credit sale, so
+ * a plain (non-POS) Sales Invoice is the correct ERPNext shape, not a
+ * workaround. `update_stock` stays 1: that flag is independent of
+ * `is_pos` and still reduces stock on submit exactly as it does for
+ * every other Kasir sale.
  */
 export async function submitKasbonInvoice(
   invoiceName: string,
@@ -334,6 +345,7 @@ export async function submitKasbonInvoice(
   const dueDate = await computeKasbonDueDate(customerId);
   const updated = await erpNextClient.update<SalesInvoiceDoc>('Sales Invoice', invoiceName, {
     due_date: dueDate,
+    is_pos: 0,
     docstatus: 1,
   });
   return toPosTransaction(updated);
@@ -471,8 +483,14 @@ function toTransactionSummary(
 
 /**
  * Riwayat Transaksi (spec: transaction history) — every submitted sale,
- * Paid or not (Kasbon/credit sales aren't reachable yet, but this list is
- * deliberately built to already handle both).
+ * Paid or not, including Kasbon (Group 3). Filters on `docstatus` alone,
+ * not `is_pos` — real bug found live: Kasbon invoices are deliberately
+ * `is_pos=0` (see submitKasbonInvoice's doc comment for why: ERPNext
+ * refuses to submit an is_pos=1 invoice with zero payments), so an
+ * `is_pos=1` filter here would silently drop every Kasbon sale from this
+ * list. Every Sales Invoice this codebase ever creates (Kasir or
+ * WhatsApp-channel) is a real completed transaction once submitted —
+ * there's no other source to filter out.
  *
  * Payment method is fetched per-invoice via a full `Sales Invoice` GET,
  * NOT a bulk list of the `Sales Invoice Payment` child-table doctype —
@@ -489,10 +507,7 @@ export async function listCompletedTransactions(
   limit: number,
 ): Promise<TransactionListPage> {
   const names = await erpNextClient.list<{ name: string }>('Sales Invoice', {
-    filters: [
-      ['docstatus', '=', 1],
-      ['is_pos', '=', 1],
-    ],
+    filters: [['docstatus', '=', 1]],
     fields: ['name'],
     order_by: 'posting_date desc, posting_time desc',
     limit_start: String(offset),

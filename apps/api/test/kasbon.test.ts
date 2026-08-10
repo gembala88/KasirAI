@@ -159,6 +159,26 @@ describe('submitKasbonInvoice', () => {
       expect.objectContaining({ docstatus: 1 }),
     );
   });
+
+  it('flips is_pos back to 0 — real bug found live: ERPNext refuses to submit an is_pos=1 invoice with zero payments, and Kasbon submits with none by design', async () => {
+    erpNextClientMock.get.mockResolvedValue({ payment_term_days: 0 });
+    erpNextClientMock.update.mockResolvedValue({
+      name: 'ACC-SINV-EXISTING',
+      status: 'Overdue',
+      customer: 'CUST-001',
+      grand_total: 5000,
+      paid_amount: 0,
+      outstanding_amount: 5000,
+    });
+
+    await submitKasbonInvoice('ACC-SINV-EXISTING', 'CUST-001');
+
+    expect(erpNextClientMock.update).toHaveBeenCalledWith(
+      'Sales Invoice',
+      'ACC-SINV-EXISTING',
+      expect.objectContaining({ is_pos: 0 }),
+    );
+  });
 });
 
 describe('confirmKasbonPaid', () => {
