@@ -39,8 +39,8 @@ describe('formatTransactionDateTime', () => {
 });
 
 describe('statusBadge', () => {
-  it('labels a not-yet-attempted queued sale "Menunggu Sinkron", not an alarming "Gagal"', () => {
-    expect(statusBadge('Pending').label).toBe('Menunggu Sinkron');
+  it('labels a not-yet-attempted queued sale "Menunggu Disimpan", not an alarming "Gagal"', () => {
+    expect(statusBadge('Pending').label).toBe('Menunggu Disimpan');
   });
 
   it('labels a real, server-attempted rejection "Gagal"', () => {

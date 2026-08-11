@@ -593,7 +593,7 @@ export default function TambahProdukBaru({ onSubmitted }: { onSubmitted: () => v
           <button type="submit" disabled={submitting}>
             {submitting ? 'Menyimpan…' : 'Simpan Produk'}
           </button>
-          <button type="button" className="link-button" onClick={resetToEntry}>
+          <button type="button" className="button-secondary" onClick={resetToEntry}>
             Batal
           </button>
         </form>

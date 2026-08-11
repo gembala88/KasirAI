@@ -15,10 +15,13 @@ import { fetchReceiptHtml } from '../lib/api';
 export default function ReceiptPreview({
   transactionName,
   itemCount,
+  printButtonVariant = 'primary',
 }: {
   transactionName: string;
   /** Distinct line-item count, when the caller already has it in hand (Kasir's cart, Riwayat Transaksi's detail.items) — omitted rather than re-derived from the printed HTML, which is free-form ERPNext Print Format content, not structured data. */
   itemCount?: number;
+  /** Riwayat Transaksi's "Cetak Ulang" is that screen's one and only action, so it stays primary (the default). Kasir's post-sale screen already has a bigger, more urgent "Transaksi Baru" button — there, pass 'secondary' so printing doesn't visually compete with starting the next sale. */
+  printButtonVariant?: 'primary' | 'secondary';
 }) {
   const [html, setHtml] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -79,7 +82,11 @@ export default function ReceiptPreview({
             onLoad={handleFrameLoad}
             style={frameHeight ? { height: `${frameHeight}px` } : undefined}
           />
-          <button type="button" onClick={() => frameRef.current?.contentWindow?.print()}>
+          <button
+            type="button"
+            className={printButtonVariant === 'primary' ? 'button-primary' : 'button-secondary'}
+            onClick={() => frameRef.current?.contentWindow?.print()}
+          >
             <IconPrinter size={18} /> Cetak Struk
           </button>
         </>

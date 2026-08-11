@@ -22,7 +22,7 @@ const TEMPLATE_OPTIONS: Array<{ value: ReceiptTemplate; label: string; descripti
   {
     value: 'Standard',
     label: 'Standard',
-    description: 'Nama toko, alamat, No. WhatsApp Toko, barang, total, dan rincian pembayaran.',
+    description: 'Nama toko, alamat, No. WA, barang, total, dan rincian pembayaran.',
   },
   {
     value: 'Detailed',
@@ -63,6 +63,7 @@ export default function Settings() {
   const [headerText, setHeaderText] = useState('');
   const [footerText, setFooterText] = useState('');
   const [logoUrl, setLogoUrl] = useState('');
+  const [tagline, setTagline] = useState('');
   const [customizationLoading, setCustomizationLoading] = useState(true);
   const [customizationSaving, setCustomizationSaving] = useState(false);
   const [customizationError, setCustomizationError] = useState<string | null>(null);
@@ -119,6 +120,7 @@ export default function Settings() {
           setHeaderText(result.headerText);
           setFooterText(result.footerText);
           setLogoUrl(result.logoUrl);
+          setTagline(result.tagline);
         }
       })
       .catch((err: unknown) => {
@@ -186,7 +188,7 @@ export default function Settings() {
     setCustomizationError(null);
     setCustomizationMessage(null);
     try {
-      const result = await updateReceiptCustomization({ headerText, footerText, logoUrl });
+      const result = await updateReceiptCustomization({ headerText, footerText, logoUrl, tagline });
       setCustomization(result);
       setCustomizationMessage('Kustomisasi struk disimpan.');
     } catch (err) {
@@ -203,7 +205,8 @@ export default function Settings() {
     customization != null &&
     (headerText !== customization.headerText ||
       footerText !== customization.footerText ||
-      logoUrl !== customization.logoUrl);
+      logoUrl !== customization.logoUrl ||
+      tagline !== customization.tagline);
 
   return (
     <>
@@ -226,7 +229,7 @@ export default function Settings() {
           </label>
 
           <label>
-            No. WhatsApp Toko
+            No. WA Toko
             <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0812…" />
           </label>
 
@@ -290,6 +293,20 @@ export default function Settings() {
               placeholder="Mis. Toko Sembako Terpercaya"
               maxLength={200}
             />
+          </label>
+
+          <label>
+            Tagline Toko (di bawah nama toko)
+            <input
+              value={tagline}
+              onChange={(e) => setTagline(e.target.value)}
+              placeholder="Mis. Sembako & Kebutuhan Harian"
+              maxLength={150}
+            />
+            <span className="hint">
+              Beda dari Header Teks di atas (yang tampil sebelum nama toko) — ini tampil sebagai
+              subjudul tepat di bawah nama toko.
+            </span>
           </label>
 
           <label>

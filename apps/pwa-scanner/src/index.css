@@ -98,6 +98,21 @@ body {
   color: var(--color-primary);
 }
 
+/* Only the low-stock stat card is ever interactive (taps through to a
+   filtered Daftar Produk) — reset the native <button> chrome to match its
+   plain-<div> sibling stat cards exactly. */
+.stat-card--button {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.stat-card--button:active {
+  border-color: var(--color-warning);
+}
+
 .stat-card-value {
   font-size: 1.4rem;
   font-weight: 700;
@@ -108,11 +123,32 @@ body {
   font-size: var(--font-size-muted);
 }
 
-/* --- Home screen: low-stock alert banner (Owner/Manager only) --- */
+/* --- Home screen: low-stock alert banner (Owner/Manager only) — a <button>
+   (taps through to a filtered Daftar Produk), so it needs the usual native
+   chrome reset to still read as a plain card, not a browser button. */
 .low-stock-banner {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
   background: rgba(245, 158, 11, 0.12);
   border: 1px solid var(--color-warning);
   margin-bottom: var(--space-5);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.low-stock-banner:active {
+  border-color: var(--color-warning);
+  background: rgba(245, 158, 11, 0.2);
+}
+
+.low-stock-banner-more {
+  margin-top: var(--space-2);
+  color: var(--color-warning);
+  font-size: var(--font-size-muted);
+  font-weight: 600;
 }
 
 .low-stock-banner-title {
@@ -384,8 +420,32 @@ h1 {
 
 .pending-kg-item-actions {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 1rem;
+}
+
+.pending-kg-item-actions button {
+  flex: 1;
+}
+
+/* Cancel/secondary action in a primary+cancel button pair — visually
+   distinct from the primary action (bordered/neutral, not solid-primary),
+   so a rushed tap can't confuse "cancel" for "confirm". Self-sufficient
+   sizing (not relying on `.scan-form button`'s cascade) since some of these
+   pairs — e.g. the Kg-quantity confirm above — sit outside any `.scan-form`. */
+.button-secondary {
+  min-height: 3.25rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+
+.button-secondary:active {
+  transform: scale(0.98);
 }
 
 .template-option-list {
@@ -463,8 +523,9 @@ h1 {
   resize: vertical;
 }
 
+.button-primary,
 .scan-form button,
-.queue button {
+.queue-sync-button {
   min-height: 3.25rem;
   font-size: 1.1rem;
   font-weight: 600;
@@ -475,12 +536,23 @@ h1 {
   cursor: pointer;
 }
 
+.button-primary:active,
 .scan-form button:active,
-.queue button:active {
+.queue-sync-button:active {
   transform: scale(0.98);
 }
 
-.queue button:disabled {
+/* Beats `.scan-form button` above for a .button-secondary that happens to
+   sit inside a .scan-form (Daftar Produk's edit-price dialog, Tambah Produk
+   Baru's Batal) — same properties as the standalone `.button-secondary`
+   rule, just re-asserted at higher specificity. */
+.scan-form button.button-secondary {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+
+.queue-sync-button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -506,6 +578,41 @@ h1 {
   margin: 0 0 var(--space-3);
 }
 
+/* Kasir's queue header doubles as the collapse/expand control — same
+   visual weight as the old plain <h2>, but a real button so it's a proper
+   44px+ tap target and keyboard-operable. */
+.queue-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: 44px;
+  margin: 0 0 var(--space-3);
+  padding: 0.5rem 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: var(--font-size-section);
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.queue-toggle-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* Only Kasir's collapsible layout puts this button as a direct child of
+   .queue (WarehouseScan's stays inline inside its <h2>, unchanged). */
+.queue > .queue-sync-button {
+  width: 100%;
+  margin-bottom: var(--space-3);
+}
+
 .queue ul {
   list-style: none;
   padding: 0;
@@ -515,10 +622,42 @@ h1 {
 }
 
 .queue li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
   background: var(--color-surface);
   padding: 0.6rem 0.8rem;
   border-radius: var(--radius-sm);
   font-size: 0.9rem;
+}
+
+.queue-item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Local-only — dismissing here never touches ERPNext, so this is
+   deliberately lower-emphasis than the primary sync button: a small,
+   muted icon button, not a loud destructive-looking one. */
+.queue-dismiss-button {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  margin: -0.4rem -0.4rem -0.4rem 0;
+}
+
+.queue-dismiss-button:active {
+  background: var(--color-surface-alt, rgba(0, 0, 0, 0.08));
 }
 
 .hint {
@@ -530,7 +669,7 @@ h1 {
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  margin: var(--space-2) 0;
+  margin: var(--space-1) 0;
 }
 
 .message {
@@ -548,6 +687,19 @@ h1 {
   gap: 0.5rem;
 }
 
+/* .app's generous 3rem bottom padding is comfortable for scrolling screens,
+   but on Kasir it's the difference between the cart+keypad fitting on a
+   real 375×812 phone without scrolling and not — measured live against the
+   deployed app: this alone reclaims ~28px of the ~200px this screen was
+   overflowing by. Desktop's side-by-side layout was never affected by this
+   (`@media (min-width: 1024px)` below doesn't touch scroll at all), so this
+   stays scoped to mobile only. */
+@media (max-width: 1023px) {
+  .app--kasir {
+    padding-bottom: 1.25rem;
+  }
+}
+
 /*
  * Mobile (default): cart/search and payment are still the same
  * mutually-exclusive full-screen "stage" swap this screen has always had
@@ -560,7 +712,7 @@ h1 {
 .kasir-payment-panel {
   display: none;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.35rem;
 }
 
 .kasir[data-stage='cart'] .kasir-cart-panel {
@@ -762,7 +914,7 @@ h1 {
 }
 
 .keypad-section {
-  margin: 0.5rem 0 1rem;
+  margin: 0.4rem 0 0.6rem;
 }
 
 .keypad-label {
@@ -799,12 +951,15 @@ h1 {
 .keypad {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 0.5rem;
-  margin-top: 0.5rem;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
 }
 
+/* 2.75rem = 44px, the floor for a touch target — any smaller and this,
+   the screen's most-tapped control, becomes the one thing on Kasir that
+   doesn't meet it. */
 .keypad button {
-  min-height: 3rem;
+  min-height: 2.75rem;
   font-size: 1.2rem;
   font-weight: 600;
   border-radius: var(--radius-sm);
@@ -1021,6 +1176,11 @@ h1 {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: #fff;
+  overflow: hidden;
+}
+
+.receipt-preview {
+  overflow-x: hidden;
 }
 
 /* --- Tagihan Kasbon --- */
@@ -1246,7 +1406,11 @@ h1 {
 
 .edit-price-actions {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: 1rem;
   margin-top: 0.5rem;
+}
+
+.edit-price-actions button {
+  flex: 1;
 }

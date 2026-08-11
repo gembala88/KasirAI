@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { IconCamera } from '@tabler/icons-react';
+import { IconCamera, IconX } from '@tabler/icons-react';
 import CameraScanner from './CameraScanner';
 import DaftarProduk from './DaftarProduk';
 import TambahProdukBaru from './TambahProdukBaru';
@@ -7,7 +7,12 @@ import { fetchWarehouses, type WarehouseOption } from '../lib/api';
 import { buildAction, type StockActionType } from '../lib/build-action';
 import { loadWithCacheFallback } from '../lib/cached-lookup';
 import { statusBadge, stripHtmlTags } from '../lib/format';
-import { listQueuedActions, QUEUE_CHANGED_EVENT, type QueuedAction } from '../lib/offline-queue';
+import {
+  listQueuedActions,
+  removeQueuedAction,
+  QUEUE_CHANGED_EVENT,
+  type QueuedAction,
+} from '../lib/offline-queue';
 import { submitOrQueue, syncPendingQueue } from '../lib/sync';
 import type { ScanAction, ScanActionType } from '../lib/types';
 import { useProductSearch } from '../lib/use-product-search';
@@ -39,8 +44,17 @@ function queueLineDescription(item: ScanQueuedAction): string {
   return `${item.action.itemCode} (${item.action.qty})`;
 }
 
-export default function WarehouseScan() {
-  const [mode, setMode] = useState<'input-stok' | 'tambah-produk' | 'daftar-produk'>('input-stok');
+export default function WarehouseScan({
+  initialMode,
+  lowStockItemCodes,
+}: {
+  /** Opens straight into Daftar Produk instead of the usual Input Stok default — set by App.tsx only when arriving here from Beranda's low-stock stat card. */
+  initialMode?: 'daftar-produk';
+  lowStockItemCodes?: string[];
+} = {}) {
+  const [mode, setMode] = useState<'input-stok' | 'tambah-produk' | 'daftar-produk'>(
+    initialMode ?? 'input-stok',
+  );
   const [queue, setQueue] = useState<ScanQueuedAction[]>([]);
   const [syncing, setSyncing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -97,6 +111,12 @@ export default function WarehouseScan() {
       setSyncing(false);
     }
   }, [refreshQueue]);
+
+  // Local-only — never touches ERPNext or the server-side sync checkpoint.
+  async function handleDismissQueueItem(uuid: string): Promise<void> {
+    await removeQueuedAction(uuid);
+    await refreshQueue();
+  }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -305,18 +325,19 @@ export default function WarehouseScan() {
 
       {mode === 'tambah-produk' && <TambahProdukBaru onSubmitted={() => void refreshQueue()} />}
 
-      {mode === 'daftar-produk' && <DaftarProduk />}
+      {mode === 'daftar-produk' && <DaftarProduk initialItemCodeFilter={lowStockItemCodes} />}
 
       {mode !== 'daftar-produk' && (
         <section className="queue">
           <h2>
-            Menunggu Sinkron ({queue.length})
+            Menunggu Disimpan ({queue.length})
             <button
               type="button"
+              className="queue-sync-button"
               onClick={() => void syncQueue()}
               disabled={syncing || queue.length === 0}
             >
-              {syncing ? 'Menyinkron…' : 'Sinkron Sekarang'}
+              {syncing ? 'Menyimpan ke server…' : 'Simpan ke Server Sekarang'}
             </button>
           </h2>
           <ul>
@@ -324,9 +345,20 @@ export default function WarehouseScan() {
               const badge = statusBadge(item.status);
               return (
                 <li key={item.uuid}>
-                  {ACTION_LABELS[item.actionType]} — {queueLineDescription(item)}{' '}
-                  <span className={badge.className}>{badge.label}</span>
-                  {item.lastError && <div className="hint">{stripHtmlTags(item.lastError)}</div>}
+                  <div className="queue-item-body">
+                    {ACTION_LABELS[item.actionType]} — {queueLineDescription(item)}{' '}
+                    <span className={badge.className}>{badge.label}</span>
+                    {item.lastError && <div className="hint">{stripHtmlTags(item.lastError)}</div>}
+                  </div>
+                  <button
+                    type="button"
+                    className="queue-dismiss-button"
+                    onClick={() => void handleDismissQueueItem(item.uuid)}
+                    aria-label="Hapus dari antrian (tidak memengaruhi data di server)"
+                    title="Hapus dari antrian — hanya di perangkat ini, tidak memengaruhi ERPNext"
+                  >
+                    <IconX size={16} />
+                  </button>
                 </li>
               );
             })}

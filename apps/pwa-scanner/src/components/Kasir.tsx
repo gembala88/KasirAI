@@ -6,8 +6,11 @@ import {
   IconCalendarTime,
   IconCamera,
   IconCash,
+  IconChevronDown,
+  IconChevronUp,
   IconCloudCheck,
   IconQrcode,
+  IconX,
 } from '@tabler/icons-react';
 import {
   fetchPaymentInfo,
@@ -22,7 +25,12 @@ import CameraScanner from './CameraScanner';
 import ReceiptPreview from './ReceiptPreview';
 import { getLastSyncedAt } from '../lib/catalog-cache';
 import { formatQty, formatRupiah, formatSyncedAt, statusBadge, stripHtmlTags } from '../lib/format';
-import { listQueuedActions, QUEUE_CHANGED_EVENT, type QueuedAction } from '../lib/offline-queue';
+import {
+  listQueuedActions,
+  removeQueuedAction,
+  QUEUE_CHANGED_EVENT,
+  type QueuedAction,
+} from '../lib/offline-queue';
 import { pressQtyKey } from '../lib/qty-keypad';
 import { submitOrQueue, syncPendingQueue } from '../lib/sync';
 import type { KasbonSaleAction, PosSaleAction } from '../lib/types';
@@ -113,6 +121,11 @@ export default function Kasir() {
     Array<QueuedAction & { action: PosSaleAction | KasbonSaleAction }>
   >([]);
   const [syncingQueue, setSyncingQueue] = useState(false);
+  // null = no manual override yet, follow the auto rule below (collapsed
+  // when everything's routine, auto-expanded the moment something needs a
+  // human to look at it). A tap on the header sets an explicit override for
+  // the rest of this session.
+  const [queueManuallyExpanded, setQueueManuallyExpanded] = useState<boolean | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
   // Real bug found live: tapping a Kg item from the search dropdown always
   // added it at whatever qty the keypad happened to be showing (usually the
@@ -191,6 +204,16 @@ export default function Kasir() {
       await refreshPendingSales();
       setSyncingQueue(false);
     }
+  }
+
+  // Local-only — never touches ERPNext or the server-side sync checkpoint.
+  // For a genuinely dead entry (e.g. a permanent business-rule violation
+  // that will never resolve), this is the cashier's own way to clear it
+  // without waiting for anyone else; a still-recoverable one can always be
+  // re-queued by ringing up the sale again.
+  async function handleDismissQueueItem(uuid: string): Promise<void> {
+    await removeQueuedAction(uuid);
+    await refreshPendingSales();
   }
 
   const total = cart.reduce((sum, line) => sum + line.qty * line.rate, 0);
@@ -517,6 +540,7 @@ export default function Kasir() {
             <div className="pending-kg-item-actions">
               <button
                 type="button"
+                className="button-primary"
                 onClick={() => {
                   addToCart(pendingKgItem, qtyToAdd);
                   setPendingKgItem(null);
@@ -528,7 +552,7 @@ export default function Kasir() {
               </button>
               <button
                 type="button"
-                className="link-button"
+                className="button-secondary"
                 onClick={() => {
                   setPendingKgItem(null);
                   setPendingQty('1');
@@ -575,49 +599,96 @@ export default function Kasir() {
 
         <div className="scan-form">
           <label>
-            ID Pelanggan (kosongkan untuk Walk-in / Retail)
-            <input value={customerId} onChange={(e) => setCustomerId(e.target.value)} />
+            ID Pelanggan (opsional)
+            <input
+              value={customerId}
+              onChange={(e) => setCustomerId(e.target.value)}
+              placeholder="Kosongkan untuk Walk-in / Retail"
+            />
           </label>
         </div>
 
         {(error ?? searchError) && <p className="error-box">{error ?? searchError}</p>}
         {message && <p className="message">{message}</p>}
 
-        {pendingSales.length > 0 && (
-          <section className="queue">
-            <h2>
-              Transaksi Menunggu Sinkron ({pendingSales.length})
-              <button
-                type="button"
-                onClick={() => void handleSyncPendingSales()}
-                disabled={syncingQueue}
-              >
-                {syncingQueue ? 'Menyinkron…' : 'Sinkron Sekarang'}
-              </button>
-            </h2>
-            <ul>
-              {pendingSales.map((item) => {
-                const badge = statusBadge(item.status);
-                // Kasbon has no "amount tendered" (nothing was paid up
-                // front) — show the cart's real value instead, same
-                // number either way for a normal full-payment sale.
-                const action = item.action;
-                const amount =
-                  action.type === 'kasbon-sale'
-                    ? action.lines.reduce((sum, line) => sum + line.qty * (line.rate ?? 0), 0)
-                    : action.amount;
-                return (
-                  <li key={item.uuid}>
-                    {formatRupiah(amount)} ({action.lines.length} barang)
-                    {action.type === 'kasbon-sale' ? ' · Kasbon' : ''}{' '}
-                    <span className={badge.className}>{badge.label}</span>
-                    {item.lastError && <div className="hint">{stripHtmlTags(item.lastError)}</div>}
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        )}
+        {pendingSales.length > 0 &&
+          (() => {
+            const needsAttention = pendingSales.some(
+              (item) => item.status === 'Failed' || item.status === 'Conflict',
+            );
+            const expanded = queueManuallyExpanded ?? needsAttention;
+            return (
+              <section className="queue">
+                <button
+                  type="button"
+                  className="queue-toggle"
+                  onClick={() => setQueueManuallyExpanded(!expanded)}
+                  aria-expanded={expanded}
+                >
+                  <span className="queue-toggle-title">
+                    Transaksi Menunggu Disimpan ({pendingSales.length})
+                    {needsAttention && (
+                      <IconAlertTriangle
+                        size={16}
+                        style={{ color: 'var(--color-warning)' }}
+                        aria-label="Ada transaksi yang perlu diperiksa"
+                      />
+                    )}
+                  </span>
+                  {expanded ? <IconChevronUp size={18} /> : <IconChevronDown size={18} />}
+                </button>
+                {expanded && (
+                  <>
+                    <button
+                      type="button"
+                      className="queue-sync-button"
+                      onClick={() => void handleSyncPendingSales()}
+                      disabled={syncingQueue}
+                    >
+                      {syncingQueue ? 'Menyimpan ke server…' : 'Simpan ke Server Sekarang'}
+                    </button>
+                    <ul>
+                      {pendingSales.map((item) => {
+                        const badge = statusBadge(item.status);
+                        // Kasbon has no "amount tendered" (nothing was paid up
+                        // front) — show the cart's real value instead, same
+                        // number either way for a normal full-payment sale.
+                        const action = item.action;
+                        const amount =
+                          action.type === 'kasbon-sale'
+                            ? action.lines.reduce(
+                                (sum, line) => sum + line.qty * (line.rate ?? 0),
+                                0,
+                              )
+                            : action.amount;
+                        return (
+                          <li key={item.uuid}>
+                            <div className="queue-item-body">
+                              {formatRupiah(amount)} ({action.lines.length} barang)
+                              {action.type === 'kasbon-sale' ? ' · Kasbon' : ''}{' '}
+                              <span className={badge.className}>{badge.label}</span>
+                              {item.lastError && (
+                                <div className="hint">{stripHtmlTags(item.lastError)}</div>
+                              )}
+                            </div>
+                            <button
+                              type="button"
+                              className="queue-dismiss-button"
+                              onClick={() => void handleDismissQueueItem(item.uuid)}
+                              aria-label="Hapus dari antrian (tidak memengaruhi data di server)"
+                              title="Hapus dari antrian — hanya di perangkat ini, tidak memengaruhi ERPNext"
+                            >
+                              <IconX size={16} />
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </>
+                )}
+              </section>
+            );
+          })()}
 
         <section className="cart">
           <h2 className="section-label">Keranjang</h2>
@@ -652,10 +723,15 @@ export default function Kasir() {
           )}
         </section>
 
-        <div className="cart-total card">
-          <span className="card-label">Total</span>
-          <span className="card-value">{formatRupiah(total)}</span>
-        </div>
+        {/* Hidden on an empty cart — "Total Rp 0" tells the cashier nothing
+            and, on mobile, was pushing "Bayar" (and the cart itself) below
+            the fold on a real 375×812 screen. */}
+        {cart.length > 0 && (
+          <div className="cart-total card">
+            <span className="card-label">Total</span>
+            <span className="card-value">{formatRupiah(total)}</span>
+          </div>
+        )}
 
         {/* Mobile only — desktop shows the payment panel alongside the cart at all times, so this full-screen swap has nothing to do there. */}
         <button
@@ -698,6 +774,7 @@ export default function Kasir() {
               <ReceiptPreview
                 transactionName={saleResult.transaction.name}
                 itemCount={saleResult.itemCount}
+                printButtonVariant="secondary"
               />
             )}
 

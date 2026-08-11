@@ -182,7 +182,7 @@ function TransactionDetailView({ name, onBack }: { name: string; onBack: () => v
           {showReceipt ? (
             <ReceiptPreview transactionName={detail.name} itemCount={detail.items.length} />
           ) : (
-            <button type="button" onClick={() => setShowReceipt(true)}>
+            <button type="button" className="button-primary" onClick={() => setShowReceipt(true)}>
               <IconPrinter size={18} /> Cetak Ulang
             </button>
           )}

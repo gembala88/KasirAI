@@ -538,6 +538,7 @@ export interface ReceiptCustomization {
   headerText: string;
   footerText: string;
   logoUrl: string;
+  tagline: string;
 }
 
 export function fetchReceiptCustomization(): Promise<ReceiptCustomization> {

@@ -15,12 +15,12 @@ export function formatQty(qty: number): string {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  Pending: 'Menunggu Sinkron',
+  Pending: 'Menunggu Disimpan',
   Processing: 'Memproses',
   Failed: 'Gagal',
   Retry: 'Mencoba Lagi',
-  Conflict: 'Konflik',
-  Synced: 'Tersinkron',
+  Conflict: 'Perlu Diperiksa',
+  Synced: 'Tersimpan',
 };
 
 const STATUS_CLASS: Record<string, string> = {

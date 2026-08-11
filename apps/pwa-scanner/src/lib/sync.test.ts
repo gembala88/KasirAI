@@ -84,7 +84,7 @@ describe('syncPendingQueue', () => {
     // Failed same as a real server rejection — alarming a cashier over a
     // sale that's perfectly safe and hasn't actually been rejected by
     // anyone. Nothing was tried-and-refused here, so it stays Pending
-    // ("Menunggu Sinkron" in the UI), not Failed ("Gagal").
+    // ("Menunggu Disimpan" in the UI), not Failed ("Gagal").
     expect(offlineQueueMock.updateActionStatus).toHaveBeenCalledWith(
       'unreachable-1',
       'Pending',
