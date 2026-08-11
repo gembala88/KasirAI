@@ -178,12 +178,15 @@ export interface ReceiptCustomization {
   headerText: string;
   footerText: string;
   logoUrl: string;
+  /** Subtitle line printed directly below the store name — distinct from headerText, which prints above it. */
+  tagline: string;
 }
 
 interface CompanyReceiptCustomizationDoc {
   custom_receipt_header?: string;
   custom_receipt_footer?: string;
   custom_receipt_logo_url?: string;
+  custom_store_tagline?: string;
 }
 
 export async function getReceiptCustomization(): Promise<ReceiptCustomization> {
@@ -195,6 +198,7 @@ export async function getReceiptCustomization(): Promise<ReceiptCustomization> {
     headerText: company.custom_receipt_header ?? '',
     footerText: company.custom_receipt_footer ?? '',
     logoUrl: company.custom_receipt_logo_url ?? '',
+    tagline: company.custom_store_tagline ?? '',
   };
 }
 
@@ -202,6 +206,7 @@ export async function updateReceiptCustomization(input: {
   headerText: string;
   footerText: string;
   logoUrl: string;
+  tagline: string;
 }): Promise<ReceiptCustomization> {
   if (input.logoUrl && !/^https?:\/\//i.test(input.logoUrl)) {
     throw new ValidationError(
@@ -212,6 +217,7 @@ export async function updateReceiptCustomization(input: {
     custom_receipt_header: input.headerText,
     custom_receipt_footer: input.footerText,
     custom_receipt_logo_url: input.logoUrl,
+    custom_store_tagline: input.tagline,
   });
   return getReceiptCustomization();
 }

@@ -108,6 +108,18 @@ const COMPANY_CUSTOM_FIELDS: CustomFieldSpec[] = [
       // load, which the receipt iframe never has, so it silently 403s.
       'Image URL shown at the top of every receipt — must be a publicly reachable URL (a private ERPNext file will not display). Also editable from Settings.',
   },
+  {
+    fieldname: 'custom_store_tagline',
+    label: 'Store Tagline (for receipt)',
+    fieldtype: 'Data',
+    insertAfter: 'custom_receipt_logo_url',
+    description:
+      // Deliberately separate from custom_receipt_header (printed *above*
+      // the store name, e.g. a decorative pre-header) — this one prints as
+      // a subtitle line directly *below* the store name on every receipt,
+      // e.g. "Sembako & Kebutuhan Harian". Also editable from Settings.
+      'Short subtitle printed directly below the store name on every receipt, e.g. "Sembako & Kebutuhan Harian". Also editable from Settings.',
+  },
 ];
 
 const CUSTOMER_CUSTOM_FIELDS: CustomFieldSpec[] = [
@@ -240,7 +252,7 @@ const MODES_OF_PAYMENT: Array<{
 // store's real WhatsApp number and Company.custom_store_address for them to
 // appear correctly — see DEPLOY_CHECKLIST.md.
 const RECEIPT_HEADER_LOOKUP =
-  '{% set company = frappe.db.get_value("Company", doc.company, ["company_name", "custom_store_address", "phone_no", "website", "company_logo", "custom_receipt_header", "custom_receipt_footer", "custom_receipt_logo_url"], as_dict=True) %}';
+  '{% set company = frappe.db.get_value("Company", doc.company, ["company_name", "custom_store_address", "phone_no", "website", "company_logo", "custom_receipt_header", "custom_receipt_footer", "custom_receipt_logo_url", "custom_store_tagline"], as_dict=True) %}';
 
 // Real bug found live (2026-08-11): items/prices were getting physically
 // clipped on 80mm thermal paper. Root cause, confirmed by fetching a real
@@ -334,11 +346,14 @@ ${RECEIPT_PRINT_WIDTH_OVERRIDE}
     <div style="font-size:12px; color:#666; margin-bottom:2px;">{{ company.custom_receipt_header }}</div>
     {% endif %}
     <div style="font-size:15px; font-weight:700;">{{ company.company_name }}</div>
+    {% if company.custom_store_tagline %}
+    <div style="font-size:11px; color:#666;">{{ company.custom_store_tagline }}</div>
+    {% endif %}
     {% if company.custom_store_address %}
     <div style="font-size:11px; color:#666;">{{ company.custom_store_address }}</div>
     {% endif %}
     {% if company.phone_no %}
-    <div style="font-size:11px; color:#666;">No. WhatsApp Toko: {{ company.phone_no }}</div>
+    <div style="font-size:11px; color:#666;">WhatsApp: {{ company.phone_no }}</div>
     {% endif %}
   </div>
   <div style="text-align:center; margin-bottom: 12px;">
@@ -371,6 +386,9 @@ ${RECEIPT_PRINT_WIDTH_OVERRIDE}
     <div style="font-size:9px; color:#666;">{{ company.custom_receipt_header }}</div>
     {% endif %}
     <div style="font-size:13px; font-weight:700;">{{ company.company_name }}</div>
+    {% if company.custom_store_tagline %}
+    <div style="font-size:9px; color:#666;">{{ company.custom_store_tagline }}</div>
+    {% endif %}
     <div style="font-size:10px; color:#666;">{{ doc.name }} · {{ frappe.utils.formatdate(doc.posting_date, "dd-MM-yyyy") }}</div>
   </div>
   <div style="border-top: 1px dashed #999; padding-top:4px; font-size:10px;">
@@ -415,11 +433,14 @@ ${RECEIPT_PRINT_WIDTH_OVERRIDE}
     <div style="font-size:12px; color:#666; margin-bottom:2px;">{{ company.custom_receipt_header }}</div>
     {% endif %}
     <div style="font-size:16px; font-weight:700;">{{ company.company_name }}</div>
+    {% if company.custom_store_tagline %}
+    <div style="font-size:11px; color:#666; margin-top:2px;">{{ company.custom_store_tagline }}</div>
+    {% endif %}
     {% if company.custom_store_address %}
     <div style="font-size:11px; color:#666; margin-top:2px;">{{ company.custom_store_address }}</div>
     {% endif %}
     {% if company.phone_no %}
-    <div style="font-size:11px; color:#666;">No. WhatsApp Toko: {{ company.phone_no }}</div>
+    <div style="font-size:11px; color:#666;">WhatsApp: {{ company.phone_no }}</div>
     {% endif %}
     {% if company.website %}
     <div style="font-size:11px; color:#666;">{{ company.website }}</div>

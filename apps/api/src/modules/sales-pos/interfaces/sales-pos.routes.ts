@@ -95,6 +95,7 @@ const receiptCustomizationSchema = z.object({
   headerText: z.string().max(200),
   footerText: z.string().max(300),
   logoUrl: z.string().max(500),
+  tagline: z.string().max(150),
 });
 
 const POS_ROLES = ['Owner', 'Manager', 'Cashier'] as const;

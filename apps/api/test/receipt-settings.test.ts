@@ -156,11 +156,12 @@ describe('getReceiptCustomization', () => {
     vi.clearAllMocks();
   });
 
-  it('reads custom_receipt_header/footer/logo_url from the Company doc', async () => {
+  it('reads custom_receipt_header/footer/logo_url/store_tagline from the Company doc', async () => {
     erpNextClientMock.get.mockResolvedValue({
       custom_receipt_header: 'Toko Sembako Terpercaya',
       custom_receipt_footer: 'Barang yang sudah dibeli tidak dapat dikembalikan.',
       custom_receipt_logo_url: 'https://example.com/logo.png',
+      custom_store_tagline: 'Sembako & Kebutuhan Harian',
     });
 
     const result = await getReceiptCustomization();
@@ -169,6 +170,7 @@ describe('getReceiptCustomization', () => {
       headerText: 'Toko Sembako Terpercaya',
       footerText: 'Barang yang sudah dibeli tidak dapat dikembalikan.',
       logoUrl: 'https://example.com/logo.png',
+      tagline: 'Sembako & Kebutuhan Harian',
     });
   });
 
@@ -179,6 +181,7 @@ describe('getReceiptCustomization', () => {
       headerText: '',
       footerText: '',
       logoUrl: '',
+      tagline: '',
     });
   });
 });
@@ -188,23 +191,26 @@ describe('updateReceiptCustomization', () => {
     vi.clearAllMocks();
   });
 
-  it('writes header/footer/logo_url to the Company doc', async () => {
+  it('writes header/footer/logo_url/store_tagline to the Company doc', async () => {
     erpNextClientMock.get.mockResolvedValue({
       custom_receipt_header: 'Header baru',
       custom_receipt_footer: 'Footer baru',
       custom_receipt_logo_url: 'https://example.com/new-logo.png',
+      custom_store_tagline: 'Tagline baru',
     });
 
     await updateReceiptCustomization({
       headerText: 'Header baru',
       footerText: 'Footer baru',
       logoUrl: 'https://example.com/new-logo.png',
+      tagline: 'Tagline baru',
     });
 
     expect(erpNextClientMock.update).toHaveBeenCalledWith('Company', expect.any(String), {
       custom_receipt_header: 'Header baru',
       custom_receipt_footer: 'Footer baru',
       custom_receipt_logo_url: 'https://example.com/new-logo.png',
+      custom_store_tagline: 'Tagline baru',
     });
   });
 
@@ -212,13 +218,18 @@ describe('updateReceiptCustomization', () => {
     erpNextClientMock.get.mockResolvedValue({});
 
     await expect(
-      updateReceiptCustomization({ headerText: '', footerText: '', logoUrl: '' }),
+      updateReceiptCustomization({ headerText: '', footerText: '', logoUrl: '', tagline: '' }),
     ).resolves.not.toThrow();
   });
 
   it("rejects a logoUrl that is not a full http(s) URL — real bug this guards against: a relative ERPNext file path (e.g. /files/logo.png) resolves against Hermes' own origin inside the receipt iframe, not ERPNext's, and silently 404s", async () => {
     await expect(
-      updateReceiptCustomization({ headerText: '', footerText: '', logoUrl: '/files/logo.png' }),
+      updateReceiptCustomization({
+        headerText: '',
+        footerText: '',
+        logoUrl: '/files/logo.png',
+        tagline: '',
+      }),
     ).rejects.toThrow();
     expect(erpNextClientMock.update).not.toHaveBeenCalled();
   });
