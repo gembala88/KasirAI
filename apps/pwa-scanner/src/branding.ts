@@ -7,4 +7,4 @@
  * so it won't pick up a change here automatically — update it by hand too
  * if you change this.
  */
-export const STORE_NAME = 'Hermes Scanner';
+export const STORE_NAME = 'KasirAI';

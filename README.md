@@ -1,4 +1,4 @@
-# Hermes
+# KasirAI
 
 AI-powered wholesale & retail POS/ERP platform for Indonesian stores —
 WhatsApp ordering with an AI assistant, an offline-capable cashier app,
@@ -6,13 +6,13 @@ warehouse scanning, and an owner dashboard, all built on top of
 [ERPNext](https://erpnext.com/) as the single source of truth for real
 business data (stock, invoices, customers, money).
 
-## What Hermes is
+## What KasirAI is
 
 A small wholesale/retail store (think: a _toko grosir_ selling by piece,
 dozen, and carton, at different prices for walk-in/regular/member
 customers) needs real inventory and accounting, a fast checkout, a way for
 customers to order over WhatsApp, and an owner who can ask "how did we do
-today?" without opening a spreadsheet. Hermes is that layer, built on top
+today?" without opening a spreadsheet. KasirAI is that layer, built on top
 of ERPNext rather than reinventing invoicing/accounting/stock from
 scratch:
 
@@ -33,7 +33,7 @@ scratch:
 - **Owner dashboard** — daily revenue/profit, best/worst sellers,
   low-stock and near-expiry alerts, piutang (accounts receivable)
   tracking with automatic reminders, payment confirmation, and a
-  grounded "ask Hermes" chat over the store's own real data.
+  grounded "ask KasirAI" chat over the store's own real data.
 - **Manual-confirm payments** — QRIS, bank transfer, and COD, all
   reconciled by a human tapping "confirm," never auto-trusted from a
   WhatsApp message alone.
@@ -57,7 +57,7 @@ scratch:
                                       +-- BullMQ (piutang reminders,
                                       |    retention cleanup) via its own
                                       |    Redis instance
-                                      +-- SQLite (Hermes' own audit log,
+                                      +-- SQLite (KasirAI' own audit log,
                                            offline-sync queue receipts,
                                            WhatsApp conversation history —
                                            never a copy of ERPNext's data)
@@ -65,7 +65,7 @@ scratch:
 
 ERPNext (stock, invoices, customers, accounting) is the only place real
 business data lives — `apps/api` never maintains a shadow copy of it.
-Hermes' own SQLite database only holds _its_ data: audit trails, offline
+KasirAI' own SQLite database only holds _its_ data: audit trails, offline
 sync-queue bookkeeping, and WhatsApp conversation history.
 
 ### Repository layout
@@ -106,7 +106,7 @@ BACKLOG.md           Deferred work, including the path toward a
 ## Tech stack
 
 - **Backend:** Node.js (TypeScript), Fastify, Zod validation, BullMQ +
-  Redis for background jobs, `node:sqlite` for Hermes' own data.
+  Redis for background jobs, `node:sqlite` for KasirAI' own data.
 - **Frontend:** React + Vite, installable as a PWA (`apps/pwa-scanner`).
 - **Business data:** ERPNext (Frappe framework) — Docker Compose, MariaDB.
 - **Infra:** Docker Compose (single VPS, no orchestrator), Nginx reverse
@@ -132,7 +132,7 @@ code is built and tested, but each new store needs its own accounts.
 Payment methods (QRIS image, bank account details) are also per-client
 configuration, not code.
 
-## Setting up Hermes for a new client
+## Setting up KasirAI for a new client
 
 This walks through taking a brand-new store from nothing to a working
 deployment. For deeper detail on any step, or to verify a completed
@@ -162,7 +162,7 @@ version of this walkthrough is a backlog item — see
   free tier) is the easiest to start with; NVIDIA NIM, Mimo, OpenAI, and
   Claude are also supported and can be added later — see
   `AI_PROVIDER_PRIORITY` in `.env.example`. None of this is required just
-  to run the POS/inventory side of Hermes.
+  to run the POS/inventory side of KasirAI.
 - **A QRIS static image and/or bank account details**, if the store wants
   those payment methods shown to customers (COD needs nothing extra).
 
@@ -198,7 +198,7 @@ version of this walkthrough is a backlog item — see
    Log in to ERPNext at `http://<vps-ip>:8080` as `Administrator` with
    the `ADMIN_PASSWORD` you set. The Setup Wizard asks for a business
    domain — pick **Distribution** (closest fit for wholesale + retail).
-6. **Generate an ERPNext API key/secret** for Hermes' own backend to
+6. **Generate an ERPNext API key/secret** for KasirAI' own backend to
    authenticate with (not the shared Administrator login):
    ```bash
    docker compose exec backend bench --site "$SITE_NAME" execute \
@@ -213,7 +213,7 @@ version of this walkthrough is a backlog item — see
    ```
    This creates the Company/Warehouse/Price Lists/UOMs/Modes of
    Payment/Walk-in Customer and registers ERPNext's webhook
-   subscriptions. **Rename the placeholder company** ("Toko Hermes") to
+   subscriptions. **Rename the placeholder company** ("Toko KasirAI") to
    the real store name in ERPNext (Setup > Company), and fill in the
    company address — it appears on printed receipts.
    **After renaming, you must also update `ERPNEXT_DEFAULT_COMPANY` in

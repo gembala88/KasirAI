@@ -20,7 +20,7 @@ type View = 'home' | Tab;
 // clicked).
 const TABS: Array<{ id: Tab; label: string; roles: AuthUser['role'][] }> = [
   { id: 'overview', label: 'Ringkasan', roles: ['Owner', 'Manager'] },
-  { id: 'chat', label: 'Tanya Hermes', roles: ['Owner', 'Manager'] },
+  { id: 'chat', label: 'Tanya KasirAI', roles: ['Owner', 'Manager'] },
   { id: 'payments', label: 'Konfirmasi Pembayaran', roles: ['Owner', 'Manager', 'Cashier'] },
   { id: 'sync-conflicts', label: 'Konflik Sinkron', roles: ['Owner', 'Manager'] },
 ];

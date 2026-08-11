@@ -1,6 +1,6 @@
-# Panduan Operasional Hermes — Untuk Staf Toko
+# Panduan Operasional KasirAI — Untuk Staf Toko
 
-Panduan ini untuk kasir dan staf gudang yang menggunakan aplikasi Hermes sehari-hari. Tidak perlu paham teknis — cukup ikuti langkah-langkahnya.
+Panduan ini untuk kasir dan staf gudang yang menggunakan aplikasi KasirAI sehari-hari. Tidak perlu paham teknis — cukup ikuti langkah-langkahnya.
 
 Jika ada istilah yang belum jelas atau langkah yang tidak sesuai dengan yang Anda lihat di layar, hubungi pemilik toko (lihat bagian [10. Jika Ada Masalah](#10-jika-ada-masalah-hubungi) di akhir panduan ini).
 
@@ -114,7 +114,7 @@ Daftar semua produk yang ada di toko, lengkap dengan stok saat ini, harga jual, 
 
 ## 4. Jika Internet Mati (Mode Offline)
 
-Aplikasi Hermes **tetap bisa dipakai untuk berjualan** meskipun internet toko sedang mati. Ini penting untuk kasir — jangan panik kalau tiba-tiba internet putus di tengah jam ramai.
+Aplikasi KasirAI **tetap bisa dipakai untuk berjualan** meskipun internet toko sedang mati. Ini penting untuk kasir — jangan panik kalau tiba-tiba internet putus di tengah jam ramai.
 
 Yang perlu diketahui:
 
@@ -152,7 +152,7 @@ Dari Beranda, tekan **Riwayat Transaksi**. Layar ini butuh internet aktif (tidak
 
 ### Mengatur printer thermal (struk 80mm)
 
-Hermes tidak butuh software printer khusus — struk dicetak lewat kotak dialog cetak bawaan Chrome, sama seperti mencetak halaman web biasa. Printer thermal USB atau Bluetooth (kertas 80mm) cukup dipasang sebagai **printer default** di HP/tablet/komputer toko (lewat pengaturan printer bawaan Windows/Android/iOS — bukan pengaturan di dalam Hermes), lalu:
+KasirAI tidak butuh software printer khusus — struk dicetak lewat kotak dialog cetak bawaan Chrome, sama seperti mencetak halaman web biasa. Printer thermal USB atau Bluetooth (kertas 80mm) cukup dipasang sebagai **printer default** di HP/tablet/komputer toko (lewat pengaturan printer bawaan Windows/Android/iOS — bukan pengaturan di dalam KasirAI), lalu:
 
 1. Tekan tombol **Cetak Struk** (atau **Cetak Ulang**) di aplikasi.
 2. Kotak dialog cetak Chrome akan muncul. Pastikan pengaturannya:

@@ -10,7 +10,7 @@
 import { env } from '../../../config/env.js';
 import type { ConversationAction, ConversationLogEntry } from '../domain/index.js';
 
-export const HERMES_SYSTEM_PROMPT = `Kamu adalah Hermes, admin toko digital untuk ${env.ERPNEXT_DEFAULT_COMPANY}.
+export const HERMES_SYSTEM_PROMPT = `Kamu adalah KasirAI, admin toko digital untuk ${env.ERPNEXT_DEFAULT_COMPANY}.
 Karaktermu: ramah, cepat tanggap, sopan tapi santai — seperti admin toko
 sungguhan yang hafal produk luar kepala, bukan robot customer service.
 

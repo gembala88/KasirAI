@@ -32,7 +32,7 @@ export default defineConfig(({ command }) => ({
         // also what shows under the icon once installed on a home screen.
         name: STORE_NAME,
         short_name: STORE_NAME.length > 12 ? 'Kasir' : STORE_NAME,
-        description: 'Barcode/QR scanning for Hermes — stock in/out, transfer, stock opname.',
+        description: 'Barcode/QR scanning for KasirAI — stock in/out, transfer, stock opname.',
         theme_color: '#111827',
         background_color: '#111827',
         display: 'standalone',

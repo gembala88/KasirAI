@@ -32,7 +32,7 @@ const MENU_BY_ROLE: Record<AuthUser['role'], MenuItem[]> = {
     },
     {
       id: 'chat',
-      label: 'Tanya Hermes',
+      label: 'Tanya KasirAI',
       subtitle: 'Tanya jawab data toko',
       icon: <IconMessageCircle />,
     },
@@ -65,7 +65,7 @@ const MENU_BY_ROLE: Record<AuthUser['role'], MenuItem[]> = {
     },
     {
       id: 'chat',
-      label: 'Tanya Hermes',
+      label: 'Tanya KasirAI',
       subtitle: 'Tanya jawab data toko',
       icon: <IconMessageCircle />,
     },

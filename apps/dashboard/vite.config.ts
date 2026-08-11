@@ -15,7 +15,7 @@ export default defineConfig({
       manifest: {
         name: STORE_NAME,
         short_name: STORE_NAME.length > 12 ? 'Dashboard' : STORE_NAME,
-        description: 'Owner/manager dashboard — ringkasan, Tanya Hermes, konfirmasi pembayaran.',
+        description: 'Owner/manager dashboard — ringkasan, Tanya KasirAI, konfirmasi pembayaran.',
         theme_color: '#0f172a',
         background_color: '#0f172a',
         display: 'standalone',

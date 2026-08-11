@@ -49,7 +49,7 @@ frappe.core.doctype.user.user.generate_keys`), not copied from local
       dikonfigurasi" and blocks confirming that payment, rather than
       showing a broken image.
 - [ ] **`BANK_TRANSFER_BANK_NAME`/`_ACCOUNT_NUMBER`/`_ACCOUNT_NAME`** —
-      already set on the VPS (`BCA` / `1234567890` / `Toko Hermes`), but
+      already set on the VPS (`BCA` / `1234567890` / `Toko KasirAI`), but
       `1234567890` reads like a placeholder, not a real account number.
       **Action needed from you:** confirm this is the store's actual BCA
       account before a real cashier hands it to a real customer at
@@ -93,7 +93,7 @@ frappe.core.doctype.user.user.generate_keys`), not copied from local
       request (confirmed clean removal — PM2 process, `pm2 save`d so it
       doesn't resurrect on reboot, and its project directory deleted).
       `robin_darkpools` remains completely untouched throughout every change
-      made to this VPS across every session. Hermes was deployed with a
+      made to this VPS across every session. KasirAI was deployed with a
       deliberately trimmed memory/CPU budget
       (`docker-compose.shared-vps-test.yml`) to coexist without touching
       those other projects, and is genuinely relying on swap to fit (~986 MB
@@ -113,7 +113,7 @@ frappe.core.doctype.user.user.generate_keys`), not copied from local
       from ERPNext's own Company doctype**, not a Letter Head or any string
       in this codebase — confirmed live across all 3 templates below.
       **Action needed from you**, three fields, all in ERPNext at Setup >
-      Company > Toko Hermes:
+      Company > Toko KasirAI:
   - **`Phone` (shows on the receipt as "No. WhatsApp Toko")** — fill this
     in with the store's real WhatsApp number. Currently blank, so the
     receipt correctly omits the line rather than showing "No. WhatsApp
@@ -126,8 +126,8 @@ frappe.core.doctype.user.user.generate_keys`), not copied from local
     appear on the Detailed template (Minimal and Standard don't show a
     logo by design).
 - [x] **3 receipt templates** (Minimal / Standard / Detailed — increasing
-      branding/spacing) now exist as real ERPNext Print Formats ("Hermes
-      Struk Kasir", "Hermes Struk Kasir - Minimal", "Hermes Struk Kasir -
+      branding/spacing) now exist as real ERPNext Print Formats ("KasirAI
+      Struk Kasir", "KasirAI Struk Kasir - Minimal", "KasirAI Struk Kasir -
       Detail"), all created/kept in sync by `scripts/seed-erpnext.ts`.
       Selectable from the app's own Pengaturan screen (Owner/Manager only)
       or directly by editing Company's `Receipt Template` field in
@@ -141,7 +141,7 @@ frappe.core.doctype.user.user.generate_keys`), not copied from local
 
 ## Verified working (real evidence, not assumed)
 
-- [x] Full stack deployed: ERPNext + MariaDB + Redis (×3) + Hermes API +
+- [x] Full stack deployed: ERPNext + MariaDB + Redis (×3) + KasirAI API +
       dashboard + pwa-scanner, all containerized, all healthy.
 - [x] Real login against the deployed stack returned a real JWT.
 - [x] Nginx correctly routes `/`, `/scan/`, `/api/`, `/erp/`,
@@ -177,7 +177,7 @@ frappe.core.doctype.user.user.generate_keys`), not copied from local
       scans correctly — this is the one thing that genuinely can't be
       verified without physical hardware.
 
-## Not yet possible to verify (blocked on items below, not on Hermes' code)
+## Not yet possible to verify (blocked on items below, not on KasirAI' code)
 
 - [ ] A real WhatsApp message hitting the deployed webhook (needs Meta
       credentials, above — the webhook _code_ is deployed and its signature

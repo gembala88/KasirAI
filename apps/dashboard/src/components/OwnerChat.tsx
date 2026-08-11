@@ -59,12 +59,12 @@ export default function OwnerChat() {
         {messages.map((message, index) => (
           <div key={index} className={`chat-message chat-message--${message.role}`}>
             <span className="chat-message-role">
-              {message.role === 'owner' ? 'Anda' : 'Hermes'}
+              {message.role === 'owner' ? 'Anda' : 'KasirAI'}
             </span>
             <p>{message.text}</p>
           </div>
         ))}
-        {sending && <p className="hint">Hermes sedang mengecek data…</p>}
+        {sending && <p className="hint">KasirAI sedang mengecek data…</p>}
         {error && <p className="error-box">Gagal: {error}</p>}
       </div>
 
