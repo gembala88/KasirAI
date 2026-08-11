@@ -77,6 +77,8 @@ const offlineActionSchema = z.discriminatedUnion('type', [
     uom: z.string().min(1),
     retailPrice: z.number().nonnegative().optional(),
     grosirPrice: z.number().nonnegative().optional(),
+    costPrice: z.number().nonnegative().optional(),
+    warehouse: z.string().optional(),
   }),
 ]);
 
@@ -148,13 +150,16 @@ export function registerSyncRoutes(app: FastifyInstance): void {
       }
     }
 
-    // A price edit that touches neither field is a no-op, not a valid request.
+    // A price edit that touches no field is a no-op, not a valid request.
     if (
       action.type === 'update-item-price' &&
       action.retailPrice === undefined &&
-      action.grosirPrice === undefined
+      action.grosirPrice === undefined &&
+      action.costPrice === undefined
     ) {
-      throw new ValidationError('Harga Retail atau Harga Grosir wajib diisi salah satu');
+      throw new ValidationError(
+        'Harga Retail, Harga Grosir, atau Harga Modal wajib diisi salah satu',
+      );
     }
 
     return syncAction(parsed.data);

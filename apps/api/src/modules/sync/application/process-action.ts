@@ -6,7 +6,12 @@
  */
 import { env } from '../../../config/env.js';
 import { ErpNextApiError } from '../../../shared/erpnext-client/index.js';
-import { scanAddStock, scanReduceStock, scanTransfer } from '../../inventory/application/index.js';
+import {
+  scanAddStock,
+  scanReduceStock,
+  scanTransfer,
+  updateItemCostPrice,
+} from '../../inventory/application/index.js';
 import {
   addPayment,
   assertRealCustomer,
@@ -185,10 +190,19 @@ export async function processAction(uuid: string, action: OfflineAction): Promis
     case 'create-item':
       return processCreateItem(uuid, action);
     case 'update-item-price':
-      await updateItemPrice(action.itemCode, action.uom, {
-        ...(action.retailPrice !== undefined ? { retailPrice: action.retailPrice } : {}),
-        ...(action.grosirPrice !== undefined ? { grosirPrice: action.grosirPrice } : {}),
-      });
+      if (action.retailPrice !== undefined || action.grosirPrice !== undefined) {
+        await updateItemPrice(action.itemCode, action.uom, {
+          ...(action.retailPrice !== undefined ? { retailPrice: action.retailPrice } : {}),
+          ...(action.grosirPrice !== undefined ? { grosirPrice: action.grosirPrice } : {}),
+        });
+      }
+      if (action.costPrice !== undefined) {
+        await updateItemCostPrice(
+          action.itemCode,
+          action.warehouse ?? env.ERPNEXT_DEFAULT_WAREHOUSE,
+          action.costPrice,
+        );
+      }
       return { itemCode: action.itemCode, uom: action.uom };
     default: {
       const exhaustive: never = action;

@@ -39,7 +39,7 @@ describe('listCatalogPage — bulk offline-catalog pull', () => {
         }
         if (doctype === 'Bin') {
           return Promise.resolve([
-            { item_code: 'A', actual_qty: 8, warehouse: 'Gudang Utama - TH' },
+            { item_code: 'A', actual_qty: 8, warehouse: 'Gudang Utama - TH', valuation_rate: 4200 },
           ]);
         }
         return Promise.resolve([]);
@@ -54,6 +54,7 @@ describe('listCatalogPage — bulk offline-catalog pull', () => {
         itemName: 'Item A',
         stockUom: 'Pcs',
         retailPrice: 15000,
+        costPrice: 4200,
         stockQty: 8,
         stockByWarehouse: [{ warehouse: 'Gudang Utama - TH', qty: 8 }],
       },
@@ -62,6 +63,7 @@ describe('listCatalogPage — bulk offline-catalog pull', () => {
         itemName: 'Item B',
         stockUom: 'Pcs',
         retailPrice: null,
+        costPrice: null,
         stockQty: 0,
         stockByWarehouse: [],
       },
@@ -91,6 +93,49 @@ describe('listCatalogPage — bulk offline-catalog pull', () => {
       { warehouse: 'Gudang Utama - TH', qty: 5 },
       { warehouse: 'Stores - TH', qty: 3 },
     ]);
+  });
+
+  it('prefers the store\'s default warehouse\'s valuation_rate as "Modal" when an item is stocked in more than one warehouse', async () => {
+    erpNextClientMock.list.mockImplementation((doctype: string) => {
+      if (doctype === 'Item') {
+        return Promise.resolve([{ item_code: 'A', item_name: 'Item A', stock_uom: 'Pcs' }]);
+      }
+      if (doctype === 'Warehouse') {
+        return Promise.resolve([{ name: 'Gudang Utama - TH' }, { name: 'Stores - TH' }]);
+      }
+      if (doctype === 'Bin') {
+        // Non-default warehouse listed first on purpose — the default
+        // warehouse's rate must still win regardless of Bin row order.
+        return Promise.resolve([
+          { item_code: 'A', actual_qty: 3, warehouse: 'Stores - TH', valuation_rate: 4000 },
+          { item_code: 'A', actual_qty: 5, warehouse: 'Gudang Utama - TH', valuation_rate: 4200 },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+
+    const page = await listCatalogPage(0, 200);
+    expect(page.items[0]?.costPrice).toBe(4200);
+  });
+
+  it("falls back to the first warehouse's rate when the item has no stock in the default warehouse", async () => {
+    erpNextClientMock.list.mockImplementation((doctype: string) => {
+      if (doctype === 'Item') {
+        return Promise.resolve([{ item_code: 'A', item_name: 'Item A', stock_uom: 'Pcs' }]);
+      }
+      if (doctype === 'Warehouse') {
+        return Promise.resolve([{ name: 'Gudang Utama - TH' }, { name: 'Stores - TH' }]);
+      }
+      if (doctype === 'Bin') {
+        return Promise.resolve([
+          { item_code: 'A', actual_qty: 3, warehouse: 'Stores - TH', valuation_rate: 4000 },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+
+    const page = await listCatalogPage(0, 200);
+    expect(page.items[0]?.costPrice).toBe(4000);
   });
 
   it('excludes Bin rows from the other Company\'s warehouse tree — real bug this mirrors: listWarehouses() had to fix the same "Toko - NPG" leak (see its doc comment)', async () => {

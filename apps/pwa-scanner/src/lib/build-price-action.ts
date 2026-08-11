@@ -5,9 +5,11 @@ export interface EditPriceFormFields {
   uom: string;
   retailPrice: string;
   grosirPrice: string;
+  costPrice: string;
+  warehouse?: string;
 }
 
-/** Validates and converts raw form input into an UpdateItemPriceAction, or returns a Bahasa Indonesia error message. Blank fields are omitted (not sent as 0), so editing only one of Retail/Grosir never overwrites the other. */
+/** Validates and converts raw form input into an UpdateItemPriceAction, or returns a Bahasa Indonesia error message. Blank fields are omitted (not sent as 0), so editing only some of Retail/Grosir/Modal never overwrites the others. */
 export function buildUpdatePriceAction(
   fields: EditPriceFormFields,
 ): UpdateItemPriceAction | string {
@@ -19,6 +21,7 @@ export function buildUpdatePriceAction(
 
   const retailRaw = fields.retailPrice.trim();
   const grosirRaw = fields.grosirPrice.trim();
+  const costRaw = fields.costPrice.trim();
 
   let retailPrice: number | undefined;
   if (retailRaw) {
@@ -36,8 +39,16 @@ export function buildUpdatePriceAction(
     }
   }
 
-  if (retailPrice === undefined && grosirPrice === undefined) {
-    return 'Harga Retail atau Harga Grosir wajib diisi salah satu';
+  let costPrice: number | undefined;
+  if (costRaw) {
+    costPrice = Number(costRaw);
+    if (!Number.isFinite(costPrice) || costPrice <= 0) {
+      return 'Harga Modal harus lebih dari 0';
+    }
+  }
+
+  if (retailPrice === undefined && grosirPrice === undefined && costPrice === undefined) {
+    return 'Harga Retail, Harga Grosir, atau Harga Modal wajib diisi salah satu';
   }
 
   return {
@@ -46,5 +57,7 @@ export function buildUpdatePriceAction(
     uom,
     ...(retailPrice !== undefined ? { retailPrice } : {}),
     ...(grosirPrice !== undefined ? { grosirPrice } : {}),
+    ...(costPrice !== undefined ? { costPrice } : {}),
+    ...(fields.warehouse?.trim() ? { warehouse: fields.warehouse.trim() } : {}),
   };
 }

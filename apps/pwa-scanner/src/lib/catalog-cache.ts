@@ -30,6 +30,7 @@ export interface CatalogItem {
   itemName: string;
   stockUom: string;
   retailPrice: number | null;
+  costPrice: number | null;
   stockQty: number;
   stockByWarehouse: { warehouse: string; qty: number }[];
 }

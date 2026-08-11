@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { buildUpdatePriceAction } from './build-price-action';
 
-const baseFields = { itemCode: '', uom: '', retailPrice: '', grosirPrice: '' };
+const baseFields = { itemCode: '', uom: '', retailPrice: '', grosirPrice: '', costPrice: '' };
 
 describe('buildUpdatePriceAction', () => {
   it('builds a valid action with only Retail price set', () => {
@@ -46,10 +46,33 @@ describe('buildUpdatePriceAction', () => {
     expect(result).not.toHaveProperty('grosirPrice');
   });
 
-  it('rejects when neither price field is filled in', () => {
+  it('rejects when no price field is filled in', () => {
     expect(buildUpdatePriceAction({ ...baseFields, itemCode: 'X', uom: 'Pcs' })).toBe(
-      'Harga Retail atau Harga Grosir wajib diisi salah satu',
+      'Harga Retail, Harga Grosir, atau Harga Modal wajib diisi salah satu',
     );
+  });
+
+  it('builds a valid action with only Harga Modal set, including an explicit warehouse', () => {
+    const result = buildUpdatePriceAction({
+      ...baseFields,
+      itemCode: 'X',
+      uom: 'Pcs',
+      costPrice: '3500',
+      warehouse: 'Gudang Utama - TH',
+    });
+    expect(result).toEqual({
+      type: 'update-item-price',
+      itemCode: 'X',
+      uom: 'Pcs',
+      costPrice: 3500,
+      warehouse: 'Gudang Utama - TH',
+    });
+  });
+
+  it('rejects a zero or negative Harga Modal', () => {
+    expect(
+      buildUpdatePriceAction({ ...baseFields, itemCode: 'X', uom: 'Pcs', costPrice: '0' }),
+    ).toBe('Harga Modal harus lebih dari 0');
   });
 
   it('rejects a zero or negative Retail price', () => {

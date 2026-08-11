@@ -185,6 +185,7 @@ interface BinRecord {
   item_code: string;
   warehouse: string;
   actual_qty: number;
+  valuation_rate: number;
 }
 
 interface WarehouseRecord {
@@ -267,10 +268,16 @@ export async function listCatalogPage(offset: number, limit: number): Promise<Ca
   // breakdown for Daftar Produk, scoped to Hermes' own company only.
   const bins = await erpNextClient.list<BinRecord>('Bin', {
     filters: [['item_code', 'in', itemCodes]],
-    fields: ['item_code', 'warehouse', 'actual_qty'],
+    fields: ['item_code', 'warehouse', 'actual_qty', 'valuation_rate'],
     limit_page_length: String(itemCodes.length * 10),
   });
   const stockByWarehouseByItemCode = new Map<string, { warehouse: string; qty: number }[]>();
+  // "Modal" (cost price) for the browse list — Bin.valuation_rate is
+  // per-warehouse, so most items with stock in only one place have one
+  // unambiguous answer; for the rare item stocked in more than one
+  // warehouse, the store's single default warehouse wins if it has stock,
+  // otherwise whichever warehouse's rate was seen first.
+  const costPriceByItemCode = new Map<string, number>();
   for (const bin of bins) {
     if (!ownWarehouses.has(bin.warehouse)) {
       continue;
@@ -278,6 +285,13 @@ export async function listCatalogPage(offset: number, limit: number): Promise<Ca
     const existing = stockByWarehouseByItemCode.get(bin.item_code) ?? [];
     existing.push({ warehouse: bin.warehouse, qty: bin.actual_qty });
     stockByWarehouseByItemCode.set(bin.item_code, existing);
+
+    if (
+      bin.warehouse === env.ERPNEXT_DEFAULT_WAREHOUSE ||
+      !costPriceByItemCode.has(bin.item_code)
+    ) {
+      costPriceByItemCode.set(bin.item_code, bin.valuation_rate);
+    }
   }
 
   return {
@@ -290,6 +304,7 @@ export async function listCatalogPage(offset: number, limit: number): Promise<Ca
         itemName: item.item_name,
         stockUom: item.stock_uom,
         retailPrice: priceByItemCode.get(item.item_code) ?? null,
+        costPrice: costPriceByItemCode.get(item.item_code) ?? null,
         stockQty: stockByWarehouse.reduce((sum, w) => sum + w.qty, 0),
         stockByWarehouse,
       };

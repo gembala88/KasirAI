@@ -162,6 +162,61 @@ export async function uploadCompanyLogo(
 }
 
 /**
+ * Receipt customization (header/footer text, logo) — separate from
+ * StoreProfile above: these three are receipt-content fields, not general
+ * store info, and `custom_receipt_logo_url` is deliberately NOT the same as
+ * StoreProfile's `logoUrl` (Company's native `company_logo` attach field).
+ * Real bug found live: `company_logo` stores a path relative to ERPNext
+ * (`/files/...` or `/private/files/...`), but the printed receipt HTML is
+ * rendered into an iframe on Hermes' own origin — a relative path there
+ * resolves against the wrong origin and 404s, and a private file needs an
+ * ERPNext session the iframe never has either way. custom_receipt_logo_url
+ * requires a real absolute URL instead, so it always resolves correctly
+ * regardless of where the receipt is displayed or printed from.
+ */
+export interface ReceiptCustomization {
+  headerText: string;
+  footerText: string;
+  logoUrl: string;
+}
+
+interface CompanyReceiptCustomizationDoc {
+  custom_receipt_header?: string;
+  custom_receipt_footer?: string;
+  custom_receipt_logo_url?: string;
+}
+
+export async function getReceiptCustomization(): Promise<ReceiptCustomization> {
+  const company = await erpNextClient.get<CompanyReceiptCustomizationDoc>(
+    'Company',
+    env.ERPNEXT_DEFAULT_COMPANY,
+  );
+  return {
+    headerText: company.custom_receipt_header ?? '',
+    footerText: company.custom_receipt_footer ?? '',
+    logoUrl: company.custom_receipt_logo_url ?? '',
+  };
+}
+
+export async function updateReceiptCustomization(input: {
+  headerText: string;
+  footerText: string;
+  logoUrl: string;
+}): Promise<ReceiptCustomization> {
+  if (input.logoUrl && !/^https?:\/\//i.test(input.logoUrl)) {
+    throw new ValidationError(
+      'Logo URL harus berupa alamat lengkap (dimulai dengan http:// atau https://)',
+    );
+  }
+  await erpNextClient.update('Company', env.ERPNEXT_DEFAULT_COMPANY, {
+    custom_receipt_header: input.headerText,
+    custom_receipt_footer: input.footerText,
+    custom_receipt_logo_url: input.logoUrl,
+  });
+  return getReceiptCustomization();
+}
+
+/**
  * QRIS/Transfer confirmation screen (spec Group 2): the same static
  * payment config already used to build the WhatsApp channel's payment
  * instructions (see whatsapp/application/payment-reply.ts) — one store

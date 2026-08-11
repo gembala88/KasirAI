@@ -521,6 +521,22 @@ export async function uploadStoreLogo(file: File): Promise<StoreProfile> {
   return response.json() as Promise<StoreProfile>;
 }
 
+export interface ReceiptCustomization {
+  headerText: string;
+  footerText: string;
+  logoUrl: string;
+}
+
+export function fetchReceiptCustomization(): Promise<ReceiptCustomization> {
+  return get('/api/v1/settings/receipt-customization');
+}
+
+export function updateReceiptCustomization(
+  input: ReceiptCustomization,
+): Promise<ReceiptCustomization> {
+  return put('/api/v1/settings/receipt-customization', input);
+}
+
 // --- Kasbon / credit sale (Group 3) ---
 
 export interface CustomerSearchResult {

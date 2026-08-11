@@ -35,8 +35,11 @@ export {
   getStoreProfile,
   updateStoreProfile,
   uploadCompanyLogo,
+  getReceiptCustomization,
+  updateReceiptCustomization,
   LogoUploadError,
   type ReceiptTemplate,
   type PaymentInfo,
   type StoreProfile,
+  type ReceiptCustomization,
 } from './settings.js';

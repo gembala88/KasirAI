@@ -6,7 +6,7 @@ import TambahProdukBaru from './TambahProdukBaru';
 import { fetchWarehouses, type WarehouseOption } from '../lib/api';
 import { buildAction, type StockActionType } from '../lib/build-action';
 import { loadWithCacheFallback } from '../lib/cached-lookup';
-import { statusBadge } from '../lib/format';
+import { statusBadge, stripHtmlTags } from '../lib/format';
 import { listQueuedActions, QUEUE_CHANGED_EVENT, type QueuedAction } from '../lib/offline-queue';
 import { submitOrQueue, syncPendingQueue } from '../lib/sync';
 import type { ScanAction, ScanActionType } from '../lib/types';
@@ -326,7 +326,7 @@ export default function WarehouseScan() {
                 <li key={item.uuid}>
                   {ACTION_LABELS[item.actionType]} — {queueLineDescription(item)}{' '}
                   <span className={badge.className}>{badge.label}</span>
-                  {item.lastError && <div className="hint">{item.lastError}</div>}
+                  {item.lastError && <div className="hint">{stripHtmlTags(item.lastError)}</div>}
                 </li>
               );
             })}

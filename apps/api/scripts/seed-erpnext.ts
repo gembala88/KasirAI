@@ -80,6 +80,34 @@ const COMPANY_CUSTOM_FIELDS: CustomFieldSpec[] = [
     description:
       "Which of the 3 Hermes receipt layouts to print — also changeable from the app's Settings screen.",
   },
+  {
+    fieldname: 'custom_receipt_header',
+    label: 'Receipt Header Text',
+    fieldtype: 'Small Text',
+    insertAfter: 'custom_receipt_template',
+    description:
+      'Shown above the store name on every receipt (e.g. a tagline) — also editable from Settings.',
+  },
+  {
+    fieldname: 'custom_receipt_footer',
+    label: 'Receipt Footer Text',
+    fieldtype: 'Small Text',
+    insertAfter: 'custom_receipt_header',
+    description:
+      'Shown at the bottom of every receipt, replacing the default "Terima kasih" line — also editable from Settings.',
+  },
+  {
+    fieldname: 'custom_receipt_logo_url',
+    label: 'Receipt Logo URL',
+    fieldtype: 'Data',
+    insertAfter: 'custom_receipt_footer',
+    description:
+      // A plain hosted URL, not the native company_logo attach field — same
+      // reasoning as QRIS_STATIC_IMAGE_URL: a private ERPNext-hosted file
+      // (the default for company_logo) needs an authenticated session to
+      // load, which the receipt iframe never has, so it silently 403s.
+      'Image URL shown at the top of every receipt — must be a publicly reachable URL (a private ERPNext file will not display). Also editable from Settings.',
+  },
 ];
 
 const CUSTOMER_CUSTOM_FIELDS: CustomFieldSpec[] = [
@@ -195,7 +223,7 @@ const MODES_OF_PAYMENT: Array<{
 // store's real WhatsApp number and Company.custom_store_address for them to
 // appear correctly — see DEPLOY_CHECKLIST.md.
 const RECEIPT_HEADER_LOOKUP =
-  '{% set company = frappe.db.get_value("Company", doc.company, ["company_name", "custom_store_address", "phone_no", "website", "company_logo"], as_dict=True) %}';
+  '{% set company = frappe.db.get_value("Company", doc.company, ["company_name", "custom_store_address", "phone_no", "website", "company_logo", "custom_receipt_header", "custom_receipt_footer", "custom_receipt_logo_url"], as_dict=True) %}';
 
 const RECEIPT_ITEMS_TABLE = `<table style="width:100%; border-collapse: collapse; font-size: 12px;">
     <thead>
@@ -243,6 +271,12 @@ const RECEIPT_PRINT_FORMAT_STANDARD_NAME = 'Hermes Struk Kasir';
 const RECEIPT_PRINT_FORMAT_STANDARD_HTML = `${RECEIPT_HEADER_LOOKUP}
 <div style="font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; color: #171717; max-width: 380px; margin: 0 auto;">
   <div style="text-align:center; margin-bottom: 10px;">
+    {% if company.custom_receipt_logo_url %}
+    <img src="{{ company.custom_receipt_logo_url }}" style="max-height:48px; max-width:160px; margin-bottom:6px;" />
+    {% endif %}
+    {% if company.custom_receipt_header %}
+    <div style="font-size:12px; color:#666; margin-bottom:2px;">{{ company.custom_receipt_header }}</div>
+    {% endif %}
     <div style="font-size:15px; font-weight:700;">{{ company.company_name }}</div>
     {% if company.custom_store_address %}
     <div style="font-size:11px; color:#666;">{{ company.custom_store_address }}</div>
@@ -261,7 +295,7 @@ const RECEIPT_PRINT_FORMAT_STANDARD_HTML = `${RECEIPT_HEADER_LOOKUP}
   ${RECEIPT_ITEMS_TABLE}
   ${RECEIPT_TOTALS_BLOCK}
   <div style="text-align:center; margin-top:16px; font-size:12px; color:#666;">
-    Terima kasih atas kunjungan Anda!
+    {% if company.custom_receipt_footer %}{{ company.custom_receipt_footer }}{% else %}Terima kasih atas kunjungan Anda!{% endif %}
   </div>
 </div>
 `;
@@ -273,6 +307,12 @@ const RECEIPT_PRINT_FORMAT_MINIMAL_NAME = 'Hermes Struk Kasir - Minimal';
 const RECEIPT_PRINT_FORMAT_MINIMAL_HTML = `${RECEIPT_HEADER_LOOKUP}
 <div style="font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: #171717; max-width: 320px; margin: 0 auto;">
   <div style="text-align:center; margin-bottom: 6px;">
+    {% if company.custom_receipt_logo_url %}
+    <img src="{{ company.custom_receipt_logo_url }}" style="max-height:32px; max-width:120px; margin-bottom:4px;" />
+    {% endif %}
+    {% if company.custom_receipt_header %}
+    <div style="font-size:9px; color:#666;">{{ company.custom_receipt_header }}</div>
+    {% endif %}
     <div style="font-size:13px; font-weight:700;">{{ company.company_name }}</div>
     <div style="font-size:10px; color:#666;">{{ doc.name }} · {{ frappe.utils.formatdate(doc.posting_date, "dd-MM-yyyy") }}</div>
   </div>
@@ -294,6 +334,9 @@ const RECEIPT_PRINT_FORMAT_MINIMAL_HTML = `${RECEIPT_HEADER_LOOKUP}
     <span>{{ pmt.mode_of_payment }}</span><span>Rp {{ "{:,.0f}".format(pmt.amount)|replace(",", ".") }}</span>
   </div>
   {% endfor %}
+  {% if company.custom_receipt_footer %}
+  <div style="text-align:center; margin-top:6px; font-size:9px; color:#666;">{{ company.custom_receipt_footer }}</div>
+  {% endif %}
 </div>
 `;
 
@@ -304,8 +347,11 @@ const RECEIPT_PRINT_FORMAT_DETAILED_NAME = 'Hermes Struk Kasir - Detail';
 const RECEIPT_PRINT_FORMAT_DETAILED_HTML = `${RECEIPT_HEADER_LOOKUP}
 <div style="font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; color: #171717; max-width: 380px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px; padding: 14px;">
   <div style="text-align:center; margin-bottom: 10px;">
-    {% if company.company_logo %}
-    <img src="{{ company.company_logo }}" style="max-height:56px; max-width:180px; margin-bottom:8px;" />
+    {% if company.custom_receipt_logo_url %}
+    <img src="{{ company.custom_receipt_logo_url }}" style="max-height:56px; max-width:180px; margin-bottom:8px;" />
+    {% endif %}
+    {% if company.custom_receipt_header %}
+    <div style="font-size:12px; color:#666; margin-bottom:2px;">{{ company.custom_receipt_header }}</div>
     {% endif %}
     <div style="font-size:17px; font-weight:700;">{{ company.company_name }}</div>
     {% if company.custom_store_address %}
@@ -328,7 +374,7 @@ const RECEIPT_PRINT_FORMAT_DETAILED_HTML = `${RECEIPT_HEADER_LOOKUP}
   ${RECEIPT_ITEMS_TABLE}
   ${RECEIPT_TOTALS_BLOCK}
   <div style="text-align:center; margin-top:16px; font-size:12px; color:#666;">
-    Terima kasih atas kunjungan Anda di {{ company.company_name }}!
+    {% if company.custom_receipt_footer %}{{ company.custom_receipt_footer }}{% else %}Terima kasih atas kunjungan Anda di {{ company.company_name }}!{% endif %}
     {% if company.phone_no %}<br />Ada pertanyaan? WhatsApp kami di {{ company.phone_no }}.{% endif %}
   </div>
 </div>

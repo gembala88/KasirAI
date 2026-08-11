@@ -6,6 +6,7 @@ import {
   overdueBadge,
   paymentStatusBadge,
   statusBadge,
+  stripHtmlTags,
 } from './format';
 
 describe('formatQty', () => {
@@ -66,6 +67,22 @@ describe('overdueBadge', () => {
       label: 'Belum Jatuh Tempo',
       className: 'status-badge status-badge--pending',
     });
+  });
+});
+
+describe('stripHtmlTags', () => {
+  it('removes HTML tags ERPNext embeds in its own validation messages', () => {
+    expect(
+      stripHtmlTags(
+        "ERPNext request failed: Baris 1: Kuantitas (2.75) tidak boleh pecahan. Untuk mengizinkan ini, nonaktifkan '<strong>Harus Nomor Utuh</strong>' di UOM <strong>Pcs</strong>.",
+      ),
+    ).toBe(
+      "ERPNext request failed: Baris 1: Kuantitas (2.75) tidak boleh pecahan. Untuk mengizinkan ini, nonaktifkan 'Harus Nomor Utuh' di UOM Pcs.",
+    );
+  });
+
+  it('leaves plain text with no markup unchanged', () => {
+    expect(stripHtmlTags('Koneksi terputus, coba lagi.')).toBe('Koneksi terputus, coba lagi.');
   });
 });
 

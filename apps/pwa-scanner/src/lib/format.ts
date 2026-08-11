@@ -81,3 +81,15 @@ export function overdueBadge(overdue: boolean): { label: string; className: stri
     ? { label: 'Jatuh Tempo', className: 'status-badge status-badge--failed' }
     : { label: 'Belum Jatuh Tempo', className: 'status-badge status-badge--pending' };
 }
+
+/**
+ * Offline-queue error text is ERPNext's raw exception message, which often
+ * embeds its own HTML (e.g. "<strong>Harus Nomor Utuh</strong>") for its
+ * own desk UI. React already escapes this safely as plain text, but the
+ * literal tags were still visible to the cashier — a real bug found live.
+ * Strips markup without attempting to translate or reword ERPNext's own
+ * message, which stays in whatever language ERPNext produced it in.
+ */
+export function stripHtmlTags(text: string): string {
+  return text.replace(/<[^>]*>/g, '');
+}

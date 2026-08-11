@@ -98,8 +98,13 @@ export interface KasbonSaleAction {
 /**
  * "Edit from Daftar Produk" (price-only — see sales-pos/application's
  * updateItemPrice doc comment for why a UOM change isn't offered here).
- * At least one of retailPrice/grosirPrice is required — enforced in
- * sync.routes.ts, since a request with neither would be a no-op write.
+ * At least one of retailPrice/grosirPrice/costPrice is required — enforced
+ * in sync.routes.ts, since a request with none would be a no-op write.
+ * costPrice is a genuinely different write underneath (a Stock
+ * Reconciliation's valuation_rate, not an Item Price row — see
+ * inventory/application/opname.ts's updateItemCostPrice) but stays one
+ * offline-queue action so an owner's single "Simpan" edit can't half-apply
+ * if the connection drops between two separate submits.
  */
 export interface UpdateItemPriceAction {
   type: 'update-item-price';
@@ -107,6 +112,8 @@ export interface UpdateItemPriceAction {
   uom: string;
   retailPrice?: number | undefined;
   grosirPrice?: number | undefined;
+  costPrice?: number | undefined;
+  warehouse?: string | undefined;
 }
 
 export type OfflineAction =

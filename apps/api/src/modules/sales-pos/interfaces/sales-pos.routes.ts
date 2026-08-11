@@ -10,6 +10,7 @@ import {
   getItemUomPrices,
   getPaymentInfo,
   getProductPrice,
+  getReceiptCustomization,
   getReceiptHtml,
   getReceiptTemplate,
   getStoreProfile,
@@ -24,6 +25,7 @@ import {
   RECEIPT_TEMPLATES,
   searchProducts,
   setReceiptTemplate,
+  updateReceiptCustomization,
   updateStoreProfile,
   uploadCompanyLogo,
 } from '../application/index.js';
@@ -87,6 +89,12 @@ const receiptTemplateSchema = z.object({
 const storeProfileSchema = z.object({
   phone: z.string().max(50),
   address: z.string().max(500),
+});
+
+const receiptCustomizationSchema = z.object({
+  headerText: z.string().max(200),
+  footerText: z.string().max(300),
+  logoUrl: z.string().max(500),
 });
 
 const POS_ROLES = ['Owner', 'Manager', 'Cashier'] as const;
@@ -338,6 +346,24 @@ export function registerSalesPosRoutes(app: FastifyInstance): void {
       }
       const buffer = await file.toBuffer();
       return uploadCompanyLogo(buffer, file.filename, file.mimetype);
+    },
+  );
+
+  app.get(
+    '/api/v1/settings/receipt-customization',
+    { preHandler: requireRole(...SETTINGS_ROLES) },
+    async () => getReceiptCustomization(),
+  );
+
+  app.put(
+    '/api/v1/settings/receipt-customization',
+    { preHandler: requireRole(...SETTINGS_ROLES) },
+    async (request) => {
+      const parsed = receiptCustomizationSchema.safeParse(request.body);
+      if (!parsed.success) {
+        throw new ValidationError(parsed.error.issues.map((i) => i.message).join('; '));
+      }
+      return updateReceiptCustomization(parsed.data);
     },
   );
 }

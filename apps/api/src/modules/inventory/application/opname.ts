@@ -66,3 +66,37 @@ export async function submitStockOpname(
 
   return { reconciliationName: reconciliation.name, warehouse, variances };
 }
+
+/**
+ * "Edit Harga Modal" (Daftar Produk) — adjusts an item's cost/valuation
+ * without moving any stock. There is no direct `Item.valuation_rate` field
+ * to write in ERPNext (it's a read-only rollup of the Stock Ledger); the
+ * native mechanism for a no-quantity-change valuation correction is the
+ * same Stock Reconciliation submitStockOpname uses above, with `qty` set
+ * to the *current* on-hand quantity (unchanged) and a `valuation_rate` on
+ * the row instead. Real caveat worth knowing: if the item currently has
+ * zero stock in this warehouse, this has no lasting effect — the next
+ * Material Receipt sets the moving-average valuation from its own
+ * basic_rate, not from this reconciliation, since 0 qty carries no prior
+ * value forward.
+ */
+export async function updateItemCostPrice(
+  itemCode: string,
+  warehouse: string,
+  costPrice: number,
+): Promise<{ reconciliationName: string; itemCode: string; warehouse: string; qty: number }> {
+  const qty = await getSystemQty(itemCode, warehouse);
+
+  const reconciliation = await erpNextClient.create<{ name: string }>('Stock Reconciliation', {
+    company: env.ERPNEXT_DEFAULT_COMPANY,
+    purpose: 'Stock Reconciliation',
+    items: [{ item_code: itemCode, warehouse, qty, valuation_rate: costPrice }],
+  });
+
+  await erpNextClient.update('Stock Reconciliation', reconciliation.name, { docstatus: 1 });
+
+  stockCache.invalidate(stockCacheKey(itemCode, warehouse));
+  stockCache.invalidate(stockCacheKey(itemCode));
+
+  return { reconciliationName: reconciliation.name, itemCode, warehouse, qty };
+}

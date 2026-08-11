@@ -21,10 +21,12 @@ const EDIT_PRICE_ROLES = new Set(['Owner', 'Manager']);
  * offline catalog cache Kasir search already syncs — no new network calls,
  * works offline, and never gets out of sync with what the cashier sees.
  *
- * Edit (Retail/Grosir price only — see build-price-action.ts's doc comment
- * for why a UOM correction isn't offered here): opens a small always-online
- * form, prefilled from a live per-UOM price lookup since the offline cache
- * only ever has Retail.
+ * Edit (Retail/Grosir/Modal price only — see build-price-action.ts's doc
+ * comment for why a UOM correction isn't offered here): opens a small
+ * always-online form. Retail/Grosir are prefilled from a live per-UOM price
+ * lookup since the offline cache only ever has Retail; Modal (cost price)
+ * is prefilled straight from the cached item, since the catalog cache
+ * already carries each item's current valuation_rate.
  */
 export default function DaftarProduk() {
   const [items, setItems] = useState<CatalogItem[]>([]);
@@ -66,15 +68,17 @@ export default function DaftarProduk() {
         </p>
       )}
 
-      <label>
-        Cari Produk
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Nama atau kode barang"
-          inputMode="search"
-        />
-      </label>
+      <div className="scan-form">
+        <label>
+          Cari Produk
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Nama atau kode barang"
+            inputMode="search"
+          />
+        </label>
+      </div>
 
       {items.length === 0 ? (
         <p className="hint">Belum ada data produk tersimpan — sinkron ulang saat online.</p>
@@ -115,6 +119,9 @@ export default function DaftarProduk() {
                       </span>
                     )}
                     <span>{item.retailPrice != null ? formatRupiah(item.retailPrice) : '—'}</span>
+                    <span className="hint">
+                      Modal: {item.costPrice != null ? formatRupiah(item.costPrice) : '—'}
+                    </span>
                     {canEditPrice && (
                       <button
                         type="button"
@@ -166,6 +173,7 @@ function EditPriceDialog({
 }): React.JSX.Element {
   const [retailPrice, setRetailPrice] = useState('');
   const [grosirPrice, setGrosirPrice] = useState('');
+  const [costPrice, setCostPrice] = useState(item.costPrice != null ? String(item.costPrice) : '');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -199,6 +207,7 @@ function EditPriceDialog({
       uom: item.stockUom,
       retailPrice,
       grosirPrice,
+      costPrice,
     };
     const built = buildUpdatePriceAction(fields);
     if (typeof built === 'string') {
@@ -250,6 +259,15 @@ function EditPriceDialog({
               <input
                 value={grosirPrice}
                 onChange={(e) => setGrosirPrice(e.target.value)}
+                inputMode="decimal"
+                placeholder="0"
+              />
+            </label>
+            <label>
+              Harga Modal
+              <input
+                value={costPrice}
+                onChange={(e) => setCostPrice(e.target.value)}
                 inputMode="decimal"
                 placeholder="0"
               />

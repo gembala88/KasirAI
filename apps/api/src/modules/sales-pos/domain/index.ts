@@ -32,6 +32,8 @@ export interface CatalogItem {
   itemName: string;
   stockUom: string;
   retailPrice: number | null;
+  /** "Harga Modal" — Bin.valuation_rate from the item's stocked warehouse, null if it has no stock anywhere yet (a fresh item's valuation is only set on its first stock movement). */
+  costPrice: number | null;
   /** Sum of stockByWarehouse — Hermes' own company's warehouses only (see listCatalogPage). */
   stockQty: number;
   stockByWarehouse: { warehouse: string; qty: number }[];

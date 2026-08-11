@@ -1,10 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import {
+  fetchReceiptCustomization,
   fetchReceiptTemplate,
   fetchStoreProfile,
+  updateReceiptCustomization,
   updateReceiptTemplate,
   updateStoreProfile,
   uploadStoreLogo,
+  type ReceiptCustomization,
   type ReceiptTemplate,
   type StoreProfile,
 } from '../lib/api';
@@ -56,6 +59,15 @@ export default function Settings() {
   const [logoBroken, setLogoBroken] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [customization, setCustomization] = useState<ReceiptCustomization | null>(null);
+  const [headerText, setHeaderText] = useState('');
+  const [footerText, setFooterText] = useState('');
+  const [logoUrl, setLogoUrl] = useState('');
+  const [customizationLoading, setCustomizationLoading] = useState(true);
+  const [customizationSaving, setCustomizationSaving] = useState(false);
+  const [customizationError, setCustomizationError] = useState<string | null>(null);
+  const [customizationMessage, setCustomizationMessage] = useState<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     fetchReceiptTemplate()
@@ -92,6 +104,28 @@ export default function Settings() {
       })
       .finally(() => {
         if (!cancelled) setProfileLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchReceiptCustomization()
+      .then((result) => {
+        if (!cancelled) {
+          setCustomization(result);
+          setHeaderText(result.headerText);
+          setFooterText(result.footerText);
+          setLogoUrl(result.logoUrl);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setCustomizationError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setCustomizationLoading(false);
       });
     return () => {
       cancelled = true;
@@ -147,8 +181,29 @@ export default function Settings() {
     }
   }
 
+  async function handleSaveCustomization(): Promise<void> {
+    setCustomizationSaving(true);
+    setCustomizationError(null);
+    setCustomizationMessage(null);
+    try {
+      const result = await updateReceiptCustomization({ headerText, footerText, logoUrl });
+      setCustomization(result);
+      setCustomizationMessage('Kustomisasi struk disimpan.');
+    } catch (err) {
+      setCustomizationError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCustomizationSaving(false);
+    }
+  }
+
   const profileChanged =
     profile != null && (phone !== profile.phone || address !== profile.address);
+
+  const customizationChanged =
+    customization != null &&
+    (headerText !== customization.headerText ||
+      footerText !== customization.footerText ||
+      logoUrl !== customization.logoUrl);
 
   return (
     <>
@@ -159,7 +214,7 @@ export default function Settings() {
       {profileError && <p className="error-box">{profileError}</p>}
 
       {!profileLoading && profile && (
-        <>
+        <form className="scan-form" onSubmit={(e) => e.preventDefault()}>
           <label>
             Nama Toko
             <input value={profile.companyName} disabled />
@@ -218,7 +273,60 @@ export default function Settings() {
             {logoUploading && <p className="hint">Mengunggah logo…</p>}
             {logoError && <p className="error-box">{logoError}</p>}
           </label>
-        </>
+        </form>
+      )}
+
+      <h3 className="section-label">Kustomisasi Struk</h3>
+      {customizationLoading && <p className="hint">Memuat…</p>}
+      {customizationError && <p className="error-box">{customizationError}</p>}
+
+      {!customizationLoading && customization && (
+        <form className="scan-form" onSubmit={(e) => e.preventDefault()}>
+          <label>
+            Header Teks (di atas nama toko)
+            <input
+              value={headerText}
+              onChange={(e) => setHeaderText(e.target.value)}
+              placeholder="Mis. Toko Sembako Terpercaya"
+              maxLength={200}
+            />
+          </label>
+
+          <label>
+            Footer Teks (di bawah struk)
+            <textarea
+              value={footerText}
+              onChange={(e) => setFooterText(e.target.value)}
+              rows={2}
+              placeholder='Kosongkan untuk pesan bawaan ("Terima kasih atas kunjungan Anda!")'
+              maxLength={300}
+            />
+          </label>
+
+          <label>
+            Logo URL (untuk struk)
+            <input
+              value={logoUrl}
+              onChange={(e) => setLogoUrl(e.target.value)}
+              placeholder="https://…"
+              maxLength={500}
+            />
+            <span className="hint">
+              Harus alamat gambar lengkap (https://…) yang bisa diakses publik — beda dari
+              &quot;Logo Toko&quot; di atas, yang hanya dipakai ERPNext sendiri. Kosongkan jika
+              belum ada.
+            </span>
+          </label>
+
+          {customizationMessage && <p className="message">{customizationMessage}</p>}
+          <button
+            type="button"
+            onClick={() => void handleSaveCustomization()}
+            disabled={customizationSaving || !customizationChanged}
+          >
+            {customizationSaving ? 'Menyimpan…' : 'Simpan Kustomisasi'}
+          </button>
+        </form>
       )}
 
       <h3 className="section-label">Template Struk</h3>
@@ -266,8 +374,8 @@ export default function Settings() {
 
           {printFormat && (
             <p className="hint">
-              Ingin ubah tata letak, judul, atau pesan penutup struk? Itu diatur langsung di ERPNext
-              (bukan di sini), supaya bisa diubah kapan saja tanpa perlu update aplikasi.{' '}
+              Header, footer, dan logo struk sudah bisa diatur di atas. Untuk mengubah tata letak
+              atau susunan yang lebih detail, itu diatur langsung di ERPNext.{' '}
               <a
                 href={`${window.location.origin}/erp/app/print-format/${encodeURIComponent(printFormat)}`}
                 target="_blank"

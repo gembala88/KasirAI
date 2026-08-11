@@ -21,7 +21,7 @@ import {
 import CameraScanner from './CameraScanner';
 import ReceiptPreview from './ReceiptPreview';
 import { getLastSyncedAt } from '../lib/catalog-cache';
-import { formatQty, formatRupiah, formatSyncedAt, statusBadge } from '../lib/format';
+import { formatQty, formatRupiah, formatSyncedAt, statusBadge, stripHtmlTags } from '../lib/format';
 import { listQueuedActions, QUEUE_CHANGED_EVENT, type QueuedAction } from '../lib/offline-queue';
 import { pressQtyKey } from '../lib/qty-keypad';
 import { submitOrQueue, syncPendingQueue } from '../lib/sync';
@@ -577,10 +577,12 @@ export default function Kasir() {
           </div>
         </div>
 
-        <label>
-          ID Pelanggan (kosongkan untuk Walk-in / Retail)
-          <input value={customerId} onChange={(e) => setCustomerId(e.target.value)} />
-        </label>
+        <div className="scan-form">
+          <label>
+            ID Pelanggan (kosongkan untuk Walk-in / Retail)
+            <input value={customerId} onChange={(e) => setCustomerId(e.target.value)} />
+          </label>
+        </div>
 
         {(error ?? searchError) && <p className="error-box">{error ?? searchError}</p>}
         {message && <p className="message">{message}</p>}
@@ -613,7 +615,7 @@ export default function Kasir() {
                     {formatRupiah(amount)} ({action.lines.length} barang)
                     {action.type === 'kasbon-sale' ? ' · Kasbon' : ''}{' '}
                     <span className={badge.className}>{badge.label}</span>
-                    {item.lastError && <div className="hint">{item.lastError}</div>}
+                    {item.lastError && <div className="hint">{stripHtmlTags(item.lastError)}</div>}
                   </li>
                 );
               })}
@@ -844,14 +846,16 @@ export default function Kasir() {
                   </div>
                 ) : (
                   <>
-                    <label>
-                      Cari Pelanggan (nama atau nomor HP)
-                      <input
-                        value={kasbonQuery}
-                        onChange={(e) => setKasbonQuery(e.target.value)}
-                        placeholder="Contoh: Budi atau 0812…"
-                      />
-                    </label>
+                    <div className="scan-form">
+                      <label>
+                        Cari Pelanggan (nama atau nomor HP)
+                        <input
+                          value={kasbonQuery}
+                          onChange={(e) => setKasbonQuery(e.target.value)}
+                          placeholder="Contoh: Budi atau 0812…"
+                        />
+                      </label>
+                    </div>
                     {kasbonSearching && <p className="hint">Mencari…</p>}
                     {!kasbonSearching &&
                       kasbonQuery.trim().length >= 2 &&

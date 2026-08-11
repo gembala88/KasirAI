@@ -20,6 +20,8 @@ const {
   getPaymentInfo,
   getStoreProfile,
   updateStoreProfile,
+  getReceiptCustomization,
+  updateReceiptCustomization,
 } = await import('../src/modules/sales-pos/application/settings.js');
 
 describe('getReceiptTemplate', () => {
@@ -146,5 +148,78 @@ describe('updateStoreProfile', () => {
     });
     const updateCall = erpNextClientMock.update.mock.calls[0];
     expect(updateCall?.[2]).not.toHaveProperty('company_name');
+  });
+});
+
+describe('getReceiptCustomization', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('reads custom_receipt_header/footer/logo_url from the Company doc', async () => {
+    erpNextClientMock.get.mockResolvedValue({
+      custom_receipt_header: 'Toko Sembako Terpercaya',
+      custom_receipt_footer: 'Barang yang sudah dibeli tidak dapat dikembalikan.',
+      custom_receipt_logo_url: 'https://example.com/logo.png',
+    });
+
+    const result = await getReceiptCustomization();
+
+    expect(result).toEqual({
+      headerText: 'Toko Sembako Terpercaya',
+      footerText: 'Barang yang sudah dibeli tidak dapat dikembalikan.',
+      logoUrl: 'https://example.com/logo.png',
+    });
+  });
+
+  it('falls back to empty strings for fields never set', async () => {
+    erpNextClientMock.get.mockResolvedValue({});
+
+    expect(await getReceiptCustomization()).toEqual({
+      headerText: '',
+      footerText: '',
+      logoUrl: '',
+    });
+  });
+});
+
+describe('updateReceiptCustomization', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('writes header/footer/logo_url to the Company doc', async () => {
+    erpNextClientMock.get.mockResolvedValue({
+      custom_receipt_header: 'Header baru',
+      custom_receipt_footer: 'Footer baru',
+      custom_receipt_logo_url: 'https://example.com/new-logo.png',
+    });
+
+    await updateReceiptCustomization({
+      headerText: 'Header baru',
+      footerText: 'Footer baru',
+      logoUrl: 'https://example.com/new-logo.png',
+    });
+
+    expect(erpNextClientMock.update).toHaveBeenCalledWith('Company', expect.any(String), {
+      custom_receipt_header: 'Header baru',
+      custom_receipt_footer: 'Footer baru',
+      custom_receipt_logo_url: 'https://example.com/new-logo.png',
+    });
+  });
+
+  it('accepts an empty logoUrl (clearing it) without requiring http(s)', async () => {
+    erpNextClientMock.get.mockResolvedValue({});
+
+    await expect(
+      updateReceiptCustomization({ headerText: '', footerText: '', logoUrl: '' }),
+    ).resolves.not.toThrow();
+  });
+
+  it("rejects a logoUrl that is not a full http(s) URL — real bug this guards against: a relative ERPNext file path (e.g. /files/logo.png) resolves against Hermes' own origin inside the receipt iframe, not ERPNext's, and silently 404s", async () => {
+    await expect(
+      updateReceiptCustomization({ headerText: '', footerText: '', logoUrl: '/files/logo.png' }),
+    ).rejects.toThrow();
+    expect(erpNextClientMock.update).not.toHaveBeenCalled();
   });
 });
