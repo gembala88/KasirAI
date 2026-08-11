@@ -22,6 +22,9 @@ const LOW_STOCK_VISIBLE_ROLES = new Set<AuthUser['role']>(['Owner', 'Manager']);
 
 export type HomeDestination = 'warehouse' | 'kasir' | 'riwayat' | 'kasbon' | 'settings';
 
+/** Max items shown inline in the low-stock glance card — keeps Beranda's critical actions (Kasir, Gudang) reachable without scrolling on a real phone (375×812) even when many items are flagged. The full list is one tap away via the stat card or "lihat semua". */
+const LOW_STOCK_BANNER_PREVIEW_COUNT = 3;
+
 interface MenuItem {
   id: HomeDestination | 'dashboard';
   label: string;
@@ -142,7 +145,8 @@ export default function Home({
 }: {
   user: AuthUser;
   isOnline: boolean;
-  onNavigate: (destination: HomeDestination) => void;
+  /** `lowStockItemCodes` is only passed when navigating to Gudang from the low-stock stat card/banner — tells Daftar Produk to open pre-filtered instead of showing every product. */
+  onNavigate: (destination: HomeDestination, lowStockItemCodes?: string[]) => void;
 }) {
   const [pendingCount, setPendingCount] = useState<number | null>(null);
   const [lowStock, setLowStock] = useState<LowStockAlert[] | null>(null);
@@ -192,7 +196,7 @@ export default function Home({
         <div className="card stat-card">
           <IconRefresh size={22} className="stat-card-icon" />
           <span className="stat-card-value">{pendingCount ?? '—'}</span>
-          <span className="stat-card-label">Menunggu Sinkron</span>
+          <span className="stat-card-label">Menunggu Disimpan</span>
         </div>
         <div className="card stat-card">
           {isOnline ? (
@@ -211,28 +215,51 @@ export default function Home({
           <span className="stat-card-value">{isOnline ? 'Online' : 'Offline'}</span>
           <span className="stat-card-label">Status Koneksi</span>
         </div>
-        {canSeeLowStock && (
-          <div className="card stat-card">
-            <IconAlertTriangle
-              size={22}
-              className="stat-card-icon"
-              style={
-                lowStock && lowStock.length > 0 ? { color: 'var(--color-warning)' } : undefined
+        {canSeeLowStock &&
+          (lowStock && lowStock.length > 0 ? (
+            <button
+              type="button"
+              className="card stat-card stat-card--button"
+              onClick={() =>
+                onNavigate(
+                  'warehouse',
+                  lowStock.map((item) => item.itemCode),
+                )
               }
-            />
-            <span className="stat-card-value">{lowStock?.length ?? '—'}</span>
-            <span className="stat-card-label">Stok Menipis</span>
-          </div>
-        )}
+            >
+              <IconAlertTriangle
+                size={22}
+                className="stat-card-icon"
+                style={{ color: 'var(--color-warning)' }}
+              />
+              <span className="stat-card-value">{lowStock.length}</span>
+              <span className="stat-card-label">Stok Hampir Habis</span>
+            </button>
+          ) : (
+            <div className="card stat-card">
+              <IconAlertTriangle size={22} className="stat-card-icon" />
+              <span className="stat-card-value">{lowStock?.length ?? '—'}</span>
+              <span className="stat-card-label">Stok Hampir Habis</span>
+            </div>
+          ))}
       </div>
 
       {canSeeLowStock && lowStock && lowStock.length > 0 && (
-        <div className="card low-stock-banner">
+        <button
+          type="button"
+          className="card low-stock-banner"
+          onClick={() =>
+            onNavigate(
+              'warehouse',
+              lowStock.map((item) => item.itemCode),
+            )
+          }
+        >
           <h3 className="low-stock-banner-title">
-            <IconAlertTriangle size={18} /> {lowStock.length} produk stoknya menipis
+            <IconAlertTriangle size={18} /> {lowStock.length} produk stoknya hampir habis
           </h3>
           <ul className="low-stock-list">
-            {lowStock.map((item) => (
+            {lowStock.slice(0, LOW_STOCK_BANNER_PREVIEW_COUNT).map((item) => (
               <li key={item.itemCode}>
                 <span className="low-stock-item-name">{item.itemName}</span>
                 <span className="low-stock-item-qty">
@@ -241,7 +268,12 @@ export default function Home({
               </li>
             ))}
           </ul>
-        </div>
+          {lowStock.length > LOW_STOCK_BANNER_PREVIEW_COUNT && (
+            <span className="low-stock-banner-more">
+              +{lowStock.length - LOW_STOCK_BANNER_PREVIEW_COUNT} produk lainnya — lihat semua
+            </span>
+          )}
+        </button>
       )}
 
       <div className="menu-list">

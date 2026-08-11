@@ -28,11 +28,25 @@ const EDIT_PRICE_ROLES = new Set(['Owner', 'Manager']);
  * is prefilled straight from the cached item, since the catalog cache
  * already carries each item's current valuation_rate.
  */
-export default function DaftarProduk() {
+export default function DaftarProduk({
+  initialItemCodeFilter,
+}: {
+  /** Pre-filters to just these item codes — set only when arriving here from Beranda's low-stock stat card/banner. */
+  initialItemCodeFilter?: string[];
+} = {}) {
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<CatalogItem | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  // Only ever set from the constructor prop — WarehouseScan remounts this
+  // component fresh each time it switches into the "daftar-produk" tab, so
+  // there's no later prop change to react to, just an initial value and a
+  // manual "show all" escape hatch below.
+  const [lowStockOnly, setLowStockOnly] = useState(!!initialItemCodeFilter?.length);
+  const lowStockCodes = useMemo(
+    () => new Set(initialItemCodeFilter ?? []),
+    [initialItemCodeFilter],
+  );
   const lastSyncedAt = getLastSyncedAt();
   const canEditPrice = EDIT_PRICE_ROLES.has(getStoredAuth()?.user.role ?? '');
 
@@ -53,10 +67,15 @@ export default function DaftarProduk() {
     void triggerCatalogSync().then(reload);
   }, []);
 
+  const filteredByLowStock = useMemo(
+    () => (lowStockOnly ? items.filter((item) => lowStockCodes.has(item.itemCode)) : items),
+    [items, lowStockOnly, lowStockCodes],
+  );
+
   const visible = useMemo(() => {
     const trimmed = query.trim();
-    return trimmed ? matchCatalog(items, trimmed) : items;
-  }, [items, query]);
+    return trimmed ? matchCatalog(filteredByLowStock, trimmed) : filteredByLowStock;
+  }, [filteredByLowStock, query]);
 
   return (
     <>
@@ -65,6 +84,15 @@ export default function DaftarProduk() {
       {lastSyncedAt && (
         <p className="hint">
           <IconCloudCheck size={14} /> Data tersinkron: {formatSyncedAt(lastSyncedAt)}
+        </p>
+      )}
+
+      {lowStockOnly && (
+        <p className="hint">
+          Menampilkan {lowStockCodes.size} produk stok hampir habis.{' '}
+          <button type="button" className="link-button" onClick={() => setLowStockOnly(false)}>
+            Tampilkan semua produk
+          </button>
         </p>
       )}
 
@@ -83,11 +111,15 @@ export default function DaftarProduk() {
       {items.length === 0 ? (
         <p className="hint">Belum ada data produk tersimpan — sinkron ulang saat online.</p>
       ) : visible.length === 0 ? (
-        <p className="hint">Tidak ada barang yang cocok dengan &quot;{query.trim()}&quot;.</p>
+        <p className="hint">
+          {lowStockOnly
+            ? 'Tidak ada produk stok hampir habis yang cocok.'
+            : `Tidak ada barang yang cocok dengan "${query.trim()}".`}
+        </p>
       ) : (
         <>
           <p className="hint">
-            {visible.length} dari {items.length} produk
+            {visible.length} dari {lowStockOnly ? lowStockCodes.size : items.length} produk
           </p>
           <ul className="product-list">
             {visible.map((item) => {
@@ -280,7 +312,7 @@ function EditPriceDialog({
               <button type="submit" disabled={submitting}>
                 {submitting ? 'Menyimpan…' : 'Simpan'}
               </button>
-              <button type="button" className="link-button" onClick={onClose}>
+              <button type="button" className="button-secondary" onClick={onClose}>
                 Batal
               </button>
             </div>

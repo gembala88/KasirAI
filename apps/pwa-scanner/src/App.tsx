@@ -28,6 +28,12 @@ export default function App() {
   const [user, setUser] = useState<AuthUser | null>(() => getStoredAuth()?.user ?? null);
   const [view, setView] = useState<View>('home');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  // Set only when Beranda's low-stock stat card/banner navigates to Gudang —
+  // tells WarehouseScan to open straight into Daftar Produk, pre-filtered.
+  // WarehouseScan remounts fresh every time `view` becomes 'warehouse' (it's
+  // unmounted whenever the user is elsewhere), so this only needs to be read
+  // once at mount, not kept in sync afterwards.
+  const [lowStockNavFilter, setLowStockNavFilter] = useState<string[] | null>(null);
 
   useEffect(() => {
     setOnAuthRequired(() => setUser(null));
@@ -76,6 +82,16 @@ export default function App() {
   const visibleTabs = user ? TABS.filter((t) => t.roles.includes(user.role)) : [];
 
   useEffect(() => {
+    // The low-stock filter is only meant for the one WarehouseScan mount
+    // that immediately follows a tap on Beranda's low-stock card — clear it
+    // the moment the user leaves Gudang, so a later plain tap on the
+    // "Gudang" tab (not through the stat card) opens unfiltered.
+    if (view !== 'warehouse') {
+      setLowStockNavFilter(null);
+    }
+  }, [view]);
+
+  useEffect(() => {
     // Reset to the home screen on login/logout/role change, rather than
     // trying to land back on a tab that role might not even have.
     setView('home');
@@ -116,7 +132,14 @@ export default function App() {
       </header>
 
       {view === 'home' && (
-        <Home user={user} isOnline={isOnline} onNavigate={(destination) => setView(destination)} />
+        <Home
+          user={user}
+          isOnline={isOnline}
+          onNavigate={(destination, lowStockItemCodes) => {
+            setLowStockNavFilter(lowStockItemCodes ?? null);
+            setView(destination);
+          }}
+        />
       )}
 
       {(view === 'warehouse' || view === 'kasir') &&
@@ -139,7 +162,12 @@ export default function App() {
               </nav>
             )}
 
-            {view === 'warehouse' && <WarehouseScan />}
+            {view === 'warehouse' && (
+              <WarehouseScan
+                initialMode={lowStockNavFilter ? 'daftar-produk' : undefined}
+                lowStockItemCodes={lowStockNavFilter ?? undefined}
+              />
+            )}
             {view === 'kasir' && <Kasir />}
           </>
         ))}
