@@ -150,6 +150,20 @@ Dari Beranda, tekan **Riwayat Transaksi**. Layar ini butuh internet aktif (tidak
 - Tekan salah satu transaksi untuk melihat detail lengkapnya (daftar barang yang dibeli, metode bayar).
 - Di halaman detail, tekan **Cetak Ulang** untuk menampilkan dan mencetak ulang struknya — berguna kalau pelanggan minta struk dicetak ulang, atau struk pertama macet saat dicetak.
 
+### Mengatur printer thermal (struk 80mm)
+
+Hermes tidak butuh software printer khusus — struk dicetak lewat kotak dialog cetak bawaan Chrome, sama seperti mencetak halaman web biasa. Printer thermal USB atau Bluetooth (kertas 80mm) cukup dipasang sebagai **printer default** di HP/tablet/komputer toko (lewat pengaturan printer bawaan Windows/Android/iOS — bukan pengaturan di dalam Hermes), lalu:
+
+1. Tekan tombol **Cetak Struk** (atau **Cetak Ulang**) di aplikasi.
+2. Kotak dialog cetak Chrome akan muncul. Pastikan pengaturannya:
+   - **Tujuan/Printer**: pilih printer thermal toko.
+   - **Ukuran kertas**: `80mm` × `Auto` (kalau tidak ada pilihan persis ini, pilih ukuran kertas thermal 80mm yang tersedia — jangan pilih A4/Letter, struk akan tercetak terlalu kecil di tengah kertas besar).
+   - **Margin**: `None` / `Tidak ada`.
+   - **Skala**: `100%` (jangan dicentang "Fit to page" — itu bisa mengecilkan tulisan).
+3. Tekan **Cetak**.
+
+Setelah diatur sekali di sebuah HP/tablet/komputer, pengaturan ini biasanya diingat oleh Chrome untuk pencetakan berikutnya di perangkat yang sama.
+
 ---
 
 ## 7. Konfirmasi Pembayaran QRIS / Transfer
