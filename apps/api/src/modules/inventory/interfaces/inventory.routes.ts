@@ -79,7 +79,7 @@ export function registerInventoryRoutes(app: FastifyInstance): void {
     '/api/v1/inventory/alerts/low-stock',
     { preHandler: requireRole(...INVENTORY_MANAGE_ROLES) },
     async (request) => {
-      const threshold = request.query.threshold ? Number(request.query.threshold) : 5;
+      const threshold = request.query.threshold ? Number(request.query.threshold) : 10;
       if (!Number.isFinite(threshold) || threshold < 0) {
         throw new ValidationError('threshold must be a non-negative number');
       }

@@ -419,11 +419,7 @@ export default function Kasir() {
   }
 
   return (
-    <div
-      className="kasir"
-      data-stage={stage}
-      data-receipt={saleResult && printReceipt ? 'true' : undefined}
-    >
+    <div className="kasir" data-stage={stage}>
       <div className="kasir-cart-panel">
         <form onSubmit={(e) => void handleSearch(e)} className="scan-form">
           <label>

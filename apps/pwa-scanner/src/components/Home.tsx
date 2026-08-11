@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
+  IconAlertTriangle,
   IconBoxSeam,
   IconCalendarTime,
   IconChevronRight,
@@ -12,7 +13,12 @@ import {
   IconWifiOff,
 } from '@tabler/icons-react';
 import { listQueuedActions } from '../lib/offline-queue';
+import { fetchLowStockAlerts, type LowStockAlert } from '../lib/api';
 import type { AuthUser } from '../lib/auth';
+import { formatQty } from '../lib/format';
+
+/** Same role check as the report-dashboard's owner-facing analytics — Cashier and Warehouse Staff aren't shown store-wide stock-level alerts, just what's needed for their own screens. */
+const LOW_STOCK_VISIBLE_ROLES = new Set<AuthUser['role']>(['Owner', 'Manager']);
 
 export type HomeDestination = 'warehouse' | 'kasir' | 'riwayat' | 'kasbon' | 'settings';
 
@@ -139,6 +145,8 @@ export default function Home({
   onNavigate: (destination: HomeDestination) => void;
 }) {
   const [pendingCount, setPendingCount] = useState<number | null>(null);
+  const [lowStock, setLowStock] = useState<LowStockAlert[] | null>(null);
+  const canSeeLowStock = LOW_STOCK_VISIBLE_ROLES.has(user.role);
 
   useEffect(() => {
     let cancelled = false;
@@ -149,6 +157,27 @@ export default function Home({
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!canSeeLowStock) {
+      return;
+    }
+    let cancelled = false;
+    fetchLowStockAlerts()
+      .then(({ alerts }) => {
+        if (!cancelled) setLowStock(alerts);
+      })
+      .catch(() => {
+        // Offline or a transient API error — the stat card falls back to
+        // "—" and the banner just doesn't show, same as pendingCount's own
+        // silent-failure behavior above. Not worth a visible error box on
+        // the landing screen for a secondary, non-blocking alert.
+        if (!cancelled) setLowStock(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [canSeeLowStock]);
 
   const menuItems = MENU_BY_ROLE[user.role];
 
@@ -182,7 +211,38 @@ export default function Home({
           <span className="stat-card-value">{isOnline ? 'Online' : 'Offline'}</span>
           <span className="stat-card-label">Status Koneksi</span>
         </div>
+        {canSeeLowStock && (
+          <div className="card stat-card">
+            <IconAlertTriangle
+              size={22}
+              className="stat-card-icon"
+              style={
+                lowStock && lowStock.length > 0 ? { color: 'var(--color-warning)' } : undefined
+              }
+            />
+            <span className="stat-card-value">{lowStock?.length ?? '—'}</span>
+            <span className="stat-card-label">Stok Menipis</span>
+          </div>
+        )}
       </div>
+
+      {canSeeLowStock && lowStock && lowStock.length > 0 && (
+        <div className="card low-stock-banner">
+          <h3 className="low-stock-banner-title">
+            <IconAlertTriangle size={18} /> {lowStock.length} produk stoknya menipis
+          </h3>
+          <ul className="low-stock-list">
+            {lowStock.map((item) => (
+              <li key={item.itemCode}>
+                <span className="low-stock-item-name">{item.itemName}</span>
+                <span className="low-stock-item-qty">
+                  Sisa {formatQty(item.actualQty)} (batas {formatQty(item.threshold)})
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="menu-list">
         {menuItems.map((item) =>

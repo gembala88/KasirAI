@@ -137,6 +137,23 @@ const CUSTOMER_CUSTOM_FIELDS: CustomFieldSpec[] = [
   },
 ];
 
+// Per-item low-stock override — the alert on Beranda uses a
+// store-wide default (10 units) for every item, but a shopkeeper may
+// reasonably want a fast-moving staple (rice, cooking oil) flagged
+// sooner and a slow-moving item never flagged at 10. Left blank (0/unset)
+// on every item by default, meaning "use the store-wide default" — see
+// listLowStock()'s doc comment for the exact fallback rule.
+const ITEM_CUSTOM_FIELDS: CustomFieldSpec[] = [
+  {
+    fieldname: 'custom_low_stock_threshold',
+    label: 'Low Stock Threshold',
+    fieldtype: 'Int',
+    insertAfter: 'is_stock_item',
+    description:
+      'Alert on Beranda when stock falls to or below this many units. Leave blank to use the store-wide default (10 units).',
+  },
+];
+
 const PRICE_LISTS = ['Retail', 'Grosir', 'Member'];
 
 const UOMS: Array<{ name: string; mustBeWholeNumber: boolean }> = [
@@ -225,43 +242,81 @@ const MODES_OF_PAYMENT: Array<{
 const RECEIPT_HEADER_LOOKUP =
   '{% set company = frappe.db.get_value("Company", doc.company, ["company_name", "custom_store_address", "phone_no", "website", "company_logo", "custom_receipt_header", "custom_receipt_footer", "custom_receipt_logo_url"], as_dict=True) %}';
 
-const RECEIPT_ITEMS_TABLE = `<table style="width:100%; border-collapse: collapse; font-size: 12px;">
-    <thead>
-      <tr style="border-bottom: 1px solid #ddd;">
-        <td style="padding: 4px 2px; text-align:left;">Barang</td>
-        <td style="padding: 4px 2px; text-align:right;">Qty</td>
-        <td style="padding: 4px 2px; text-align:right;">Harga</td>
-        <td style="padding: 4px 2px; text-align:right;">Subtotal</td>
-      </tr>
-    </thead>
-    <tbody>
-      {% for item in doc.items %}
-      <tr>
-        <td style="padding: 4px 2px;">{{ item.item_name }}</td>
-        <td style="padding: 4px 2px; text-align:right; white-space: nowrap;">{{ item.qty|int if item.qty == item.qty|int else item.qty }} {{ item.uom }}</td>
-        <td style="padding: 4px 2px; text-align:right;">{{ "{:,.0f}".format(item.rate)|replace(",", ".") }}</td>
-        <td style="padding: 4px 2px; text-align:right;">{{ "{:,.0f}".format(item.amount)|replace(",", ".") }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>`;
+// Real bug found live (2026-08-11): items/prices were getting physically
+// clipped on 80mm thermal paper. Root cause, confirmed by fetching a real
+// /printview response rather than guessing — ERPNext wraps every Print
+// Format's HTML in its own `.print-format-gutter > .print-format` shell
+// (from Frappe's bundled print.bundle.css), which:
+//   1. Sets `.print-format { max-width: 8.3in; padding: 0.75in; }` for
+//      on-screen preview (the same markup the app's iframe displays before
+//      printing) — 0.75in (72px) of padding *per side* alone eats 144px
+//      out of an 80mm/302px page, before our own template's content even
+//      starts.
+//   2. Sets `.print-format td, .print-format th { padding: 10px !important }`
+//      UNSCOPED (applies to screen *and* print, `!important` beats our
+//      inline `style=` on every `<td>`) — the old 4-column items table
+//      (Barang/Qty/Harga/Subtotal) had each cell silently padded to 10px
+//      per side regardless of what padding we requested, on top of a
+//      table's `auto` layout algorithm which won't shrink a column below
+//      its content's minimum width, and neither of the two together fit an
+//      80mm page next to genuinely long item names.
+// Neither rule can be fixed from *inside* `.print-format`'s own children —
+// they target `.print-format`/`.print-format td` itself, which our
+// template's content sits underneath but never controls. The fix is this
+// override block, placed first so it's the last matching rule in document
+// order (our `<style>` is emitted after ERPNext's own, so equal-specificity
+// rules here win the cascade) — and switching the item list to a single
+// column with two lines per item, which has no `<td>`/`<th>` at all, so
+// the `!important` padding rule above has nothing left to attach to.
+const RECEIPT_PRINT_WIDTH_OVERRIDE = `<style>
+  @page { size: 80mm auto; margin: 0; }
+  body { margin: 0; }
+  .print-format-gutter, .print-format {
+    background: #fff !important;
+    max-width: 302px !important;
+    width: 302px !important;
+    min-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 auto !important;
+    border-radius: 0 !important;
+    box-sizing: border-box !important;
+  }
+  .print-format td, .print-format th {
+    padding: 0 !important;
+  }
+</style>`;
+
+// Two lines per item (name, then "qty uom x harga = subtotal" right-
+// aligned) — deliberately not a table, so nothing here can be squeezed by
+// a table's auto-layout column-width algorithm, and ERPNext's own
+// `.print-format td { padding: 10px !important }` (see the doc comment on
+// RECEIPT_PRINT_WIDTH_OVERRIDE above) has no `<td>` left to apply to.
+const RECEIPT_ITEMS_LIST = `<div style="border-top: 1px dashed #999; padding-top: 6px;">
+    {% for item in doc.items %}
+    <div style="{% if not loop.first %}margin-top:6px;{% endif %} word-wrap: break-word;">{{ item.item_name }}</div>
+    <div style="text-align:right; font-size:11px; color:#444;">{{ item.qty|int if item.qty == item.qty|int else item.qty }} {{ item.uom }} x {{ "{:,.0f}".format(item.rate)|replace(",", ".") }} = {{ "{:,.0f}".format(item.amount)|replace(",", ".") }}</div>
+    {% endfor %}
+  </div>`;
 
 const RECEIPT_TOTALS_BLOCK = `<div style="border-top: 1px dashed #999; margin-top: 8px; padding-top: 8px;">
     {% if doc.discount_amount %}
-    <div style="display:flex; justify-content:space-between; font-size:12px;">
+    <div style="display:flex; justify-content:space-between; font-size:11px;">
       <span>Diskon</span><span>Rp {{ "{:,.0f}".format(doc.discount_amount)|replace(",", ".") }}</span>
     </div>
     {% endif %}
+    <div style="display:flex; justify-content:space-between; font-size:11px; color:#444;">
+      <span>Total item</span><span>{{ doc.items|sum(attribute='qty')|int }}</span>
+    </div>
     <div style="display:flex; justify-content:space-between; font-size:15px; font-weight:700; margin-top:4px;">
-      <span>Total</span><span>Rp {{ "{:,.0f}".format(doc.grand_total)|replace(",", ".") }}</span>
+      <span>TOTAL</span><span>Rp {{ "{:,.0f}".format(doc.grand_total)|replace(",", ".") }}</span>
     </div>
     {% for pmt in doc.payments %}
-    <div style="display:flex; justify-content:space-between; font-size:12px; margin-top:4px;">
+    <div style="display:flex; justify-content:space-between; font-size:11px; margin-top:4px;">
       <span>{{ pmt.mode_of_payment }}</span><span>Rp {{ "{:,.0f}".format(pmt.amount)|replace(",", ".") }}</span>
     </div>
     {% endfor %}
     {% if doc.change_amount %}
-    <div style="display:flex; justify-content:space-between; font-size:12px;">
+    <div style="display:flex; justify-content:space-between; font-size:11px;">
       <span>Kembalian</span><span>Rp {{ "{:,.0f}".format(doc.change_amount)|replace(",", ".") }}</span>
     </div>
     {% endif %}
@@ -269,7 +324,8 @@ const RECEIPT_TOTALS_BLOCK = `<div style="border-top: 1px dashed #999; margin-to
 
 const RECEIPT_PRINT_FORMAT_STANDARD_NAME = 'Hermes Struk Kasir';
 const RECEIPT_PRINT_FORMAT_STANDARD_HTML = `${RECEIPT_HEADER_LOOKUP}
-<div style="font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; color: #171717; max-width: 380px; margin: 0 auto;">
+${RECEIPT_PRINT_WIDTH_OVERRIDE}
+<div style="font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; color: #171717; width: 302px; max-width: 302px; box-sizing: border-box; padding: 8px; margin: 0 auto;">
   <div style="text-align:center; margin-bottom: 10px;">
     {% if company.custom_receipt_logo_url %}
     <img src="{{ company.custom_receipt_logo_url }}" style="max-height:48px; max-width:160px; margin-bottom:6px;" />
@@ -292,9 +348,9 @@ const RECEIPT_PRINT_FORMAT_STANDARD_HTML = `${RECEIPT_HEADER_LOOKUP}
   <div style="border-top: 1px dashed #999; border-bottom: 1px dashed #999; padding: 8px 0; margin-bottom: 8px;">
     <div style="font-size:12px; color:#666;">Pelanggan: {{ doc.customer_name }}</div>
   </div>
-  ${RECEIPT_ITEMS_TABLE}
+  ${RECEIPT_ITEMS_LIST}
   ${RECEIPT_TOTALS_BLOCK}
-  <div style="text-align:center; margin-top:16px; font-size:12px; color:#666;">
+  <div style="border-top: 1px dashed #999; text-align:center; margin-top:16px; padding-top:8px; font-size:12px; color:#666;">
     {% if company.custom_receipt_footer %}{{ company.custom_receipt_footer }}{% else %}Terima kasih atas kunjungan Anda!{% endif %}
   </div>
 </div>
@@ -305,7 +361,8 @@ const RECEIPT_PRINT_FORMAT_STANDARD_HTML = `${RECEIPT_HEADER_LOOKUP}
 // shops that want the shortest possible strip on a small thermal printer.
 const RECEIPT_PRINT_FORMAT_MINIMAL_NAME = 'Hermes Struk Kasir - Minimal';
 const RECEIPT_PRINT_FORMAT_MINIMAL_HTML = `${RECEIPT_HEADER_LOOKUP}
-<div style="font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: #171717; max-width: 320px; margin: 0 auto;">
+${RECEIPT_PRINT_WIDTH_OVERRIDE}
+<div style="font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: #171717; width: 302px; max-width: 302px; box-sizing: border-box; padding: 8px; margin: 0 auto;">
   <div style="text-align:center; margin-bottom: 6px;">
     {% if company.custom_receipt_logo_url %}
     <img src="{{ company.custom_receipt_logo_url }}" style="max-height:32px; max-width:120px; margin-bottom:4px;" />
@@ -316,18 +373,17 @@ const RECEIPT_PRINT_FORMAT_MINIMAL_HTML = `${RECEIPT_HEADER_LOOKUP}
     <div style="font-size:13px; font-weight:700;">{{ company.company_name }}</div>
     <div style="font-size:10px; color:#666;">{{ doc.name }} · {{ frappe.utils.formatdate(doc.posting_date, "dd-MM-yyyy") }}</div>
   </div>
-  <table style="width:100%; border-collapse: collapse; font-size: 10px; border-top: 1px dashed #999; padding-top:4px;">
-    <tbody>
-      {% for item in doc.items %}
-      <tr>
-        <td style="padding: 2px 1px;">{{ item.item_name }} x{{ item.qty|int if item.qty == item.qty|int else item.qty }}</td>
-        <td style="padding: 2px 1px; text-align:right; white-space:nowrap;">{{ "{:,.0f}".format(item.amount)|replace(",", ".") }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div style="border-top: 1px dashed #999; padding-top:4px; font-size:10px;">
+    {% for item in doc.items %}
+    <div style="{% if not loop.first %}margin-top:4px;{% endif %} word-wrap: break-word;">{{ item.item_name }}</div>
+    <div style="text-align:right; color:#444;">{{ item.qty|int if item.qty == item.qty|int else item.qty }} {{ item.uom }} x {{ "{:,.0f}".format(item.rate)|replace(",", ".") }} = {{ "{:,.0f}".format(item.amount)|replace(",", ".") }}</div>
+    {% endfor %}
+  </div>
+  <div style="display:flex; justify-content:space-between; font-size:10px; color:#444; margin-top:4px;">
+    <span>Total item</span><span>{{ doc.items|sum(attribute='qty')|int }}</span>
+  </div>
   <div style="border-top: 1px dashed #999; margin-top: 4px; padding-top: 4px; display:flex; justify-content:space-between; font-size:13px; font-weight:700;">
-    <span>Total</span><span>Rp {{ "{:,.0f}".format(doc.grand_total)|replace(",", ".") }}</span>
+    <span>TOTAL</span><span>Rp {{ "{:,.0f}".format(doc.grand_total)|replace(",", ".") }}</span>
   </div>
   {% for pmt in doc.payments %}
   <div style="display:flex; justify-content:space-between; font-size:10px;">
@@ -335,25 +391,30 @@ const RECEIPT_PRINT_FORMAT_MINIMAL_HTML = `${RECEIPT_HEADER_LOOKUP}
   </div>
   {% endfor %}
   {% if company.custom_receipt_footer %}
-  <div style="text-align:center; margin-top:6px; font-size:9px; color:#666;">{{ company.custom_receipt_footer }}</div>
+  <div style="border-top: 1px dashed #999; text-align:center; margin-top:6px; padding-top:6px; font-size:9px; color:#666;">{{ company.custom_receipt_footer }}</div>
   {% endif %}
 </div>
 `;
 
-// Detailed — full branding: logo, address, WA, website, a bordered card and
-// a warmer footer, for owners who want the receipt to double as a small
-// piece of marketing.
+// Detailed — full branding: logo, address, WA, website, a warmer footer,
+// for owners who want the receipt to double as a small piece of
+// marketing. The old version also drew a decorative border/rounded-corner
+// "card" around the whole thing — dropped for 80mm printing: a monochrome
+// thermal head can't render rounded corners meaningfully, and 14px of
+// padding *per side* on top of that border was stealing 28px out of an
+// already-tight 302px page for no functional benefit.
 const RECEIPT_PRINT_FORMAT_DETAILED_NAME = 'Hermes Struk Kasir - Detail';
 const RECEIPT_PRINT_FORMAT_DETAILED_HTML = `${RECEIPT_HEADER_LOOKUP}
-<div style="font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; color: #171717; max-width: 380px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px; padding: 14px;">
+${RECEIPT_PRINT_WIDTH_OVERRIDE}
+<div style="font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; color: #171717; width: 302px; max-width: 302px; box-sizing: border-box; padding: 8px; margin: 0 auto;">
   <div style="text-align:center; margin-bottom: 10px;">
     {% if company.custom_receipt_logo_url %}
-    <img src="{{ company.custom_receipt_logo_url }}" style="max-height:56px; max-width:180px; margin-bottom:8px;" />
+    <img src="{{ company.custom_receipt_logo_url }}" style="max-height:56px; max-width:160px; margin-bottom:8px;" />
     {% endif %}
     {% if company.custom_receipt_header %}
     <div style="font-size:12px; color:#666; margin-bottom:2px;">{{ company.custom_receipt_header }}</div>
     {% endif %}
-    <div style="font-size:17px; font-weight:700;">{{ company.company_name }}</div>
+    <div style="font-size:16px; font-weight:700;">{{ company.company_name }}</div>
     {% if company.custom_store_address %}
     <div style="font-size:11px; color:#666; margin-top:2px;">{{ company.custom_store_address }}</div>
     {% endif %}
@@ -371,9 +432,9 @@ const RECEIPT_PRINT_FORMAT_DETAILED_HTML = `${RECEIPT_HEADER_LOOKUP}
   <div style="border-top: 1px dashed #999; border-bottom: 1px dashed #999; padding: 8px 0; margin-bottom: 8px;">
     <div style="font-size:12px; color:#666;">Pelanggan: {{ doc.customer_name }}</div>
   </div>
-  ${RECEIPT_ITEMS_TABLE}
+  ${RECEIPT_ITEMS_LIST}
   ${RECEIPT_TOTALS_BLOCK}
-  <div style="text-align:center; margin-top:16px; font-size:12px; color:#666;">
+  <div style="border-top: 1px dashed #999; text-align:center; margin-top:16px; padding-top:8px; font-size:12px; color:#666;">
     {% if company.custom_receipt_footer %}{{ company.custom_receipt_footer }}{% else %}Terima kasih atas kunjungan Anda di {{ company.company_name }}!{% endif %}
     {% if company.phone_no %}<br />Ada pertanyaan? WhatsApp kami di {{ company.phone_no }}.{% endif %}
   </div>
@@ -756,6 +817,10 @@ async function main(): Promise<void> {
 
   for (const field of COMPANY_CUSTOM_FIELDS) {
     await ensureCustomField('Company', field);
+  }
+
+  for (const field of ITEM_CUSTOM_FIELDS) {
+    await ensureCustomField('Item', field);
   }
 
   await upsertPrintFormat(RECEIPT_PRINT_FORMAT_STANDARD_NAME, RECEIPT_PRINT_FORMAT_STANDARD_HTML);

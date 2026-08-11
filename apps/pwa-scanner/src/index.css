@@ -108,6 +108,47 @@ body {
   font-size: var(--font-size-muted);
 }
 
+/* --- Home screen: low-stock alert banner (Owner/Manager only) --- */
+.low-stock-banner {
+  background: rgba(245, 158, 11, 0.12);
+  border: 1px solid var(--color-warning);
+  margin-bottom: var(--space-5);
+}
+
+.low-stock-banner-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--color-warning);
+  font-size: var(--font-size-body);
+  margin: 0 0 var(--space-3);
+}
+
+.low-stock-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.low-stock-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--font-size-muted);
+}
+
+.low-stock-item-name {
+  font-weight: 600;
+}
+
+.low-stock-item-qty {
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
 /* --- Home screen: tappable menu cards (icon + title + subtitle + chevron) --- */
 .menu-list {
   display: flex;
@@ -545,15 +586,6 @@ h1 {
     gap: 1.5rem;
   }
 
-  /* A receipt is real printed-paper-shaped content, not a compact form
-     control like the rest of the payment panel — 380px made it cramped
-     and hard to read on a wide desktop screen. Widens only while a
-     receipt is actually showing (data-receipt, set by Kasir.tsx), so the
-     normal payment-form/cart-review view keeps its narrower column. */
-  .kasir[data-receipt='true'] {
-    grid-template-columns: 1fr 640px;
-  }
-
   .kasir-cart-panel,
   .kasir-payment-panel {
     display: flex !important;
@@ -970,13 +1002,22 @@ h1 {
    ERPNext's own Print Format HTML, styled for printer paper — a fixed
    white background regardless of app theme, since that's genuinely what
    will come out of the printer.
+   Width is fixed at 302px (80mm @ 96dpi), not "as wide as the app lets
+   it be" — a real bug found live: receipts previewed at whatever width
+   the surrounding layout gave them, so what the cashier saw on screen
+   never matched what an 80mm thermal printer actually produced (which
+   has no more physical width no matter how the browser lays things
+   out). 302px on screen now means 302px on paper, always.
    Real UX gap found live: a fixed 320px height meant most real receipts
    needed scrolling to read in full — ReceiptPreview.tsx now measures the
    actual content and sets height inline via style, so this min-height is
    only the pre-measurement fallback (first paint, before onLoad fires). */
 .receipt-frame {
-  width: 100%;
+  display: block;
+  width: 302px;
+  max-width: 302px;
   min-height: 320px;
+  margin: 0 auto;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   background: #fff;

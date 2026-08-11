@@ -120,38 +120,68 @@ export async function getStock(itemCode: string, warehouse?: string): Promise<St
   return levels;
 }
 
+/** Store-wide fallback when an item has no `custom_low_stock_threshold` of its own set. */
+export const DEFAULT_LOW_STOCK_THRESHOLD = 10;
+
 /**
  * Threshold-based low-stock check against the default warehouse. Not
  * ERPNext's per-item reorder-level feature (that needs a reorder rule
  * configured per item) — a simple, always-available floor check that
- * works for every item without extra per-item setup.
+ * works for every item without extra per-item setup, with an optional
+ * per-item override (`custom_low_stock_threshold`, seed-erpnext.ts) for
+ * the shopkeeper who wants a fast-moving staple flagged sooner than a
+ * slow-moving item. A blank/zero/negative override on an item means "use
+ * the store-wide default", not "never alert" — a literal 0 threshold
+ * would be useless (stock can't go below 0) and almost certainly means
+ * the field was just never filled in.
+ *
+ * Can't push the threshold into the Bin filter itself the way the old
+ * single-global-threshold version did, since the effective threshold is
+ * now per-item and unknown until the Item rows are fetched — this reads
+ * every item's Bin row for the default warehouse (cheap at this store's
+ * real scale, a few hundred SKUs at most) and filters in memory instead.
  */
-export async function listLowStock(threshold: number): Promise<LowStockAlert[]> {
+export async function listLowStock(
+  defaultThreshold: number = DEFAULT_LOW_STOCK_THRESHOLD,
+): Promise<LowStockAlert[]> {
   const bins = await erpNextClient.list<BinRecord>('Bin', {
-    filters: [
-      ['warehouse', '=', env.ERPNEXT_DEFAULT_WAREHOUSE],
-      ['actual_qty', '<=', threshold],
-    ],
+    filters: [['warehouse', '=', env.ERPNEXT_DEFAULT_WAREHOUSE]],
     fields: ['item_code', 'warehouse', 'actual_qty'],
+    limit_page_length: '0',
   });
 
   if (bins.length === 0) {
     return [];
   }
 
-  const items = await erpNextClient.list<{ item_code: string; item_name: string }>('Item', {
+  const items = await erpNextClient.list<{
+    item_code: string;
+    item_name: string;
+    custom_low_stock_threshold?: number;
+  }>('Item', {
     filters: [['item_code', 'in', bins.map((bin) => bin.item_code)]],
-    fields: ['item_code', 'item_name'],
+    fields: ['item_code', 'item_name', 'custom_low_stock_threshold'],
+    limit_page_length: '0',
   });
-  const itemNameByCode = new Map(items.map((item) => [item.item_code, item.item_name]));
+  const itemByCode = new Map(items.map((item) => [item.item_code, item]));
 
-  return bins.map((bin) => ({
-    itemCode: bin.item_code,
-    itemName: itemNameByCode.get(bin.item_code) ?? bin.item_code,
-    warehouse: bin.warehouse,
-    actualQty: bin.actual_qty,
-    threshold,
-  }));
+  return bins
+    .map((bin) => {
+      const item = itemByCode.get(bin.item_code);
+      const threshold =
+        item?.custom_low_stock_threshold && item.custom_low_stock_threshold > 0
+          ? item.custom_low_stock_threshold
+          : defaultThreshold;
+      return {
+        itemCode: bin.item_code,
+        itemName: item?.item_name ?? bin.item_code,
+        warehouse: bin.warehouse,
+        actualQty: bin.actual_qty,
+        threshold,
+      };
+    })
+    .filter((alert) => alert.actualQty <= alert.threshold)
+    .sort((a, b) => a.actualQty - b.actualQty);
 }
 
 /**

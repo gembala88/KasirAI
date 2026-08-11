@@ -16,7 +16,7 @@ import type {
   SupplierPerformance,
 } from '../domain/index.js';
 
-const LOW_STOCK_THRESHOLD = 5;
+const LOW_STOCK_THRESHOLD = 10;
 const NEAR_EXPIRY_DAYS = 30;
 const RANKING_WINDOW_DAYS = 30;
 const TOP_N = 5;

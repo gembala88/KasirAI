@@ -403,6 +403,19 @@ export function fetchPaymentInfo(): Promise<PaymentInfo> {
   return get('/api/v1/pos/payment-info');
 }
 
+export interface LowStockAlert {
+  itemCode: string;
+  itemName: string;
+  warehouse: string;
+  actualQty: number;
+  threshold: number;
+}
+
+/** Beranda's low-stock banner (Owner/Manager only — see Home.tsx). Real ERPNext Bin data, not a static list — reuses the same alert the owner dashboard's report already draws on. */
+export function fetchLowStockAlerts(): Promise<{ threshold: number; alerts: LowStockAlert[] }> {
+  return get('/api/v1/inventory/alerts/low-stock');
+}
+
 /**
  * Fetches the ERPNext-rendered receipt (real HTML from its Print Format —
  * see the receipt endpoint for why this isn't built client-side) for

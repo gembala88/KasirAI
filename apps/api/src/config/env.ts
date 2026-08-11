@@ -66,7 +66,15 @@ const envSchema = z.object({
     .min(32, 'JWT_SECRET must be at least 32 characters')
     .default('CHANGE_ME_TO_A_RANDOM_32_CHAR_MINIMUM_SECRET'),
   JWT_ACCESS_TTL: z.string().default('15m'),
-  JWT_REFRESH_TTL: z.string().default('7d'),
+  // 30 days — a cashier's device going offline overnight (or over a
+  // multi-day outage) must never force a re-login on reconnect. The
+  // access token still expires every 15m as normal; api.ts's silent
+  // refresh-on-401 uses this refresh token to mint a new pair
+  // transparently, and each successful refresh re-issues a refresh token
+  // with a fresh 30-day expiry too (see login.ts's refreshAccessToken),
+  // so an actively-used session's real lifetime is a sliding 30-day
+  // window, not a hard cutoff from first login.
+  JWT_REFRESH_TTL: z.string().default('30d'),
 
   // --- ERPNext (source of truth) ---
   ERPNEXT_BASE_URL: z.string().url().default('http://localhost:8000'),
