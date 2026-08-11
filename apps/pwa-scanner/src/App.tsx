@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { IconArrowLeft } from '@tabler/icons-react';
-import Home, { type HomeDestination } from './components/Home';
+import { IconArrowLeft, IconMenu2, IconX } from '@tabler/icons-react';
+import Home, { MENU_BY_ROLE, type HomeDestination } from './components/Home';
 import Kasir from './components/Kasir';
 import Login from './components/Login';
 import RiwayatTransaksi from './components/RiwayatTransaksi';
@@ -34,6 +34,9 @@ export default function App() {
   // unmounted whenever the user is elsewhere), so this only needs to be read
   // once at mount, not kept in sync afterwards.
   const [lowStockNavFilter, setLowStockNavFilter] = useState<string[] | null>(null);
+  // Mobile-only (<1024px) nav drawer (Part 3) — desktop never opens this,
+  // it has the full menu grid on Beranda instead.
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
     setOnAuthRequired(() => setUser(null));
@@ -97,19 +100,43 @@ export default function App() {
     setView('home');
   }, [user]);
 
+  useEffect(() => {
+    // Never leave the drawer open across a navigation — every nav item
+    // click already closes it explicitly, but this also covers browser
+    // back/forward and the low-stock card's programmatic navigation.
+    setDrawerOpen(false);
+  }, [view]);
+
   if (!user) {
     return <Login onLoggedIn={setUser} />;
   }
 
+  const handleLogout = () => {
+    logout();
+    setUser(null);
+  };
+
+  const drawerItems = MENU_BY_ROLE[user.role];
+
   return (
-    <main className={view === 'kasir' ? 'app app--kasir' : 'app'}>
+    <main
+      className={view === 'kasir' ? 'app app--kasir' : view === 'home' ? 'app app--home' : 'app'}
+    >
       {!isOnline && (
         <div className="offline-banner" role="status">
           Mode Offline — akan sinkron otomatis
         </div>
       )}
 
-      <header className="app-header">
+      <header className={view === 'home' ? 'app-header app-header--home' : 'app-header'}>
+        <button
+          type="button"
+          className="hamburger-button"
+          aria-label="Buka menu navigasi"
+          onClick={() => setDrawerOpen(true)}
+        >
+          <IconMenu2 size={22} />
+        </button>
         {view === 'home' ? (
           <h1>{STORE_NAME}</h1>
         ) : (
@@ -118,23 +145,71 @@ export default function App() {
           </button>
         )}
         <div className="header-actions">
-          <button
-            type="button"
-            className="theme-toggle"
-            onClick={() => {
-              logout();
-              setUser(null);
-            }}
-          >
+          <button type="button" className="theme-toggle" onClick={handleLogout}>
             Keluar
           </button>
         </div>
       </header>
 
+      {drawerOpen && (
+        <>
+          <button
+            type="button"
+            className="nav-drawer-backdrop"
+            aria-label="Tutup menu navigasi"
+            onClick={() => setDrawerOpen(false)}
+          />
+          <nav className="nav-drawer" aria-label="Navigasi utama">
+            <div className="nav-drawer-header">
+              <span className="nav-drawer-title">{STORE_NAME}</span>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="Tutup"
+                onClick={() => setDrawerOpen(false)}
+              >
+                <IconX size={20} />
+              </button>
+            </div>
+            <ul className="nav-drawer-list">
+              {drawerItems.map((item) =>
+                item.id === 'dashboard' ? (
+                  <li key={item.id}>
+                    <a href="/" className="nav-drawer-item">
+                      <span className={`grid-card-icon grid-card-icon--${item.color}`}>
+                        {item.icon}
+                      </span>
+                      {item.label}
+                    </a>
+                  </li>
+                ) : (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      className="nav-drawer-item"
+                      onClick={() => {
+                        setLowStockNavFilter(null);
+                        setView(item.id as HomeDestination);
+                      }}
+                    >
+                      <span className={`grid-card-icon grid-card-icon--${item.color}`}>
+                        {item.icon}
+                      </span>
+                      {item.label}
+                    </button>
+                  </li>
+                ),
+              )}
+            </ul>
+          </nav>
+        </>
+      )}
+
       {view === 'home' && (
         <Home
           user={user}
           isOnline={isOnline}
+          onLogout={handleLogout}
           onNavigate={(destination, lowStockItemCodes) => {
             setLowStockNavFilter(lowStockItemCodes ?? null);
             setView(destination);

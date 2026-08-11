@@ -416,6 +416,30 @@ export function fetchLowStockAlerts(): Promise<{ threshold: number; alerts: LowS
   return get('/api/v1/inventory/alerts/low-stock');
 }
 
+export interface TodaySummary {
+  revenue: number;
+  profit: number;
+  invoiceCount: number;
+}
+
+/** Desktop Beranda's "Ringkasan Hari Ini" panel (Owner/Manager only — same role gate as the owner dashboard app's own summary card, which this mirrors so both apps show the same numbers). */
+export function fetchDashboardSummary(): Promise<{ today: TodaySummary }> {
+  return get('/api/v1/reports/dashboard-summary');
+}
+
+export interface PendingPaymentOrder {
+  name: string;
+  status: string;
+  customer: string;
+  grandTotal: number;
+  outstandingAmount: number;
+}
+
+/** QRIS/Transfer orders placed via WhatsApp awaiting owner confirmation — same list the owner dashboard's "Konfirmasi Pembayaran" screen shows. */
+export function fetchPendingPayments(): Promise<{ orders: PendingPaymentOrder[] }> {
+  return get('/api/v1/whatsapp/orders/pending-payment');
+}
+
 /**
  * Fetches the ERPNext-rendered receipt (real HTML from its Print Format —
  * see the receipt endpoint for why this isn't built client-side) for
