@@ -1,5 +1,6 @@
 import Fastify, { type FastifyError } from 'fastify';
 import cors from '@fastify/cors';
+import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
 import sensible from '@fastify/sensible';
 import closeWithGrace from 'close-with-grace';
@@ -41,6 +42,10 @@ export async function buildApp() {
 
   app.register(sensible);
   app.register(cors, { origin: env.CORS_ALLOWED_ORIGINS });
+  // Store-logo upload (Settings screen) is the only multipart route in the
+  // app — capped well above a real logo (a few hundred KB) but far below
+  // anything that could be used to exhaust memory on the shared VPS.
+  app.register(multipart, { limits: { fileSize: 2 * 1024 * 1024, files: 1 } });
   // §1.4 NFR "Security": "rate limiting on public WhatsApp webhook".
   // `global: false` — every other route already requires a valid JWT
   // (see attachAuthentication below), so rate limiting is applied only

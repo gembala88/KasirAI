@@ -1,5 +1,13 @@
-import { useEffect, useState } from 'react';
-import { fetchReceiptTemplate, updateReceiptTemplate, type ReceiptTemplate } from '../lib/api';
+import { useEffect, useRef, useState } from 'react';
+import {
+  fetchReceiptTemplate,
+  fetchStoreProfile,
+  updateReceiptTemplate,
+  updateStoreProfile,
+  uploadStoreLogo,
+  type ReceiptTemplate,
+  type StoreProfile,
+} from '../lib/api';
 
 const TEMPLATE_OPTIONS: Array<{ value: ReceiptTemplate; label: string; description: string }> = [
   {
@@ -21,27 +29,41 @@ const TEMPLATE_OPTIONS: Array<{ value: ReceiptTemplate; label: string; descripti
   },
 ];
 
-/**
- * Minimal by design (spec: "keep it minimal for now — just the receipt
- * template selector, don't build a general settings framework yet") — one
- * setting, one screen, no tabs/sections that would only make sense once
- * there's a second thing to configure.
- */
+/** ERPNext-hosted files (both /files/... public and /private/files/... private) are only reachable through ERPNext itself, proxied at /erp — a bare relative path resolves against this app's own origin instead and 404s. */
+function resolveErpAssetUrl(path: string): string {
+  if (/^https?:\/\//i.test(path)) return path;
+  return `${window.location.origin}/erp${path.startsWith('/') ? path : `/${path}`}`;
+}
+
 export default function Settings() {
   const [current, setCurrent] = useState<ReceiptTemplate | null>(null);
   const [selected, setSelected] = useState<ReceiptTemplate | null>(null);
+  const [printFormat, setPrintFormat] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
+  const [profile, setProfile] = useState<StoreProfile | null>(null);
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileMessage, setProfileMessage] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoError, setLogoError] = useState<string | null>(null);
+  const [logoBroken, setLogoBroken] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     let cancelled = false;
     fetchReceiptTemplate()
-      .then(({ template }) => {
+      .then(({ template, printFormat: format }) => {
         if (!cancelled) {
           setCurrent(template);
           setSelected(template);
+          setPrintFormat(format);
         }
       })
       .catch((err: unknown) => {
@@ -49,6 +71,27 @@ export default function Settings() {
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchStoreProfile()
+      .then((result) => {
+        if (!cancelled) {
+          setProfile(result);
+          setPhone(result.phone);
+          setAddress(result.address);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setProfileError(err instanceof Error ? err.message : String(err));
+      })
+      .finally(() => {
+        if (!cancelled) setProfileLoading(false);
       });
     return () => {
       cancelled = true;
@@ -63,6 +106,7 @@ export default function Settings() {
     try {
       const result = await updateReceiptTemplate(selected);
       setCurrent(result.template);
+      setPrintFormat(result.printFormat);
       setMessage('Template struk disimpan.');
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -71,9 +115,112 @@ export default function Settings() {
     }
   }
 
+  async function handleSaveProfile(): Promise<void> {
+    setProfileSaving(true);
+    setProfileError(null);
+    setProfileMessage(null);
+    try {
+      const result = await updateStoreProfile({ phone, address });
+      setProfile(result);
+      setProfileMessage('Profil toko disimpan.');
+    } catch (err) {
+      setProfileError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setProfileSaving(false);
+    }
+  }
+
+  async function handleLogoSelected(event: React.ChangeEvent<HTMLInputElement>): Promise<void> {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setLogoUploading(true);
+    setLogoError(null);
+    setLogoBroken(false);
+    try {
+      const result = await uploadStoreLogo(file);
+      setProfile(result);
+    } catch (err) {
+      setLogoError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLogoUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
+  const profileChanged =
+    profile != null && (phone !== profile.phone || address !== profile.address);
+
   return (
     <>
       <h2 className="section-label">Pengaturan</h2>
+
+      <h3 className="section-label">Profil Toko</h3>
+      {profileLoading && <p className="hint">Memuat…</p>}
+      {profileError && <p className="error-box">{profileError}</p>}
+
+      {!profileLoading && profile && (
+        <>
+          <label>
+            Nama Toko
+            <input value={profile.companyName} disabled />
+            <span className="hint">
+              Ganti nama toko harus dilakukan langsung di ERPNext (Setup &gt; Company) — nama ini
+              juga jadi ID internal yang dipakai di seluruh sistem, jadi tidak bisa diubah dari
+              sini.
+            </span>
+          </label>
+
+          <label>
+            No. WhatsApp Toko
+            <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0812…" />
+          </label>
+
+          <label>
+            Alamat Toko (untuk struk)
+            <textarea
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              rows={2}
+              placeholder="Alamat lengkap toko"
+            />
+          </label>
+
+          {profileMessage && <p className="message">{profileMessage}</p>}
+          <button
+            type="button"
+            onClick={() => void handleSaveProfile()}
+            disabled={profileSaving || !profileChanged}
+          >
+            {profileSaving ? 'Menyimpan…' : 'Simpan Profil'}
+          </button>
+
+          <label>
+            Logo Toko
+            <div className="logo-upload-row">
+              {profile.logoUrl && !logoBroken ? (
+                <img
+                  src={resolveErpAssetUrl(profile.logoUrl)}
+                  alt="Logo toko"
+                  className="logo-preview"
+                  onError={() => setLogoBroken(true)}
+                />
+              ) : (
+                <span className="hint">Belum ada logo</span>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={(e) => void handleLogoSelected(e)}
+                disabled={logoUploading}
+              />
+            </div>
+            {logoUploading && <p className="hint">Mengunggah logo…</p>}
+            {logoError && <p className="error-box">{logoError}</p>}
+          </label>
+        </>
+      )}
+
       <h3 className="section-label">Template Struk</h3>
 
       {loading && <p className="hint">Memuat…</p>}
@@ -116,6 +263,20 @@ export default function Settings() {
           >
             {saving ? 'Menyimpan…' : 'Simpan'}
           </button>
+
+          {printFormat && (
+            <p className="hint">
+              Ingin ubah tata letak, judul, atau pesan penutup struk? Itu diatur langsung di ERPNext
+              (bukan di sini), supaya bisa diubah kapan saja tanpa perlu update aplikasi.{' '}
+              <a
+                href={`${window.location.origin}/erp/app/print-format/${encodeURIComponent(printFormat)}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Edit tata letak struk di ERPNext →
+              </a>
+            </p>
+          )}
         </>
       )}
     </>

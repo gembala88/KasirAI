@@ -471,14 +471,54 @@ export function fetchTransactionDetail(name: string): Promise<TransactionDetail>
 
 export type ReceiptTemplate = 'Minimal' | 'Standard' | 'Detailed';
 
-export function fetchReceiptTemplate(): Promise<{ template: ReceiptTemplate }> {
+export interface ReceiptTemplateInfo {
+  template: ReceiptTemplate;
+  /** The ERPNext Print Format this template resolves to — used to deep-link into ERPNext's own Print Format designer for header/footer editing, rather than duplicating that editor in-app. */
+  printFormat: string;
+}
+
+export function fetchReceiptTemplate(): Promise<ReceiptTemplateInfo> {
   return get('/api/v1/settings/receipt-template');
 }
 
-export function updateReceiptTemplate(
-  template: ReceiptTemplate,
-): Promise<{ template: ReceiptTemplate }> {
+export function updateReceiptTemplate(template: ReceiptTemplate): Promise<ReceiptTemplateInfo> {
   return put('/api/v1/settings/receipt-template', { template });
+}
+
+export interface StoreProfile {
+  companyName: string;
+  phone: string;
+  address: string;
+  logoUrl: string | null;
+}
+
+export function fetchStoreProfile(): Promise<StoreProfile> {
+  return get('/api/v1/settings/store-profile');
+}
+
+export function updateStoreProfile(input: {
+  phone: string;
+  address: string;
+}): Promise<StoreProfile> {
+  return put('/api/v1/settings/store-profile', input);
+}
+
+/** Real file upload (not a pasted URL) — see settings.ts's uploadCompanyLogo doc comment. Bypasses the JSON post/put helpers since this is a multipart body. */
+export async function uploadStoreLogo(file: File): Promise<StoreProfile> {
+  const form = new FormData();
+  form.append('file', file);
+  const response = await authorizedFetch('/api/v1/settings/store-logo', {
+    method: 'POST',
+    body: form,
+  });
+  if (!response.ok) {
+    const detail = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new ApiError(
+      detail?.message ?? `Logo upload failed with status ${response.status}`,
+      response.status,
+    );
+  }
+  return response.json() as Promise<StoreProfile>;
 }
 
 // --- Kasbon / credit sale (Group 3) ---

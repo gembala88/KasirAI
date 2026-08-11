@@ -53,7 +53,7 @@ const MENU_BY_ROLE: Record<AuthUser['role'], MenuItem[]> = {
     {
       id: 'settings',
       label: 'Pengaturan',
-      subtitle: 'Template struk',
+      subtitle: 'Profil toko & template struk',
       icon: <IconSettings />,
     },
   ],
@@ -86,7 +86,7 @@ const MENU_BY_ROLE: Record<AuthUser['role'], MenuItem[]> = {
     {
       id: 'settings',
       label: 'Pengaturan',
-      subtitle: 'Template struk',
+      subtitle: 'Profil toko & template struk',
       icon: <IconSettings />,
     },
   ],

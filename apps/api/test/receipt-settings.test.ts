@@ -13,8 +13,14 @@ vi.mock('../src/shared/erpnext-client/index.js', () => ({
 }));
 
 const { env } = await import('../src/config/env.js');
-const { getReceiptTemplate, setReceiptTemplate, printFormatForTemplate, getPaymentInfo } =
-  await import('../src/modules/sales-pos/application/settings.js');
+const {
+  getReceiptTemplate,
+  setReceiptTemplate,
+  printFormatForTemplate,
+  getPaymentInfo,
+  getStoreProfile,
+  updateStoreProfile,
+} = await import('../src/modules/sales-pos/application/settings.js');
 
 describe('getReceiptTemplate', () => {
   beforeEach(() => {
@@ -80,5 +86,65 @@ describe('getPaymentInfo', () => {
     if (env.QRIS_STATIC_IMAGE_URL === '') {
       expect(getPaymentInfo().qris.imageUrl).toBeNull();
     }
+  });
+});
+
+describe('getStoreProfile', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('reads company_name/phone_no/custom_store_address/company_logo from the Company doc', async () => {
+    erpNextClientMock.get.mockResolvedValue({
+      company_name: 'Toko New Pelangi Group',
+      phone_no: '0812-3456-666',
+      custom_store_address: 'Jl. Contoh No. 1',
+      company_logo: '/files/logo.png',
+    });
+
+    const profile = await getStoreProfile();
+
+    expect(profile).toEqual({
+      companyName: 'Toko New Pelangi Group',
+      phone: '0812-3456-666',
+      address: 'Jl. Contoh No. 1',
+      logoUrl: '/files/logo.png',
+    });
+  });
+
+  it('falls back to empty string/null for fields never set, rather than undefined leaking into the response', async () => {
+    erpNextClientMock.get.mockResolvedValue({ company_name: 'Toko New Pelangi Group' });
+
+    const profile = await getStoreProfile();
+
+    expect(profile).toEqual({
+      companyName: 'Toko New Pelangi Group',
+      phone: '',
+      address: '',
+      logoUrl: null,
+    });
+  });
+});
+
+describe('updateStoreProfile', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('writes only phone_no and custom_store_address — never company_name, which would rename the ERPNext document', async () => {
+    erpNextClientMock.get.mockResolvedValue({
+      company_name: 'Toko New Pelangi Group',
+      phone_no: '0812-0000-000',
+      custom_store_address: 'Alamat baru',
+    });
+
+    await updateStoreProfile({ phone: '0812-0000-000', address: 'Alamat baru' });
+
+    expect(erpNextClientMock.update).toHaveBeenCalledWith('Company', expect.any(String), {
+      phone_no: '0812-0000-000',
+      custom_store_address: 'Alamat baru',
+    });
+    const updateCall = erpNextClientMock.update.mock.calls[0];
+    expect(updateCall?.[2]).not.toHaveProperty('company_name');
   });
 });

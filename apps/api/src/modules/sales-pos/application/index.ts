@@ -30,7 +30,13 @@ export {
   RECEIPT_TEMPLATES,
   getReceiptTemplate,
   setReceiptTemplate,
+  printFormatForTemplate,
   getPaymentInfo,
+  getStoreProfile,
+  updateStoreProfile,
+  uploadCompanyLogo,
+  LogoUploadError,
   type ReceiptTemplate,
   type PaymentInfo,
+  type StoreProfile,
 } from './settings.js';

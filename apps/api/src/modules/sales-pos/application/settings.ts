@@ -7,7 +7,7 @@
  */
 import { env } from '../../../config/env.js';
 import { erpNextClient } from '../../../shared/erpnext-client/index.js';
-import { ValidationError } from '../../../shared/errors/index.js';
+import { AppError, ValidationError } from '../../../shared/errors/index.js';
 
 export const RECEIPT_TEMPLATES = ['Minimal', 'Standard', 'Detailed'] as const;
 export type ReceiptTemplate = (typeof RECEIPT_TEMPLATES)[number];
@@ -50,6 +50,115 @@ export async function setReceiptTemplate(template: string): Promise<ReceiptTempl
 
 export function printFormatForTemplate(template: ReceiptTemplate): string {
   return TEMPLATE_PRINT_FORMAT[template];
+}
+
+export class LogoUploadError extends AppError {
+  constructor(message: string) {
+    super(message, 502, 'LOGO_UPLOAD_ERROR');
+  }
+}
+
+/**
+ * Store profile — the receipt-header fields (spec: owner should be able to
+ * edit these from within the app, not just ERPNext directly). Deliberately
+ * excludes `company_name`: it's both the Company's display name *and* its
+ * ERPNext document ID, and `env.ERPNEXT_DEFAULT_COMPANY` is a hardcoded
+ * reference to that ID — editing company_name would very likely trigger an
+ * ERPNext document rename and silently break that reference everywhere in
+ * Hermes. Renaming a Company is an ERPNext-side action on purpose.
+ */
+export interface StoreProfile {
+  companyName: string;
+  phone: string;
+  address: string;
+  logoUrl: string | null;
+}
+
+interface CompanyProfileDoc {
+  company_name: string;
+  phone_no?: string;
+  custom_store_address?: string;
+  company_logo?: string;
+}
+
+export async function getStoreProfile(): Promise<StoreProfile> {
+  const company = await erpNextClient.get<CompanyProfileDoc>(
+    'Company',
+    env.ERPNEXT_DEFAULT_COMPANY,
+  );
+  return {
+    companyName: company.company_name,
+    phone: company.phone_no ?? '',
+    address: company.custom_store_address ?? '',
+    logoUrl: company.company_logo ?? null,
+  };
+}
+
+export async function updateStoreProfile(input: {
+  phone: string;
+  address: string;
+}): Promise<StoreProfile> {
+  await erpNextClient.update('Company', env.ERPNEXT_DEFAULT_COMPANY, {
+    phone_no: input.phone,
+    custom_store_address: input.address,
+  });
+  return getStoreProfile();
+}
+
+interface FrappeUploadResponse {
+  message?: { file_url?: string };
+}
+
+/**
+ * Real file upload (not a pasted URL) — Frappe's own upload endpoint,
+ * attached directly to the Company doc's `company_logo` field. Hand-rolled
+ * fetch, same reasoning as receipt.ts: this is multipart/form-data against
+ * a Frappe method route, a different shape than the shared erpNextClient's
+ * JSON `/api/resource` surface.
+ */
+export async function uploadCompanyLogo(
+  fileBuffer: Buffer,
+  filename: string,
+  mimeType: string,
+): Promise<StoreProfile> {
+  const form = new FormData();
+  form.append('is_private', '0');
+  form.append('doctype', 'Company');
+  form.append('docname', env.ERPNEXT_DEFAULT_COMPANY);
+  form.append('fieldname', 'company_logo');
+  form.append('file', new Blob([fileBuffer], { type: mimeType }), filename);
+
+  let response: Response;
+  try {
+    response = await fetch(`${env.ERPNEXT_BASE_URL}/api/method/upload_file`, {
+      method: 'POST',
+      headers: { Authorization: `token ${env.ERPNEXT_API_KEY}:${env.ERPNEXT_API_SECRET}` },
+      body: form,
+    });
+  } catch (cause) {
+    throw new LogoUploadError(
+      `Failed to reach ERPNext for logo upload: ${cause instanceof Error ? cause.message : String(cause)}`,
+    );
+  }
+
+  if (!response.ok) {
+    throw new LogoUploadError(`ERPNext upload_file returned HTTP ${response.status}`);
+  }
+
+  const json = (await response.json()) as FrappeUploadResponse;
+  const fileUrl = json.message?.file_url;
+  if (!fileUrl) {
+    throw new LogoUploadError('ERPNext upload_file response had no file_url');
+  }
+
+  // upload_file with doctype/docname/fieldname already attaches the file to
+  // that field server-side — this update is a deliberate belt-and-suspenders
+  // confirmation, not a workaround for a known gap, so a future ERPNext
+  // version change there can't silently leave company_logo unset.
+  await erpNextClient.update('Company', env.ERPNEXT_DEFAULT_COMPANY, {
+    company_logo: fileUrl,
+  });
+  return getStoreProfile();
 }
 
 /**

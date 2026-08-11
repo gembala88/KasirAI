@@ -12,6 +12,7 @@ import {
   getProductPrice,
   getReceiptHtml,
   getReceiptTemplate,
+  getStoreProfile,
   getTransactionDetail,
   listCatalogPage,
   listCompletedTransactions,
@@ -19,9 +20,12 @@ import {
   listParkedTransactions,
   listUoms,
   parkTransaction,
+  printFormatForTemplate,
   RECEIPT_TEMPLATES,
   searchProducts,
   setReceiptTemplate,
+  updateStoreProfile,
+  uploadCompanyLogo,
 } from '../application/index.js';
 
 const createTransactionSchema = z.object({
@@ -78,6 +82,11 @@ const transactionListQuerySchema = z.object({
 
 const receiptTemplateSchema = z.object({
   template: z.enum(RECEIPT_TEMPLATES),
+});
+
+const storeProfileSchema = z.object({
+  phone: z.string().max(50),
+  address: z.string().max(500),
 });
 
 const POS_ROLES = ['Owner', 'Manager', 'Cashier'] as const;
@@ -275,7 +284,14 @@ export function registerSalesPosRoutes(app: FastifyInstance): void {
   app.get(
     '/api/v1/settings/receipt-template',
     { preHandler: requireRole(...SETTINGS_ROLES) },
-    async () => ({ template: await getReceiptTemplate() }),
+    async () => {
+      const template = await getReceiptTemplate();
+      // printFormat included so Settings can link straight into ERPNext's
+      // own Print Format designer for the currently-selected template,
+      // instead of duplicating header/footer text editing in-app (see
+      // receipt.ts's doc comment on why print content stays ERPNext-owned).
+      return { template, printFormat: printFormatForTemplate(template) };
+    },
   );
 
   app.put(
@@ -286,7 +302,42 @@ export function registerSalesPosRoutes(app: FastifyInstance): void {
       if (!parsed.success) {
         throw new ValidationError(parsed.error.issues.map((i) => i.message).join('; '));
       }
-      return { template: await setReceiptTemplate(parsed.data.template) };
+      const template = await setReceiptTemplate(parsed.data.template);
+      return { template, printFormat: printFormatForTemplate(template) };
+    },
+  );
+
+  app.get(
+    '/api/v1/settings/store-profile',
+    { preHandler: requireRole(...SETTINGS_ROLES) },
+    async () => getStoreProfile(),
+  );
+
+  app.put(
+    '/api/v1/settings/store-profile',
+    { preHandler: requireRole(...SETTINGS_ROLES) },
+    async (request) => {
+      const parsed = storeProfileSchema.safeParse(request.body);
+      if (!parsed.success) {
+        throw new ValidationError(parsed.error.issues.map((i) => i.message).join('; '));
+      }
+      return updateStoreProfile(parsed.data);
+    },
+  );
+
+  app.post(
+    '/api/v1/settings/store-logo',
+    { preHandler: requireRole(...SETTINGS_ROLES) },
+    async (request) => {
+      const file = await request.file();
+      if (!file) {
+        throw new ValidationError('Berkas logo wajib diunggah');
+      }
+      if (!file.mimetype.startsWith('image/')) {
+        throw new ValidationError('Logo harus berupa file gambar');
+      }
+      const buffer = await file.toBuffer();
+      return uploadCompanyLogo(buffer, file.filename, file.mimetype);
     },
   );
 }

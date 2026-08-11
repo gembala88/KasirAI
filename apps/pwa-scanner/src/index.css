@@ -362,6 +362,22 @@ h1 {
   border-color: var(--color-primary);
 }
 
+.logo-upload-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.logo-preview {
+  max-height: 56px;
+  max-width: 160px;
+  border-radius: var(--radius-sm);
+  background: #fff;
+  padding: 0.25rem;
+}
+
 .scan-form {
   display: flex;
   flex-direction: column;
