@@ -24,7 +24,7 @@ environment.
 - `apps/pwa-scanner/src/branding.ts` — app name shown under the icon
   (`KasirAI`).
 - `apps/pwa-scanner/vite.config.ts`'s `manifest` block — `display:
-  'standalone'` (no browser UI), `start_url`/`scope` scoped to `/scan/`,
+'standalone'` (no browser UI), `start_url`/`scope` scoped to `/scan/`,
   theme/background colors, and icons at both required sizes:
   - `icon-192.png` / `icon-512.png` — real PNG raster icons (PWABuilder's
     Android/Windows packaging needs PNG, not just SVG — the original
@@ -39,7 +39,7 @@ environment.
   tab today, because it's the same PWA underneath.
 
 If you ever change the store name, logo, or theme color, re-run through
-this doc afterwards — PWABuilder reads whatever the *deployed* manifest
+this doc afterwards — PWABuilder reads whatever the _deployed_ manifest
 says at the time you package, not what's in this repo.
 
 ## A. Android APK
@@ -66,7 +66,7 @@ says at the time you package, not what's in this repo.
      signing key** and download it — keep that `.keystore`/`.jks` file and
      its password somewhere safe. Every future update to this same app
      (on the same device, or on the Play Store) must be signed with the
-     *same* key, or Android will refuse to install it as an update.
+     _same_ key, or Android will refuse to install it as an update.
 7. Download the generated package (a `.zip` containing an Android Studio
    project plus a pre-built `.apk`/`.aab`).
 8. **If you just need an installable APK** (sideloading, not the Play
@@ -127,7 +127,7 @@ build — shows the first-run setup screen before login.
 
 Every step above packages the app **pointed at one specific URL**
 (`https://newpelangi.duckdns.org/scan/` in the examples). That's the
-right choice when you're building for *this* store — the packaged app
+right choice when you're building for _this_ store — the packaged app
 just opens that exact page, same as a bookmark, and never needs the
 first-run setup screen at all.
 
