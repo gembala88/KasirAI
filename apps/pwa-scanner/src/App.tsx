@@ -5,11 +5,13 @@ import Kasir from './components/Kasir';
 import Login from './components/Login';
 import RiwayatTransaksi from './components/RiwayatTransaksi';
 import Settings from './components/Settings';
+import SetupWizard from './components/SetupWizard';
 import TagihanKasbon from './components/TagihanKasbon';
 import WarehouseScan from './components/WarehouseScan';
 import { STORE_NAME } from './branding';
 import { logout, triggerCatalogSync } from './lib/api';
 import { getStoredAuth, setOnAuthRequired, type AuthUser } from './lib/auth';
+import { hasServerUrl } from './lib/server-config';
 import { syncPendingQueue } from './lib/sync';
 
 type Tab = HomeDestination;
@@ -25,6 +27,12 @@ const TABS: Array<{ id: Tab; label: string; roles: AuthUser['role'][] }> = [
 ];
 
 export default function App() {
+  // Only false for a genuinely blank packaged app with no server URL known
+  // yet (see server-config.ts) — re-read as state (not just called inline
+  // in the render below) so saving one in SetupWizard actually re-renders
+  // past it, since localStorage writes don't trigger React updates on
+  // their own.
+  const [serverConfigured, setServerConfigured] = useState(() => hasServerUrl());
   const [user, setUser] = useState<AuthUser | null>(() => getStoredAuth()?.user ?? null);
   const [view, setView] = useState<View>('home');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
@@ -106,6 +114,10 @@ export default function App() {
     // back/forward and the low-stock card's programmatic navigation.
     setDrawerOpen(false);
   }, [view]);
+
+  if (!serverConfigured) {
+    return <SetupWizard onConfigured={() => setServerConfigured(true)} />;
+  }
 
   if (!user) {
     return <Login onLoggedIn={setUser} />;

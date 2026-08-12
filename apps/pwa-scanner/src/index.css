@@ -284,6 +284,22 @@ select {
   }
 }
 
+/* First-run server-URL setup (Item 2C) — a genuinely blank packaged app
+   has nothing else on screen yet, so this centers itself rather than
+   sitting flush at the top like every other (already-branded) screen. */
+.setup-wizard {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 100vh;
+  max-width: 480px;
+}
+
+.setup-wizard .scan-form {
+  margin-top: var(--space-4);
+  max-width: none;
+}
+
 .offline-banner {
   background: var(--color-warning);
   color: var(--color-primary-text);

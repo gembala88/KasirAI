@@ -1,0 +1,84 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// jsdom isn't configured for this project (see auth.test.ts's same
+// comment) — localStorage and window.location are stubbed minimally here,
+// just enough for these pure storage-logic tests.
+const store = new Map<string, string>();
+vi.stubGlobal('localStorage', {
+  getItem: (key: string) => store.get(key) ?? null,
+  setItem: (key: string, value: string) => store.set(key, value),
+  removeItem: (key: string) => store.delete(key),
+});
+vi.stubGlobal('window', {
+  location: { protocol: 'https:', origin: 'https://newpelangi.duckdns.org' },
+});
+
+const { clearServerUrl, getServerUrl, hasServerUrl, setServerUrl, testServerConnection } =
+  await import('./server-config');
+
+describe('server-config — Item 2C first-run server URL', () => {
+  beforeEach(() => {
+    store.clear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => store.set(key, value),
+      removeItem: (key: string) => store.delete(key),
+    });
+    vi.stubGlobal('window', {
+      location: { protocol: 'https:', origin: 'https://newpelangi.duckdns.org' },
+    });
+  });
+
+  it("falls back to the page's own origin when nothing is stored — the normal browser-tab/PWA case, never shows the setup wizard", () => {
+    expect(getServerUrl()).toBe('https://newpelangi.duckdns.org');
+    expect(hasServerUrl()).toBe(true);
+  });
+
+  it('prefers an explicitly stored URL over the page origin once one has been saved', () => {
+    setServerUrl('https://tokoanda.duckdns.org');
+    expect(getServerUrl()).toBe('https://tokoanda.duckdns.org');
+  });
+
+  it('strips a trailing slash so paths built as `${url}/api/...` never end up with a double slash', () => {
+    setServerUrl('https://tokoanda.duckdns.org/');
+    expect(getServerUrl()).toBe('https://tokoanda.duckdns.org');
+  });
+
+  it('clearServerUrl reverts back to the page origin default', () => {
+    setServerUrl('https://tokoanda.duckdns.org');
+    clearServerUrl();
+    expect(getServerUrl()).toBe('https://newpelangi.duckdns.org');
+  });
+
+  it('has no known server at all for a genuinely blank packaged shell (no usable page origin, nothing stored) — this is exactly when SetupWizard should show', () => {
+    vi.stubGlobal('window', { location: { protocol: 'file:', origin: 'null' } });
+    expect(getServerUrl()).toBeNull();
+    expect(hasServerUrl()).toBe(false);
+  });
+
+  it('testServerConnection reports success only on a real 2xx /health response', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true } as Response));
+    expect(await testServerConnection('https://tokoanda.duckdns.org')).toBe(true);
+  });
+
+  it('testServerConnection reports failure on a non-2xx response, without throwing', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false } as Response));
+    expect(await testServerConnection('https://tokoanda.duckdns.org')).toBe(false);
+  });
+
+  it('testServerConnection reports failure (not a thrown error) when the host is unreachable', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+    await expect(testServerConnection('https://unreachable.invalid')).resolves.toBe(false);
+  });
+
+  it('testServerConnection rejects a blank URL before ever calling fetch', async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal('fetch', fetchSpy);
+    expect(await testServerConnection('   ')).toBe(false);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});

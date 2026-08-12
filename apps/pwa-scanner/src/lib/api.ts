@@ -8,8 +8,24 @@ import {
 } from './auth';
 import { searchLocalCatalog, syncCatalog, type CatalogItem } from './catalog-cache';
 import type { QueuedAction, SyncStatus } from './offline-queue';
+import { getServerUrl } from './server-config';
 
-const API_BASE_URL: string = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000';
+/**
+ * Resolved fresh on every call, not cached at module load — the whole
+ * point of server-config.ts is that this can change at runtime (the
+ * first-run setup screen) without a rebuild. Falls back to the
+ * build-time env var, then localhost, only for the case server-config
+ * itself can't resolve (see its own doc comment) — in normal use
+ * (browser tab or a packaged app wrapping a real URL) getServerUrl()
+ * always returns something real.
+ */
+function apiBaseUrl(): string {
+  return (
+    getServerUrl() ??
+    (import.meta.env.VITE_API_BASE_URL as string | undefined) ??
+    'http://localhost:3000'
+  );
+}
 
 /**
  * Thrown by get()/post() when the server actually responded but rejected
@@ -37,7 +53,7 @@ interface TokenPair {
 }
 
 export async function login(email: string, password: string): Promise<TokenPair> {
-  const response = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
+  const response = await fetch(`${apiBaseUrl()}/api/v1/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
@@ -82,7 +98,7 @@ async function tryRefresh(): Promise<string | null> {
   if (!stored) {
     return null;
   }
-  const response = await fetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+  const response = await fetch(`${apiBaseUrl()}/api/v1/auth/refresh`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ refreshToken: stored.refreshToken }),
@@ -117,7 +133,7 @@ async function authorizedFetch(path: string, init: RequestInit = {}): Promise<Re
     headers: { ...init.headers, Authorization: `Bearer ${token}` },
   });
 
-  let response = await fetch(`${API_BASE_URL}${path}`, withAuth(stored.accessToken));
+  let response = await fetch(`${apiBaseUrl()}${path}`, withAuth(stored.accessToken));
 
   if (response.status === 401) {
     const refreshed = await tryRefresh();
@@ -126,7 +142,7 @@ async function authorizedFetch(path: string, init: RequestInit = {}): Promise<Re
       notifyAuthRequired();
       throw new AuthRequiredError();
     }
-    response = await fetch(`${API_BASE_URL}${path}`, withAuth(refreshed));
+    response = await fetch(`${apiBaseUrl()}${path}`, withAuth(refreshed));
   }
 
   return response;
