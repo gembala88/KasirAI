@@ -15,4 +15,11 @@ interface Window {
   kasirai?: {
     isElectron: true;
   };
+  // Injected automatically by @capacitor/android's native-bridge.js before
+  // any page script runs — undefined everywhere else (browser tab,
+  // Electron). Only the one method server-config.ts actually needs is
+  // typed here; the real global has many more (see @capacitor/core).
+  Capacitor?: {
+    isNativePlatform?: () => boolean;
+  };
 }

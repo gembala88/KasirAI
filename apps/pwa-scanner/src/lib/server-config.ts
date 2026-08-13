@@ -19,8 +19,28 @@ function stripTrailingSlash(url: string): string {
   return url.trim().replace(/\/+$/, '');
 }
 
+/**
+ * True inside a real Capacitor native shell (Android/iOS) — set by
+ * @capacitor/android's native-bridge.js, injected into the WebView by the
+ * native app itself before any page script runs (no npm dependency on
+ * @capacitor/core needed in this bundle for it to appear). Needed because
+ * Capacitor serves the local bundle from https://localhost by default —
+ * syntactically a real, usable-looking https:// origin, but not an actual
+ * server. Without this check, hasUsablePageOrigin() below would treat
+ * "https://localhost" as the real server origin and every API call would
+ * go there instead of the configured server, returning the app's own
+ * index.html (a 404 fallback) instead of JSON.
+ */
+function isCapacitorNative(): boolean {
+  return typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.() === true;
+}
+
 function hasUsablePageOrigin(): boolean {
-  return typeof window !== 'undefined' && /^https?:$/.test(window.location.protocol);
+  return (
+    typeof window !== 'undefined' &&
+    /^https?:$/.test(window.location.protocol) &&
+    !isCapacitorNative()
+  );
 }
 
 /**

@@ -66,6 +66,30 @@ describe('server-config — Item 2C first-run server URL', () => {
     expect(hasServerUrl()).toBe(false);
   });
 
+  it("does NOT treat Capacitor's local https://localhost WebView origin as a real server — SetupWizard must still show on first launch", () => {
+    // Real bug found live: Capacitor serves the bundle from
+    // https://localhost by default, which passes the plain protocol
+    // regex check just like a real deployed server would — every API
+    // call went to https://localhost/api/v1/... and got the app's own
+    // index.html back ("Unexpected token '<'") instead of the setup
+    // wizard ever appearing.
+    vi.stubGlobal('window', {
+      location: { protocol: 'https:', origin: 'https://localhost' },
+      Capacitor: { isNativePlatform: () => true },
+    });
+    expect(getServerUrl()).toBeNull();
+    expect(hasServerUrl()).toBe(false);
+  });
+
+  it('once a real server URL is saved (post-SetupWizard), Capacitor correctly uses it instead of https://localhost', () => {
+    vi.stubGlobal('window', {
+      location: { protocol: 'https:', origin: 'https://localhost' },
+      Capacitor: { isNativePlatform: () => true },
+    });
+    setServerUrl('https://newpelangi.duckdns.org');
+    expect(getServerUrl()).toBe('https://newpelangi.duckdns.org');
+  });
+
   it('testServerConnection reports success only on a real 2xx /health response', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true } as Response));
     expect(await testServerConnection('https://tokoanda.duckdns.org')).toBe(true);
