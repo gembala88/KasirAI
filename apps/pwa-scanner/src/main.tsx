@@ -12,10 +12,19 @@ import './index.css';
 // reload the instant a new service worker actually takes control, so a
 // shift that starts before a deploy still ends up on the fix, not stuck on
 // old code until someone thinks to clear the cache by hand.
-registerSW({ immediate: true });
-navigator.serviceWorker?.addEventListener('controllerchange', () => {
-  window.location.reload();
-});
+//
+// Skipped entirely under file: (the Electron desktop app loads its bundled
+// build this way — see apps/electron/src/main.js) — Chromium refuses SW
+// registration outside a real secure-context origin (http/https), so this
+// would just be a guaranteed-failing call there. Offline behavior doesn't
+// need it in that shell anyway: the whole app shell already ships on local
+// disk inside the installer, nothing to precache.
+if (location.protocol.startsWith('http')) {
+  registerSW({ immediate: true });
+  navigator.serviceWorker?.addEventListener('controllerchange', () => {
+    window.location.reload();
+  });
+}
 
 const container = document.getElementById('root');
 if (!container) {
