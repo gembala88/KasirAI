@@ -8,3 +8,11 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+// Exposed by apps/electron/src/preload.js via contextBridge — undefined
+// everywhere else (browser tab, Capacitor), so always optionally-chained.
+interface Window {
+  kasirai?: {
+    isElectron: true;
+  };
+}

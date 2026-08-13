@@ -65,6 +65,60 @@ function saveWindowState(win) {
 }
 
 let mainWindow = null;
+let dashboardWindow = null;
+
+// The dashboard (apps/dashboard, served at "/") is a separate app from the
+// bundled pwa-scanner shell (Kasir/Gudang, loaded via file:// — see the
+// top-of-file comment). It always needs a live connection to the real
+// server anyway (it's analytics/reports, nothing to bundle offline), so
+// rather than navigating the main window away from its offline-capable
+// bundle, clicking Dashboard opens a second window that WE create and
+// own — still part of the KasirAI app (same taskbar icon, same menu),
+// never the system browser. A second click on an already-open dashboard
+// just focuses it instead of spawning a duplicate.
+function openDashboardWindow(url) {
+  if (dashboardWindow && !dashboardWindow.isDestroyed()) {
+    dashboardWindow.focus();
+    return;
+  }
+  dashboardWindow = new BrowserWindow({
+    width: 1280,
+    height: 800,
+    minWidth: 900,
+    minHeight: 600,
+    autoHideMenuBar: true,
+    icon: path.join(__dirname, '..', 'build', 'icon.png'),
+    backgroundColor: '#0f172a',
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+    show: false,
+  });
+  dashboardWindow.once('ready-to-show', () => dashboardWindow.show());
+  dashboardWindow.loadURL(url);
+  attachWindowOpenHandler(dashboardWindow);
+  dashboardWindow.on('closed', () => {
+    dashboardWindow = null;
+  });
+}
+
+// Shared between both windows: a link explicitly aimed at the dashboard
+// (target="kasirai-dashboard-window", set by pwa-scanner's dashboardLinkProps
+// under a packaged shell) opens inside this app; anything else (e.g.
+// "Edit tata letak struk di ERPNext →" in Pengaturan) is a genuine
+// leave-the-app link, routed to the user's real default browser.
+function attachWindowOpenHandler(win) {
+  win.webContents.setWindowOpenHandler(({ url, frameName }) => {
+    if (frameName === 'kasirai-dashboard-window') {
+      openDashboardWindow(url);
+    } else {
+      void shell.openExternal(url);
+    }
+    return { action: 'deny' };
+  });
+}
 
 function createWindow() {
   const state = loadWindowState();
@@ -105,16 +159,7 @@ function createWindow() {
   }
   mainWindow.loadFile(indexPath);
 
-  // Real gap this closes: without this, clicking a link that opens a new
-  // tab in a normal browser (e.g. "Edit tata letak struk di ERPNext →"
-  // in Pengaturan) would either silently do nothing or open a second,
-  // chromeless Electron window inside the app — neither is right for a
-  // link meant to leave the app. Route every such request to the user's
-  // real default browser instead.
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url);
-    return { action: 'deny' };
-  });
+  attachWindowOpenHandler(mainWindow);
 
   let saveTimer = null;
   const scheduleSave = () => {
@@ -138,12 +183,13 @@ function buildMenu() {
         {
           label: 'Refresh',
           accelerator: 'CmdOrCtrl+R',
-          click: () => mainWindow?.reload(),
+          click: () => (BrowserWindow.getFocusedWindow() ?? mainWindow)?.reload(),
         },
         {
           label: 'Open DevTools',
           accelerator: 'CmdOrCtrl+Shift+I',
-          click: () => mainWindow?.webContents.toggleDevTools(),
+          click: () =>
+            (BrowserWindow.getFocusedWindow() ?? mainWindow)?.webContents.toggleDevTools(),
         },
         { type: 'separator' },
         {

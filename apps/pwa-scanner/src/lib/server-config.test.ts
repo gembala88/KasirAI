@@ -93,7 +93,7 @@ describe('server-config — Item 2C first-run server URL', () => {
       expect(dashboardLinkProps()).toEqual({ href: '/' });
     });
 
-    it("under a packaged shell (Electron file://, Capacitor), opens the real server's dashboard in the system browser instead of resolving to a blank page", () => {
+    it("under a non-Electron packaged shell (Capacitor), opens the real server's dashboard in the system browser — there's no in-app window to open it into there", () => {
       vi.stubGlobal('window', { location: { protocol: 'file:', origin: 'null' } });
       setServerUrl('https://newpelangi.duckdns.org');
       expect(dashboardLinkProps()).toEqual({
@@ -108,6 +108,19 @@ describe('server-config — Item 2C first-run server URL', () => {
       expect(dashboardLinkProps()).toEqual({
         href: '/',
         target: '_blank',
+        rel: 'noopener noreferrer',
+      });
+    });
+
+    it('under Electron specifically (window.kasirai.isElectron set by preload.js), targets the named window main.js opens in-app instead of the system browser', () => {
+      vi.stubGlobal('window', {
+        location: { protocol: 'file:', origin: 'null' },
+        kasirai: { isElectron: true },
+      });
+      setServerUrl('https://newpelangi.duckdns.org');
+      expect(dashboardLinkProps()).toEqual({
+        href: 'https://newpelangi.duckdns.org/',
+        target: 'kasirai-dashboard-window',
         rel: 'noopener noreferrer',
       });
     });

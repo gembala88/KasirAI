@@ -27,27 +27,44 @@ function hasUsablePageOrigin(): boolean {
  * True under Electron's file:// shell or Capacitor's local asset scheme —
  * neither is the real server origin, so a same-tab relative link (e.g.
  * href="/") resolves to nothing (a blank page) instead of the dashboard.
- * Callers use this to decide whether a link needs an absolute URL routed
- * to the system browser instead of the normal in-page relative link.
+ * Callers use this to decide whether a link needs an absolute URL instead
+ * of the normal in-page relative link.
  */
 export function isPackagedShell(): boolean {
   return !hasUsablePageOrigin();
 }
 
 /**
+ * True only inside the actual Electron shell — set via
+ * apps/electron/src/preload.js's contextBridge, not user-agent sniffing.
+ * Electron's main.js owns a second BrowserWindow it can open the
+ * dashboard into (see dashboardLinkProps below); Capacitor's WebView has
+ * no such window, so that shell keeps the system-browser fallback.
+ */
+function isElectronShell(): boolean {
+  return typeof window !== 'undefined' && window.kasirai?.isElectron === true;
+}
+
+/**
  * The dashboard is a separate app served at "/", not part of this SPA.
  * A relative href="/" only works in a real browser tab (resolves against
  * window.location); under a packaged shell it resolves to nothing and
- * shows a blank page. Packaged shells get the real server URL instead,
- * opened in the system browser via target="_blank" (Electron's main.js
- * routes that through shell.openExternal, same as any other external
- * link) — a normal browser tab keeps the exact same relative-link
- * behavior as before this existed.
+ * shows a blank page. Packaged shells get the real server URL instead:
+ * - Electron: target="kasirai-dashboard-window" — main.js's
+ *   setWindowOpenHandler recognizes that exact name and opens the
+ *   dashboard in a second window it owns, never the system browser.
+ * - Other packaged shells (Capacitor): target="_blank", which has no
+ *   in-app window to go to, so it opens in the system browser (the
+ *   pre-existing fallback, unchanged).
+ * A normal browser tab keeps the exact same relative-link behavior as
+ * before this existed.
  */
-export function dashboardLinkProps(): { href: string; target?: '_blank'; rel?: string } {
+export function dashboardLinkProps(): { href: string; target?: string; rel?: string } {
   if (!isPackagedShell()) return { href: '/' };
   const serverUrl = getServerUrl();
-  return { href: serverUrl ? `${serverUrl}/` : '/', target: '_blank', rel: 'noopener noreferrer' };
+  const href = serverUrl ? `${serverUrl}/` : '/';
+  const target = isElectronShell() ? 'kasirai-dashboard-window' : '_blank';
+  return { href, target, rel: 'noopener noreferrer' };
 }
 
 /** null only when there's truly no known server — a fresh, generic packaged app before its one-time setup screen has been completed. */
