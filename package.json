@@ -14,6 +14,9 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "dev": "npm run dev --workspace=apps/api",
+    "build:electron": "npm run build:electron --workspace=apps/pwa-scanner && npm run dist --workspace=apps/electron",
+    "build:electron:installer": "npm run build:electron --workspace=apps/pwa-scanner && npm run dist:installer --workspace=apps/electron",
+    "build:android": "npm run build:electron --workspace=apps/pwa-scanner && npm run sync --workspace=apps/android && npm run build:debug --workspace=apps/android",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

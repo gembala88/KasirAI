@@ -3,6 +3,13 @@ dist/
 build/
 coverage/
 
+# apps/electron/build/ isn't build OUTPUT — it's electron-builder's
+# "buildResources" input dir (its own naming convention), holding the
+# checked-in icon.ico/icon.png the installer packages. Un-ignore it from
+# the generic build/ rule above.
+!apps/electron/build/
+!apps/electron/build/**
+
 .env
 .env.local
 .env.*.local
@@ -20,3 +27,20 @@ Thumbs.db
 
 # Hermes' own SQLite database (spec §5) — local runtime data, not source.
 apps/api/data/
+
+# Electron desktop shell — pwa-scanner's file://-loadable build, plus
+# electron-builder's packaged output (unpacked app + .exe installer).
+apps/pwa-scanner/dist-electron/
+apps/electron/release/
+
+# Android shell — Capacitor copies the web build into android/app's assets
+# on every `cap sync`, and Gradle writes build/local.properties under the
+# generated native project. None of this is source; `npx cap sync` and a
+# real Android Studio / SDK setup regenerate it all.
+apps/android/android/app/src/main/assets/public/
+apps/android/android/**/build/
+apps/android/android/local.properties
+apps/android/android/.gradle/
+apps/android/android/captures/
+*.apk
+*.aab
