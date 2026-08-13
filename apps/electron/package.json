@@ -1,0 +1,42 @@
+{
+  "name": "@hermes/electron",
+  "version": "0.1.0",
+  "private": true,
+  "author": "KasirAI",
+  "description": "KasirAI desktop shell — Electron wrapper around the same PWA served at /scan/ (see apps/pwa-scanner's build:electron script).",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win --dir",
+    "dist:installer": "electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "com.newpelangi.kasirai",
+    "productName": "KasirAI",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": ["src/**/*", "package.json"],
+    "extraResources": [
+      {
+        "from": "../pwa-scanner/dist-electron",
+        "to": "renderer"
+      }
+    ],
+    "win": {
+      "target": ["nsis"],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  },
+  "devDependencies": {
+    "electron": "33.4.11",
+    "electron-builder": "^25.1.8"
+  }
+}
