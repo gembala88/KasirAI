@@ -11,7 +11,7 @@ import WarehouseScan from './components/WarehouseScan';
 import { STORE_NAME } from './branding';
 import { logout, triggerCatalogSync } from './lib/api';
 import { getStoredAuth, setOnAuthRequired, type AuthUser } from './lib/auth';
-import { hasServerUrl } from './lib/server-config';
+import { dashboardLinkProps, hasServerUrl } from './lib/server-config';
 import { syncPendingQueue } from './lib/sync';
 
 type Tab = HomeDestination;
@@ -187,7 +187,7 @@ export default function App() {
               {drawerItems.map((item) =>
                 item.id === 'dashboard' ? (
                   <li key={item.id}>
-                    <a href="/" className="nav-drawer-item">
+                    <a {...dashboardLinkProps()} className="nav-drawer-item">
                       <span className={`grid-card-icon grid-card-icon--${item.color}`}>
                         {item.icon}
                       </span>

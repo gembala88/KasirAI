@@ -29,6 +29,7 @@ import { getLastSyncedAt } from '../lib/catalog-cache';
 import type { AuthUser } from '../lib/auth';
 import { formatQty, formatRupiah, formatSyncedAt } from '../lib/format';
 import { STORE_NAME } from '../branding';
+import { dashboardLinkProps } from '../lib/server-config';
 
 /** Same role check as the report-dashboard's owner-facing analytics — Cashier and Warehouse Staff aren't shown store-wide stock-level alerts, just what's needed for their own screens. */
 const LOW_STOCK_VISIBLE_ROLES = new Set<AuthUser['role']>(['Owner', 'Manager']);
@@ -354,7 +355,7 @@ export default function Home({
       );
     const className = variant === 'mobile' ? 'card menu-card' : 'card grid-card';
     return item.id === 'dashboard' ? (
-      <a key={item.id} href="/" className={className}>
+      <a key={item.id} {...dashboardLinkProps()} className={className}>
         {body}
       </a>
     ) : (

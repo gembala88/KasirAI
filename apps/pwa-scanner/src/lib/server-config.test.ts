@@ -13,8 +13,14 @@ vi.stubGlobal('window', {
   location: { protocol: 'https:', origin: 'https://newpelangi.duckdns.org' },
 });
 
-const { clearServerUrl, getServerUrl, hasServerUrl, setServerUrl, testServerConnection } =
-  await import('./server-config');
+const {
+  clearServerUrl,
+  dashboardLinkProps,
+  getServerUrl,
+  hasServerUrl,
+  setServerUrl,
+  testServerConnection,
+} = await import('./server-config');
 
 describe('server-config — Item 2C first-run server URL', () => {
   beforeEach(() => {
@@ -80,5 +86,30 @@ describe('server-config — Item 2C first-run server URL', () => {
     vi.stubGlobal('fetch', fetchSpy);
     expect(await testServerConnection('   ')).toBe(false);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  describe('dashboardLinkProps', () => {
+    it('is a plain same-tab relative link in a real browser tab/PWA — unchanged from before this existed', () => {
+      expect(dashboardLinkProps()).toEqual({ href: '/' });
+    });
+
+    it("under a packaged shell (Electron file://, Capacitor), opens the real server's dashboard in the system browser instead of resolving to a blank page", () => {
+      vi.stubGlobal('window', { location: { protocol: 'file:', origin: 'null' } });
+      setServerUrl('https://newpelangi.duckdns.org');
+      expect(dashboardLinkProps()).toEqual({
+        href: 'https://newpelangi.duckdns.org/',
+        target: '_blank',
+        rel: 'noopener noreferrer',
+      });
+    });
+
+    it('falls back to "/" under a packaged shell with no known server yet, rather than building a broken "undefined/" URL', () => {
+      vi.stubGlobal('window', { location: { protocol: 'file:', origin: 'null' } });
+      expect(dashboardLinkProps()).toEqual({
+        href: '/',
+        target: '_blank',
+        rel: 'noopener noreferrer',
+      });
+    });
   });
 });

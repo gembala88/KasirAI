@@ -23,6 +23,33 @@ function hasUsablePageOrigin(): boolean {
   return typeof window !== 'undefined' && /^https?:$/.test(window.location.protocol);
 }
 
+/**
+ * True under Electron's file:// shell or Capacitor's local asset scheme —
+ * neither is the real server origin, so a same-tab relative link (e.g.
+ * href="/") resolves to nothing (a blank page) instead of the dashboard.
+ * Callers use this to decide whether a link needs an absolute URL routed
+ * to the system browser instead of the normal in-page relative link.
+ */
+export function isPackagedShell(): boolean {
+  return !hasUsablePageOrigin();
+}
+
+/**
+ * The dashboard is a separate app served at "/", not part of this SPA.
+ * A relative href="/" only works in a real browser tab (resolves against
+ * window.location); under a packaged shell it resolves to nothing and
+ * shows a blank page. Packaged shells get the real server URL instead,
+ * opened in the system browser via target="_blank" (Electron's main.js
+ * routes that through shell.openExternal, same as any other external
+ * link) — a normal browser tab keeps the exact same relative-link
+ * behavior as before this existed.
+ */
+export function dashboardLinkProps(): { href: string; target?: '_blank'; rel?: string } {
+  if (!isPackagedShell()) return { href: '/' };
+  const serverUrl = getServerUrl();
+  return { href: serverUrl ? `${serverUrl}/` : '/', target: '_blank', rel: 'noopener noreferrer' };
+}
+
 /** null only when there's truly no known server — a fresh, generic packaged app before its one-time setup screen has been completed. */
 export function getServerUrl(): string | null {
   const stored = localStorage.getItem(STORAGE_KEY);
