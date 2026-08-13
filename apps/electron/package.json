@@ -17,7 +17,10 @@
       "output": "release",
       "buildResources": "build"
     },
-    "files": ["src/**/*", "package.json"],
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
     "extraResources": [
       {
         "from": "../pwa-scanner/dist-electron",
@@ -25,7 +28,9 @@
       }
     ],
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "icon": "build/icon.ico"
     },
     "nsis": {

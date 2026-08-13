@@ -33,11 +33,12 @@ apps/api/data/
 apps/pwa-scanner/dist-electron/
 apps/electron/release/
 
-# Android shell — Capacitor copies the web build into android/app's assets
-# on every `cap sync`, and Gradle writes build/local.properties under the
-# generated native project. None of this is source; `npx cap sync` and a
-# real Android Studio / SDK setup regenerate it all.
-apps/android/android/app/src/main/assets/public/
+# Android shell — Capacitor copies the web build and regenerates its own
+# config/plugin-list JSON into android/app's assets on every `cap sync`,
+# and Gradle writes build/local.properties under the generated native
+# project. None of this is source; `npx cap sync` and a real Android
+# Studio / SDK setup regenerate it all.
+apps/android/android/app/src/main/assets/
 apps/android/android/**/build/
 apps/android/android/local.properties
 apps/android/android/.gradle/

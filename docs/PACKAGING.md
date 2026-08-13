@@ -42,8 +42,8 @@ code is duplicated or forked for either shell.
 - `apps/electron/` — `src/main.js` (window creation, menu, window-state
   persistence), `src/preload.js`, `package.json` (electron-builder config:
   appId `com.newpelangi.kasirai`, NSIS installer target), `build/icon.ico`
-  + `build/icon.png` (generated from the same source art as the PWA
-  icons).
+  - `build/icon.png` (generated from the same source art as the PWA
+    icons).
 - `apps/android/` — `capacitor.config.ts` (points `webDir` at
   `apps/pwa-scanner`'s `dist-electron` build, same as Electron),
   `package.json` (`@capacitor/core`/`cli`/`android`/`camera`), and a
@@ -92,8 +92,8 @@ npm run dist:installer --workspace=apps/electron       # → apps/electron/relea
   no install, for quick local testing.
 - `apps/electron/release/KasirAI Setup <version>.exe` — the real
   installer: double-click, choose an install directory, get a Start Menu
-  + desktop shortcut with the KasirAI icon, uninstall entry in Windows
-  Settings.
+  - desktop shortcut with the KasirAI icon, uninstall entry in Windows
+    Settings.
 
 **Verified in this environment**: both build modes were run end-to-end —
 the unpacked `KasirAI.exe` was launched and confirmed to start and stay
@@ -202,7 +202,7 @@ release:
   `apps/electron/package.json`'s `build.win` config, then rebuild
   `dist:installer`.
 - **Android**: generate a signing keystore (`keytool -genkey -v -keystore
-  kasirai-release.keystore ...`), configure `apps/android/android/app`'s
+kasirai-release.keystore ...`), configure `apps/android/android/app`'s
   `build.gradle` `signingConfigs`, and run `./gradlew assembleRelease` (or
   `bundleRelease` for a Play Store `.aab`) instead of `assembleDebug`.
   Every future update needs the **same** keystore, or Android refuses to
@@ -218,7 +218,7 @@ changes, regenerate:
   `sharp`) and combine into `apps/electron/build/icon.ico` (e.g. with
   `png-to-ico`); copy the 512px PNG to `apps/electron/build/icon.png`.
 - **Android**: resize into `apps/android/android/app/src/main/res/mipmap-
-  {mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}/ic_launcher.png` (48/72/96/144/192px)
+{mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}/ic_launcher.png` (48/72/96/144/192px)
   and `ic_launcher_round.png` (same sizes, circular alpha mask) and
   `ic_launcher_foreground.png` (used by the adaptive icon XML in
   `mipmap-anydpi-v26/`).
