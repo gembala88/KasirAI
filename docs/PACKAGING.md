@@ -1,143 +1,237 @@
-# Packaging KasirAI as an Android APK / Windows App
+# Packaging KasirAI as a Windows App / Android APK
 
-KasirAI is already a real installable PWA (Progressive Web App) — anyone can
-open `https://newpelangi.duckdns.org/scan/` in Chrome and tap "Install app"
-to get a home-screen icon with no browser chrome, working offline exactly
-like a native app. This document is for the extra step of turning that PWA
-into a standalone **APK** (Android) or **Windows app package** that can be
-installed without going through a browser first, or submitted to the Google
-Play Store / Microsoft Store.
+KasirAI is already a real installable PWA (Progressive Web App) — anyone
+can open the server's `/scan/` URL in Chrome and tap "Install app" for a
+home-screen icon with no browser chrome, working offline exactly like a
+native app. This document is for the extra step of turning that same PWA
+into a standalone Windows installer or Android APK.
 
-The actual packaging is done by **[PWABuilder](https://www.pwabuilder.com)**,
-a free Microsoft-run tool built exactly for this — it reads the app's PWA
-manifest, generates a native wrapper around it (a "Trusted Web Activity" on
-Android, an MSIX package on Windows), and hands you a ready-to-build
-project. This repo's job is to make sure the manifest PWABuilder reads is
-complete and correct — that part is already done (see "What's already
-prepared" below). Actually compiling/signing the final APK or MSIX has to
-happen on PWABuilder's own site or a machine with the Android/Windows build
-tools installed; neither can run inside this repo's own CI or dev
-environment.
+This used to go through **PWABuilder** (pwabuilder.com), a third-party
+site that reads a PWA's manifest and hands back a wrapper package. That
+approach is gone — both platforms are now built directly in this repo:
+
+- **Windows**: `apps/electron/` — a real [Electron](https://electronjs.org)
+  app, packaged into a `.exe` installer with
+  [electron-builder](https://www.electron.build). No PWABuilder account,
+  no third-party site reading the live deployment.
+- **Android**: `apps/android/` — a real
+  [Capacitor](https://capacitorjs.com) app (not a Trusted Web Activity),
+  wrapping the PWA in a native `WebView` inside an Android Studio/Gradle
+  project you build yourself.
+
+Both load the **exact same PWA build** — `apps/pwa-scanner`'s
+`build:electron` script (relative asset paths, so it works loaded from
+`file://` under Electron or from Capacitor's local asset server, neither
+of which is `http(s)://`). Nothing in `apps/pwa-scanner`'s application
+code is duplicated or forked for either shell.
 
 ## What's already prepared
 
-- `apps/pwa-scanner/src/branding.ts` — app name shown under the icon
-  (`KasirAI`).
-- `apps/pwa-scanner/vite.config.ts`'s `manifest` block — `display:
-'standalone'` (no browser UI), `start_url`/`scope` scoped to `/scan/`,
-  theme/background colors, and icons at both required sizes:
-  - `icon-192.png` / `icon-512.png` — real PNG raster icons (PWABuilder's
-    Android/Windows packaging needs PNG, not just SVG — the original
-    SVG-only icons were the one thing that would have blocked packaging).
-  - `icon-512.png` is also declared with `purpose: "maskable"`, so Android
-    can safely crop it into a circle/squircle without cutting off the logo.
-  - The original `icon-192.svg` / `icon-512.svg` stay too, for browsers
-    that prefer a scalable icon.
-- `apps/pwa-scanner/src/main.tsx` already registers a real service worker
-  (Workbox, via `vite-plugin-pwa`) that precaches the app shell — offline
-  behavior inside the packaged app works exactly like it does in a browser
-  tab today, because it's the same PWA underneath.
+- `apps/pwa-scanner/package.json`'s `build:electron` script — builds the
+  PWA with `--base=./` (relative asset paths) into `dist-electron/`,
+  instead of the normal `/scan/`-absolute build used for server
+  deployment.
+- `apps/pwa-scanner/src/lib/server-config.ts` — already the single source
+  of truth for "what server does this app talk to." Under a normal
+  browser tab it defaults to the page's own origin; under `file://`
+  (Electron) or Capacitor's local scheme there's no usable origin, so it
+  falls through to whatever's saved in `localStorage` under the
+  `kasirai-server-url` key, or `null` if nothing's saved yet — which is
+  exactly when `SetupWizard` takes over. Both shells get this for free,
+  with zero shell-specific setup code.
+- `apps/electron/` — `src/main.js` (window creation, menu, window-state
+  persistence), `src/preload.js`, `package.json` (electron-builder config:
+  appId `com.newpelangi.kasirai`, NSIS installer target), `build/icon.ico`
+  + `build/icon.png` (generated from the same source art as the PWA
+  icons).
+- `apps/android/` — `capacitor.config.ts` (points `webDir` at
+  `apps/pwa-scanner`'s `dist-electron` build, same as Electron),
+  `package.json` (`@capacitor/core`/`cli`/`android`/`camera`), and a
+  generated `android/` native Gradle project (from `npx cap add android`)
+  with:
+  - `CAMERA` permission declared in `AndroidManifest.xml` (needed for
+    barcode scanning in Kasir/Gudang) — both explicitly, and via
+    `@capacitor/camera`'s own manifest merge.
+  - Real KasirAI launcher icons (not Capacitor's default placeholder) in
+    every `mipmap-*` density folder.
+  - App name `KasirAI` in `res/values/strings.xml`.
 
-If you ever change the store name, logo, or theme color, re-run through
-this doc afterwards — PWABuilder reads whatever the _deployed_ manifest
-says at the time you package, not what's in this repo.
+> **Note on the localStorage key**: if you've seen `kasirServerUrl`
+> mentioned elsewhere, the actual key used throughout the codebase
+> (`server-config.ts`, `SetupWizard`, both shells below) is
+> **`kasirai-server-url`**. This doc and all shipped code use the real
+> key.
 
-## A. Android APK
+## A. Windows desktop app (Electron)
 
-1. Make sure the latest build is actually deployed (PWABuilder reads the
-   **live** site, not this repo) — see the main deploy steps in
-   `RUNBOOK.md` / the VPS guide (`docs/PANDUAN_VPS_BARU.md`) if you're not
-   sure it's current.
-2. Go to **<https://www.pwabuilder.com>**.
-3. Enter `https://newpelangi.duckdns.org/scan/` (use your own domain if
-   this is a different client's server — see `docs/PANDUAN_VPS_BARU.md`)
-   and click **Start**.
-4. PWABuilder scores the manifest and service worker. With the icons above
-   already in place you should see manifest and service worker both pass;
-   if anything's flagged, PWABuilder's own "Fix" buttons can usually patch
-   it directly in their editor without touching this repo.
-5. Click **Package for stores**, choose **Android**.
-6. Fill in the package identity:
-   - **Package ID**: reverse-domain style, e.g. `com.newpelangi.kasirai`
-     (use a different one per client if packaging this for more than one
-     store).
-   - **App name**: `KasirAI`.
-   - **Signing key**: for a first build, let PWABuilder **generate a new
-     signing key** and download it — keep that `.keystore`/`.jks` file and
-     its password somewhere safe. Every future update to this same app
-     (on the same device, or on the Play Store) must be signed with the
-     _same_ key, or Android will refuse to install it as an update.
-7. Download the generated package (a `.zip` containing an Android Studio
-   project plus a pre-built `.apk`/`.aab`).
-8. **If you just need an installable APK** (sideloading, not the Play
-   Store): the zip already contains a signed `app-release-signed.apk` —
-   copy it to the device and install it directly (Android will prompt to
-   allow installing from this source the first time).
-9. **If you're publishing to the Google Play Store**: open the project in
-   [Android Studio](https://developer.android.com/studio), build the
-   `.aab` (Android App Bundle) instead of the raw APK, and follow Google's
-   normal Play Console upload flow. This needs a (one-time, $25) Google
-   Play Developer account.
+### Prerequisites
 
-### Verifying the packaged app
+Just Node.js 22+ and this repo — `npm install` at the repo root pulls in
+`electron`/`electron-builder` as part of the `apps/electron` workspace.
+No separate SDK or account needed.
 
-Once installed, confirm it behaves like the real app, not a broken shell:
+### Build
 
-- Opens straight to the login screen with **no visible browser
-  address bar/tabs** (that's the "Trusted Web Activity" working —
-  Chrome is still rendering it under the hood, just without its own UI).
-- Turn off Wi-Fi/mobile data after logging in once: Kasir should still let
-  you scan and check out (same offline-first behavior as the browser PWA —
-  see `docs/PANDUAN_OPERASIONAL.md` section 4).
-- If this APK was built generically (not pointed at one specific store's
-  URL) — see the note on generic builds below — the first launch should
-  show the **first-run setup screen** ("URL Server" / "Test Koneksi") from
-  Item 2C instead of going straight to login.
+```bash
+# From the repo root — builds the PWA (relative paths) then packages it:
+npm run build:electron            # unpacked app, for quick local testing
+npm run build:electron:installer  # real NSIS .exe installer
+```
 
-## B. Windows app package
+Equivalent step-by-step, if you want to run the pieces individually:
 
-1. From the same PWABuilder run as above (same
-   `https://newpelangi.duckdns.org/scan/` scan), click **Package for
-   stores** → **Windows**.
-2. Fill in the package identity (publisher name/ID — if you plan to submit
-   to the Microsoft Store, these need to match your Partner Center
-   account; for internal/sideloaded use, any values work).
-3. Download the generated `.msix` (or `.msixbundle` for multiple CPU
-   architectures).
-4. **To install directly** (no Microsoft Store): the `.msix` needs to be
-   signed with a certificate the target Windows machine trusts.
-   PWABuilder's Windows package includes a self-signed test certificate —
-   for real store-PC deployment, either:
-   - Install that test certificate into the PC's trusted store first
-     (PWABuilder's download includes an `install.ps1` script that does
-     this and installs the app in one step — the intended path for a
-     store's own PC, per `RUNBOOK.md`'s "Store PC/tablet setup"), or
-   - Re-sign the package with a real code-signing certificate if you have
-     one, for a smoother install with no trust warnings.
-5. **To publish to the Microsoft Store** instead: upload the `.msix`
-   through Partner Center; Microsoft handles signing.
+```bash
+npm run build:electron --workspace=apps/pwa-scanner   # → apps/pwa-scanner/dist-electron/
+npm run dist --workspace=apps/electron                # → apps/electron/release/win-unpacked/
+npm run dist:installer --workspace=apps/electron       # → apps/electron/release/KasirAI Setup <version>.exe
+```
 
-### Verifying the packaged app
+### Output
 
-Same checklist as Android: standalone window (no browser chrome), works
-offline after the first login, and — for a generic (non-store-specific)
-build — shows the first-run setup screen before login.
+- `apps/electron/release/win-unpacked/KasirAI.exe` — run this directly,
+  no install, for quick local testing.
+- `apps/electron/release/KasirAI Setup <version>.exe` — the real
+  installer: double-click, choose an install directory, get a Start Menu
+  + desktop shortcut with the KasirAI icon, uninstall entry in Windows
+  Settings.
 
-## Generic vs. store-specific builds
+**Verified in this environment**: both build modes were run end-to-end —
+the unpacked `KasirAI.exe` was launched and confirmed to start and stay
+running (not just compile), and the NSIS installer
+(`KasirAI Setup 0.1.0.exe`, ~80MB) was built successfully via
+electron-builder. This is an unsigned debug/test build, as requested — no
+code-signing certificate is applied, so Windows SmartScreen will show an
+"unknown publisher" warning on first run until one is added.
 
-Every step above packages the app **pointed at one specific URL**
-(`https://newpelangi.duckdns.org/scan/` in the examples). That's the
-right choice when you're building for _this_ store — the packaged app
-just opens that exact page, same as a bookmark, and never needs the
-first-run setup screen at all.
+### What you get
 
-If you want **one generic APK/MSIX you can hand to any future client** and
-have them point it at their own VPS, package a URL that has no real
-server behind it (e.g. a static placeholder page, or the repo's own GitHub
-Pages if one exists) instead of a specific client's domain. On first
-launch, `apps/pwa-scanner/src/lib/server-config.ts` won't find a usable
-page origin, so `SetupWizard` (Item 2C) takes over automatically — the
-client types in their own server's URL, taps **Test Koneksi** to confirm
-it's reachable, then **Simpan & Lanjutkan**. From then on that device
-remembers the URL (stored in its own `localStorage`) and behaves exactly
-like a store-specific build pointed at that server.
+- **Menu** (hidden behind `autoHideMenuBar` — press <kbd>Alt</kbd> to
+  reveal it): Refresh, Open DevTools (for debugging), About KasirAI, Exit.
+- **Window size/position** is remembered between sessions (written to a
+  JSON file in the app's user-data folder, not the registry).
+- **External links** (e.g. "Edit tata letak struk di ERPNext →" in
+  Pengaturan) open in the system's default browser instead of a second
+  Electron window.
+- **Offline behavior**: unchanged from the browser PWA — the same
+  IndexedDB action queue and cached catalog data apply, since it's the
+  same app code. (The service worker itself doesn't register under
+  `file://`, but it's redundant here anyway — the whole app already ships
+  as local files inside the installer, there's nothing left to precache.)
+- **First run**: with no `kasirai-server-url` saved yet, the app shows the
+  same `SetupWizard` screen ("URL Server" / "Test Koneksi") as the PWA
+  does, before loading the real app.
+
+## B. Android APK (Capacitor)
+
+### Prerequisites
+
+This one needs a real Android build toolchain, not just Node:
+
+- Node.js 22+ (same as above)
+- JDK 17
+- Android SDK — at minimum `platform-tools`, `platforms;android-34`, and
+  `build-tools` matching `compileSdkVersion = 34` (set in
+  `apps/android/android/variables.gradle`)
+- Easiest way to get all three at once: install
+  [Android Studio](https://developer.android.com/studio) — it bundles a
+  JDK and lets you install SDK components through its SDK Manager UI. Set
+  `ANDROID_HOME`/`JAVA_HOME` to match afterwards if you build from the
+  command line instead of Android Studio's own "Run" button.
+
+### Build
+
+```bash
+# From the repo root:
+npm run build:android
+```
+
+Equivalent step-by-step:
+
+```bash
+npm run build:electron --workspace=apps/pwa-scanner   # → apps/pwa-scanner/dist-electron/
+npm run sync --workspace=apps/android                  # copies the build into android/app/src/main/assets/public
+npm run build:debug --workspace=apps/android            # ./gradlew assembleDebug
+```
+
+Or open `apps/android/android` directly in Android Studio and hit Run —
+that's the more reliable path if command-line Gradle gives you SDK
+licensing prompts the first time (`sdkmanager --licenses` needs to be
+accepted once per machine).
+
+### Output
+
+`apps/android/android/app/build/outputs/apk/debug/app-debug.apk` — an
+unsigned debug APK. Copy it to a device (or `adb install app-debug.apk`)
+and Android will prompt to allow installing from that source the first
+time.
+
+**Verified in this environment**: the full chain was run end-to-end,
+including a real `./gradlew assembleDebug` — not just the scaffold. This
+sandbox doesn't ship a JDK or Android SDK by default, so a portable JDK 17
+and a minimal Android SDK (`platform-tools`, `platforms;android-34`,
+`build-tools;34.0.0`) were fetched to unblock Gradle. The build finished
+with `BUILD SUCCESSFUL` and produced a real 6.4MB
+`app/build/outputs/apk/debug/app-debug.apk`, confirmed via `aapt dump
+badging`: package `com.newpelangi.kasirai`, label `KasirAI`,
+`android.permission.CAMERA` + `android.permission.INTERNET` both present,
+and the actual PWA build (`assets/public/index.html`,
+`manifest.webmanifest`) bundled inside. A machine with Android Studio
+installed (the normal case for Android development) builds this the same
+way, just without needing to fetch a JDK/SDK first.
+
+### What you get
+
+- **Camera permission** pre-declared (`android.permission.CAMERA` in
+  `AndroidManifest.xml`), needed for the barcode scanner in Kasir/Gudang —
+  the OS will still prompt the user to grant it the first time the app
+  actually opens the camera, same as any Android app.
+- **Full screen, no browser chrome** — it's a native `WebView`, not a tab.
+- **Same offline cache/action queue** as the browser PWA and the Electron
+  app — same underlying build.
+- **First run**: same `SetupWizard` fallback as Electron, for the same
+  reason (`server-config.ts` finds no usable page origin under
+  Capacitor's local asset scheme, and no saved `kasirai-server-url` yet).
+
+### Release/signed builds — out of scope here
+
+Both shells above are debug/test builds, per the current ask. For a real
+release:
+
+- **Windows**: buy or generate a code-signing certificate and add a
+  `certificateFile`/`certificatePassword` (or `signtoolOptions`) to
+  `apps/electron/package.json`'s `build.win` config, then rebuild
+  `dist:installer`.
+- **Android**: generate a signing keystore (`keytool -genkey -v -keystore
+  kasirai-release.keystore ...`), configure `apps/android/android/app`'s
+  `build.gradle` `signingConfigs`, and run `./gradlew assembleRelease` (or
+  `bundleRelease` for a Play Store `.aab`) instead of `assembleDebug`.
+  Every future update needs the **same** keystore, or Android refuses to
+  install it as an update over the existing one.
+
+## Regenerating icons
+
+Both shells' icons are generated from the same source art as the PWA
+(`apps/pwa-scanner/public/icon-512.png` / `.svg`). If that source art ever
+changes, regenerate:
+
+- **Electron**: rasterize the SVG at 16/24/32/48/64/128/256px (e.g. with
+  `sharp`) and combine into `apps/electron/build/icon.ico` (e.g. with
+  `png-to-ico`); copy the 512px PNG to `apps/electron/build/icon.png`.
+- **Android**: resize into `apps/android/android/app/src/main/res/mipmap-
+  {mdpi,hdpi,xhdpi,xxhdpi,xxxhdpi}/ic_launcher.png` (48/72/96/144/192px)
+  and `ic_launcher_round.png` (same sizes, circular alpha mask) and
+  `ic_launcher_foreground.png` (used by the adaptive icon XML in
+  `mipmap-anydpi-v26/`).
+
+## Verifying either packaged app
+
+Same checklist regardless of shell:
+
+- Opens straight to the login screen (after `SetupWizard`, if this is the
+  first run) with no browser UI at all.
+- Turn off Wi-Fi/mobile data after logging in once — Kasir should still
+  let you scan and check out (same offline-first behavior as the browser
+  PWA, see `docs/PANDUAN_OPERASIONAL.md` section 4).
+- Window size (Windows) reopens where you left it after a restart.
+- Camera scan button in Kasir actually opens the camera (Android — first
+  launch prompts for the permission declared above).
