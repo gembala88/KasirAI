@@ -58,33 +58,67 @@ export function isPackagedShell(): boolean {
  * True only inside the actual Electron shell — set via
  * apps/electron/src/preload.js's contextBridge, not user-agent sniffing.
  * Electron's main.js owns a second BrowserWindow it can open the
- * dashboard into (see dashboardLinkProps below); Capacitor's WebView has
- * no such window, so that shell keeps the system-browser fallback.
+ * dashboard into (see dashboardLinkProps below); Capacitor has no such
+ * window, so that shell uses its own in-app browser instead (see
+ * openInAppBrowser below) — either way, never the system browser.
  */
 function isElectronShell(): boolean {
   return typeof window !== 'undefined' && window.kasirai?.isElectron === true;
 }
 
 /**
+ * Opens a URL in Capacitor's in-app browser (Chrome Custom Tabs on
+ * Android — a sheet with its own close button that returns straight to
+ * the app, not a separate system browser app/window). A plain
+ * `<a target="_blank">` click in the WebView gets intercepted and handed
+ * to the OS as an ACTION_VIEW intent instead — that's what was opening
+ * the real system browser. Dynamically imported so Electron's and the
+ * plain browser build's bundles don't pay for a plugin they never call
+ * (this path only runs when isCapacitorNative() is true).
+ */
+async function openInAppBrowser(url: string): Promise<void> {
+  const { Browser } = await import('@capacitor/browser');
+  await Browser.open({ url });
+}
+
+/**
  * The dashboard is a separate app served at "/", not part of this SPA.
  * A relative href="/" only works in a real browser tab (resolves against
  * window.location); under a packaged shell it resolves to nothing and
- * shows a blank page. Packaged shells get the real server URL instead:
+ * shows a blank page. Packaged shells get the real server URL instead,
+ * opened without ever leaving the app:
  * - Electron: target="kasirai-dashboard-window" — main.js's
  *   setWindowOpenHandler recognizes that exact name and opens the
- *   dashboard in a second window it owns, never the system browser.
- * - Other packaged shells (Capacitor): target="_blank", which has no
- *   in-app window to go to, so it opens in the system browser (the
- *   pre-existing fallback, unchanged).
+ *   dashboard in a second window it owns.
+ * - Capacitor: an onClick handler that prevents the default (system
+ *   browser) navigation and opens Browser.open() (Custom Tabs) instead —
+ *   href/target are kept as a harmless fallback for anything that reads
+ *   them without executing onClick (e.g. right-click "copy link").
  * A normal browser tab keeps the exact same relative-link behavior as
  * before this existed.
  */
-export function dashboardLinkProps(): { href: string; target?: string; rel?: string } {
+export function dashboardLinkProps(): {
+  href: string;
+  target?: string;
+  rel?: string;
+  onClick?: (event: { preventDefault(): void }) => void;
+} {
   if (!isPackagedShell()) return { href: '/' };
   const serverUrl = getServerUrl();
   const href = serverUrl ? `${serverUrl}/` : '/';
-  const target = isElectronShell() ? 'kasirai-dashboard-window' : '_blank';
-  return { href, target, rel: 'noopener noreferrer' };
+  if (isElectronShell()) {
+    return { href, target: 'kasirai-dashboard-window', rel: 'noopener noreferrer' };
+  }
+  if (isCapacitorNative()) {
+    return {
+      href,
+      onClick: (event) => {
+        event.preventDefault();
+        void openInAppBrowser(href);
+      },
+    };
+  }
+  return { href, target: '_blank', rel: 'noopener noreferrer' };
 }
 
 /** null only when there's truly no known server — a fresh, generic packaged app before its one-time setup screen has been completed. */

@@ -1,5 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const browserOpen = vi.fn().mockResolvedValue(undefined);
+vi.mock('@capacitor/browser', () => ({ Browser: { open: browserOpen } }));
+
 // jsdom isn't configured for this project (see auth.test.ts's same
 // comment) — localStorage and window.location are stubbed minimally here,
 // just enough for these pure storage-logic tests.
@@ -117,7 +120,7 @@ describe('server-config — Item 2C first-run server URL', () => {
       expect(dashboardLinkProps()).toEqual({ href: '/' });
     });
 
-    it("under a non-Electron packaged shell (Capacitor), opens the real server's dashboard in the system browser — there's no in-app window to open it into there", () => {
+    it('falls back to a plain target="_blank" link for an unrecognized packaged shell (neither Electron nor Capacitor) — a reasonable default for anything future/unknown', () => {
       vi.stubGlobal('window', { location: { protocol: 'file:', origin: 'null' } });
       setServerUrl('https://newpelangi.duckdns.org');
       expect(dashboardLinkProps()).toEqual({
@@ -147,6 +150,36 @@ describe('server-config — Item 2C first-run server URL', () => {
         target: 'kasirai-dashboard-window',
         rel: 'noopener noreferrer',
       });
+    });
+
+    it('under real Capacitor (window.Capacitor.isNativePlatform), returns an onClick handler instead of target="_blank" — no in-app window to target, so it must intercept the click itself', () => {
+      vi.stubGlobal('window', {
+        location: { protocol: 'https:', origin: 'https://localhost' },
+        Capacitor: { isNativePlatform: () => true },
+      });
+      setServerUrl('https://newpelangi.duckdns.org');
+      const props = dashboardLinkProps();
+      expect(props.href).toBe('https://newpelangi.duckdns.org/');
+      expect(props.target).toBeUndefined();
+      expect(typeof props.onClick).toBe('function');
+    });
+
+    it('under real Capacitor, clicking the link prevents the default (system browser) navigation and opens Chrome Custom Tabs via Browser.open() instead — real bug found live: a plain target="_blank" click got intercepted by the WebView and handed to the OS as an ACTION_VIEW intent, opening the actual system browser app', async () => {
+      vi.stubGlobal('window', {
+        location: { protocol: 'https:', origin: 'https://localhost' },
+        Capacitor: { isNativePlatform: () => true },
+      });
+      setServerUrl('https://newpelangi.duckdns.org');
+      const props = dashboardLinkProps();
+      const preventDefault = vi.fn();
+      props.onClick?.({ preventDefault });
+      expect(preventDefault).toHaveBeenCalledOnce();
+      // onClick fires the dynamic import + Browser.open() without awaiting —
+      // poll until the mocked call has actually landed rather than guessing
+      // how many microtask/macrotask hops the dynamic import needs.
+      await vi.waitFor(() =>
+        expect(browserOpen).toHaveBeenCalledWith({ url: 'https://newpelangi.duckdns.org/' }),
+      );
     });
   });
 });

@@ -13,6 +13,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@capacitor/browser": "^6.0.3",
+    "@capacitor/core": "^6.2.0",
     "@tabler/icons-react": "^3.46.0",
     "@zxing/browser": "^0.2.1",
     "idb": "^8.0.0",
